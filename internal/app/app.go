@@ -19,8 +19,9 @@ import (
 	"github.com/atsvetko/directory-auditor/internal/buildinfo"
 	"github.com/atsvetko/directory-auditor/internal/check"
 	"github.com/atsvetko/directory-auditor/internal/doctor"
+	"github.com/atsvetko/directory-auditor/internal/ldapx"
 	"github.com/atsvetko/directory-auditor/internal/provider"
-	_ "github.com/atsvetko/directory-auditor/internal/provider/ad" // register the AD / Samba provider
+	"github.com/atsvetko/directory-auditor/internal/provider/ad" // registers the AD / Samba provider
 	"github.com/atsvetko/directory-auditor/internal/report"
 	"github.com/atsvetko/directory-auditor/internal/snapshot"
 )
@@ -85,7 +86,10 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(errw, "error:", err)
 		return 1
 	}
-	fmt.Fprintf(errw, "snapshot: %s (%d objects, %d queries)\n", snapPath, len(snap.Objects), snap.Meta.QueryCount)
+	fmt.Fprintf(errw, "snapshot: %s (%d objects, %d searches, %d requests, %s)\n", snapPath, len(snap.Objects), snap.Meta.QueryCount, snap.Meta.Requests, snap.Meta.Duration)
+	for _, sk := range snap.Skipped {
+		fmt.Fprintf(errw, "  not collected: %s (%s) %s\n", sk.Query, sk.Reason, sk.Detail)
+	}
 	return analyse(snap, packsDir, outDir, lang, allowUnsigned, out, errw)
 }
 
@@ -173,6 +177,36 @@ func Doctor(ctx context.Context, args []string, out, errw io.Writer) int {
 		return 0
 	}
 	return 1
+}
+
+// Manifest handles `dirauditor manifest [--queries]`.
+func Manifest(args []string, w io.Writer) int {
+	PrintManifest(w)
+	for _, a := range args {
+		if a == "--queries" || a == "-queries" {
+			PrintQueries(w)
+		}
+	}
+	return 0
+}
+
+// PrintQueries lists every LDAP search the AD provider can issue, with the
+// catalogue entries it serves — for approvers (review pack, approach §6.1).
+func PrintQueries(w io.Writer) {
+	scopes := map[ldapx.Scope]string{ldapx.ScopeBase: "base", ldapx.ScopeOneLevel: "one", ldapx.ScopeSubtree: "subtree"}
+	fmt.Fprintln(w, "\nLDAP searches (AD / Samba provider, tier 0 — ordinary user):")
+	for _, q := range append(ad.Plan, ad.SDBaseQuery) {
+		b := q.Base
+		if b != "default" && b != "<each Tier-0 DN>" {
+			b += ",<default>"
+		}
+		sd := ""
+		if q.SD {
+			sd = " + nTSecurityDescriptor (DACL only, SD_FLAGS=0x4)"
+		}
+		fmt.Fprintf(w, "  %-14s base=%s scope=%s filter=%s\n                 attrs=%s%s\n                 why: %s\n",
+			q.Name, b, scopes[q.Scope], q.Filter, strings.Join(q.Attrs, ","), sd, q.Purpose)
+	}
 }
 
 // PrintManifest prints every behaviour of this binary (requirement AR-… `--manifest`).

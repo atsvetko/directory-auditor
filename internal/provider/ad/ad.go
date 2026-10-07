@@ -2,17 +2,14 @@
 // schema; Detect distinguishes them by rootDSE fingerprint and the snapshot
 // records the dialect so packs can be gated.
 //
-// Collection scope in this skeleton is intentionally tiny (rootDSE + domain
-// object). Attribute sets per check domain arrive with the catalogue (K1) and
-// are generated into the query manifest; nothing here may be written before
-// the catalogue is committed (docs/clean-room.md).
+// The collection plan (collect.go) reads only what committed catalogue entries
+// need; every query names the entries it serves.
 package ad
 
 import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/atsvetko/directory-auditor/internal/buildinfo"
 	"github.com/atsvetko/directory-auditor/internal/ldapx"
@@ -58,7 +55,7 @@ func Fingerprint(root map[string]string) string {
 	return ""
 }
 
-// Collect gathers the skeleton snapshot: rootDSE and the domain head object.
+// Collect binds and runs the read-only collection plan (see Plan).
 func (p Provider) Collect(ctx context.Context, t provider.Target, progress func(string)) (*snapshot.Snapshot, error) {
 	if progress == nil {
 		progress = func(string) {}
@@ -68,51 +65,30 @@ func (p Provider) Collect(ctx context.Context, t provider.Target, progress func(
 		return nil, err
 	}
 	defer c.Close()
+	identity, err := bind(c, t)
+	if err != nil {
+		return nil, err
+	}
+	return collect(ctx, c, snapshot.Meta{
+		Provider: p.Name(),
+		Target:   t.Server,
+		Domain:   t.Domain,
+		Identity: identity,
+		Tier:     t.Tier,
+		Tool:     "dirauditor " + buildinfo.Version,
+	}, progress)
+}
+
+// bind authenticates with an explicit identity when one is given; otherwise it
+// uses the current logon via Kerberos.
+func bind(c *ldapx.Conn, t provider.Target) (string, error) {
 	if t.BindUser != "" {
 		if err := c.BindSimple(t.BindUser, t.BindPassword); err != nil {
-			return nil, fmt.Errorf("ad: bind as %s: %w", t.BindUser, err)
+			return "", fmt.Errorf("ad: bind as %s: %w", t.BindUser, err)
 		}
-	} else {
-		return nil, fmt.Errorf("ad: Kerberos (current logon) bind is not implemented yet; pass --user and --password for a lab, or wait for milestone K3")
+		return t.BindUser, nil
 	}
-	progress("reading rootDSE")
-	root, err := c.RootDSE(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("ad: rootDSE: %w", err)
-	}
-	base := root["defaultNamingContext"]
-	if base == "" {
-		return nil, fmt.Errorf("ad: rootDSE has no defaultNamingContext — not an AD-schema directory?")
-	}
-	snap := &snapshot.Snapshot{
-		Schema:    snapshot.SchemaVersion,
-		Collected: time.Now().UTC(),
-		Meta: snapshot.Meta{
-			Provider: p.Name(),
-			Dialect:  Fingerprint(root),
-			Target:   t.Server,
-			Domain:   t.Domain,
-			BaseDN:   base,
-			Identity: t.BindUser,
-			Tier:     t.Tier,
-			Tool:     "dirauditor " + buildinfo.Version,
-			RootDSE:  root,
-		},
-	}
-	progress("reading domain object")
-	entries, err := c.Search(ctx, base, ldapx.ScopeBase, "(objectClass=domainDNS)", []string{
-		"objectClass", "name", "objectSid", "ms-DS-MachineAccountQuota", "minPwdLength", "pwdHistoryLength",
-		"maxPwdAge", "minPwdAge", "lockoutThreshold", "lockoutDuration", "pwdProperties",
-		"whenCreated", "msDS-Behavior-Version", "fSMORoleOwner",
-	})
-	if err != nil {
-		snap.Skipped = append(snap.Skipped, snapshot.Skipped{Query: "domain-head", Reason: "error", Detail: err.Error()})
-	}
-	for _, e := range entries {
-		snap.Objects = append(snap.Objects, snapshot.Object{DN: e.DN, Class: e.Attrs["objectClass"], Attrs: e.Attrs})
-	}
-	snap.Meta.QueryCount = c.Queries()
-	return snap, nil
+	return "", fmt.Errorf("ad: Kerberos (current logon) bind is not implemented yet; pass --user for a lab")
 }
 
 func dial(ctx context.Context, t provider.Target) (*ldapx.Conn, error) {

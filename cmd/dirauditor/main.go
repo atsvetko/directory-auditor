@@ -43,8 +43,7 @@ func run(ctx context.Context, cmd string, args []string) int {
 		fmt.Println(buildinfo.String())
 		return 0
 	case "manifest":
-		app.PrintManifest(os.Stdout)
-		return 0
+		return app.Manifest(args, os.Stdout)
 	case "scan":
 		return app.Scan(ctx, args, os.Stdout, os.Stderr)
 	case "analyse", "analyze":
@@ -68,7 +67,7 @@ Usage:
   dirauditor scan     --server HOST [--domain DOMAIN] [--packs DIR] [--out DIR] [--insecure-plaintext]
   dirauditor analyse  --snapshot FILE [--packs DIR] [--out DIR]
   dirauditor doctor   --domain DOMAIN [--server HOST]
-  dirauditor manifest
+  dirauditor manifest [--queries]   # behaviours; --queries lists every LDAP search
   dirauditor version
 
 Every command is read-only. The binary contains no code path that writes to a directory,

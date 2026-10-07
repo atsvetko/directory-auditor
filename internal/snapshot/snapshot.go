@@ -4,6 +4,14 @@
 //
 // File format: zstd-compressed JSON. Schema version is semver; readers accept
 // the same major version and migrate older minors.
+//
+// Attribute values are strings. Binary attributes are converted by the
+// collector so snapshots stay readable and diffable:
+//   - SIDs (objectSid, sIDHistory, securityIdentifier, ms-DS-CreatorSID): S-1-5-…
+//   - GUIDs (objectGUID): registry form, lower case
+//   - security descriptors (nTSecurityDescriptor,
+//     msDS-AllowedToActOnBehalfOfOtherIdentity): standard base64 of the
+//     self-relative descriptor, DACL only (collected with SD_FLAGS = DACL)
 package snapshot
 
 import (
@@ -21,7 +29,7 @@ import (
 )
 
 // SchemaVersion is the schema written by this build.
-const SchemaVersion = "0.1.0"
+const SchemaVersion = "0.2.0"
 
 // Snapshot is the complete result of one collection run.
 type Snapshot struct {
@@ -45,6 +53,9 @@ type Meta struct {
 	RootDSE    map[string]string `json:"rootdse,omitempty"`  // selected rootDSE attributes
 	Redacted   bool              `json:"redacted"`           // pseudonymised snapshot
 	QueryCount int               `json:"query_count"`        // LDAP searches issued
+	Requests   int               `json:"requests,omitempty"` // wire requests (pages, range chunks)
+	DomainSID  string            `json:"domain_sid,omitempty"`
+	Duration   string            `json:"duration,omitempty"` // collection wall time
 }
 
 // Object is one directory entry with the attributes the collector requested.
