@@ -1,0 +1,84 @@
+id: DSA-0018
+title:
+  en: "Trusts that relax SID filtering or allow ticket delegation across organisations"
+  ru: "Доверительные отношения с ослабленной фильтрацией SID или разрешённым делегированием билетов между организациями"
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ""
+verified_on: ""
+
+object: "trustedDomain objects under CN=System of the domain"
+attributes: [trustPartner, trustDirection, trustType, trustAttributes, securityIdentifier, whenCreated, whenChanged]
+
+condition: >
+  For every trust where this domain trusts the partner (trustDirection has
+  TRUST_DIRECTION_OUTBOUND, value 2 or 3), report:
+    - a forest trust (TRUST_ATTRIBUTE_FOREST_TRANSITIVE 0x8) that also has
+      TRUST_ATTRIBUTE_TREAT_AS_EXTERNAL (0x40) — SID filtering relaxed to the
+      external-trust rule set → high;
+    - TRUST_ATTRIBUTE_CROSS_ORGANIZATION_ENABLE_TGT_DELEGATION (0x800) — tickets from
+      the partner may be delegated → high;
+    - an external trust (not WITHIN_FOREST 0x20, not FOREST_TRANSITIVE) without
+      TRUST_ATTRIBUTE_QUARANTINED_DOMAIN (0x4) → medium (severity to be revisited
+      once the default flag on newly created external trusts is confirmed in the lab);
+    - a trust with TRUST_DIRECTION_DISABLED (0) still present → info (stale object);
+    - an MIT/Kerberos realm trust (trustType 3) with
+      TRUST_ATTRIBUTE_USES_RC4_ENCRYPTION (0x80) → medium.
+  Every trust is listed in the report inventory, finding or not.
+threshold: "any occurrence"
+
+rationale: >
+  A trust lets accounts from the partner be authenticated here. SID filtering
+  decides which SIDs from the partner's tokens are honoured; when it is relaxed,
+  SIDs the partner controls — including SID-history values — can carry privileges
+  into this domain, so a compromise of the partner becomes a compromise of this
+  domain. Allowing ticket delegation across the trust has the same effect for
+  delegation-based paths.
+
+remediation:
+  en: >
+    Remove trusts that are no longer needed. On remaining trusts keep SID filtering
+    at its default (do not set "treat as external" on forest trusts), enable
+    quarantine on external trusts where only the partner's own accounts need access,
+    and do not enable TGT delegation across organisational boundaries. Use selective
+    authentication on trusts to limit which partner accounts can reach which servers.
+  ru: >
+    Удалите ненужные доверительные отношения. На оставшихся сохраняйте фильтрацию SID
+    по умолчанию (не включайте «рассматривать как внешнее» для доверия между лесами),
+    включите карантин на внешних доверительных отношениях, если доступ нужен только
+    учётным записям самого партнёра, и не разрешайте делегирование TGT между
+    организациями. Используйте выборочную проверку подлинности, чтобы ограничить, к
+    каким серверам могут обращаться учётные записи партнёра.
+
+attack:
+  - { id: T1482, name: "Domain Trust Discovery" }
+  - { id: T1134.005, name: "Access Token Manipulation: SID-History Injection" }
+
+engine: declarative
+query_sketch:
+  base: "CN=System,<default>"
+  scope: one
+  filter: "(objectClass=trustedDomain)"
+  attributes: [trustPartner, trustDirection, trustType, trustAttributes, securityIdentifier, whenCreated, whenChanged]
+
+references:
+  - title: "MS-ADTS 6.1.6.7.9 trustAttributes (flag values)"
+    url: "https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/e9a2d23c-c31e-4a6f-88a0-6646fdb51a3c"
+  - title: "MS-ADTS 6.1.6.7.12 trustDirection (0–3)"
+    url: "https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/5026a939-44ba-47b2-99cf-386a9e674b04"
+  - title: "MS-PAC 4.1.2.2 SID Filtering and Claims Transformation"
+    url: "https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-pac/55fc19f2-55ba-4251-8a6a-103dd7c66280"
+  - title: "MITRE ATT&CK — T1482 Domain Trust Discovery"
+    url: "https://attack.mitre.org/techniques/T1482/"
+  - title: "MITRE ATT&CK — T1134.005 SID-History Injection"
+    url: "https://attack.mitre.org/techniques/T1134/005/"
+
+notes: >
+  Open: whether new external trusts get QUARANTINED_DOMAIN set by default (if yes, its
+  absence means someone removed it and severity should be high). trustType values (1 downlevel, 2 uplevel, 3 MIT) to be confirmed against MS-ADTS
+  6.1.6.7.15 before implementing. Selective authentication is not visible in
+  trustAttributes on the trusting side alone — reported as a recommendation, not
+  evaluated, until the ACE-based check is designed.
