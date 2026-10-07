@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Directory Auditor</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="apphdr">
+  <div class="prod"><span class="logo">DA</span><span>Directory Auditor</span> <span class="sub mono" id="ver"></span></div>
+  <nav class="pivot" role="tablist" id="tabs">
+    <button class="ptab" role="tab" data-go="welcome" aria-selected="true"><span class="num">1</span><span data-t="st1">Connect</span></button>
+    <button class="ptab" role="tab" data-go="scan" disabled><span class="num">2</span><span data-t="st2">Scan</span></button>
+    <button class="ptab" role="tab" data-go="report" disabled><span class="num">3</span><span data-t="st3">Results</span></button>
+  </nav>
+  <div class="hright"><button class="toggle" id="lang">RU</button><button class="toggle" id="theme" data-t="theme">Theme</button><button class="toggle" id="quit" data-t="quit">Quit</button></div>
+</header>
+
+<div class="wrap">
+ <div class="win">
+
+  <!-- 1 · CONNECT -->
+  <section class="screen view" id="welcome">
+    <h2 class="h2" data-t="c_h">Connect to a directory</h2>
+    <p class="tagline" data-t="tagline">What an attacker would find in your directory — read-only, in five minutes.</p>
+    <div class="trust">
+      <span><b>✓</b> <span data-t="tr1">Read-only</span></span>
+      <span><b>✓</b> <span data-t="tr2">Nothing leaves this machine</span></span>
+      <span><b>✓</b> <span data-t="tr4">Source public</span></span>
+    </div>
+
+    <div class="copt sel" data-mode="auto" id="optauto"><span class="rdot"></span><div class="ctext"><div class="ct" data-t="c_auto">Use the detected domain</div><div class="cd" id="autodesc"><span class="spin"></span><span data-t="detecting">Looking for a domain…</span></div></div></div>
+    <div class="detect hidden" id="detectbox">
+      <div class="row"><div class="k" data-t="d_dom">Domain</div><div class="v"><span class="chk">●</span> <span class="mono" id="d_domain"></span></div></div>
+      <div class="row"><div class="k" data-t="d_dc">Domain controller</div><div class="v"><span class="chk">●</span> <span class="mono" id="d_server"></span> <span class="sub" data-t="d_dc_sub">found via DNS SRV · LDAPS</span></div></div>
+      <div class="row"><div class="k" data-t="d_id">Identity</div><div class="v"><span class="chk">●</span> <span class="mono" id="d_identity"></span> <span class="sub" data-t="d_id_sub">your current logon · Kerberos (no password needed)</span></div></div>
+    </div>
+
+    <div class="copt" data-mode="manual" id="optmanual"><span class="rdot"></span><div class="ctext"><div class="ct" data-t="c_man">Enter domain and credentials</div><div class="cd" data-t="c_man_d">Another domain, a non-joined machine, Samba AD DC, or a dedicated audit account.</div></div></div>
+    <form class="mform hidden" id="mform" autocomplete="off">
+      <label><span data-t="f_dom">Domain</span><input class="inp mono" id="m_domain" placeholder="corp.example.com" spellcheck="false"></label>
+      <label><span data-t="f_dc">Domain controller (optional)</span><input class="inp mono" id="m_server" placeholder="dc01.corp.example.com" spellcheck="false"></label>
+      <label><span data-t="f_user">User</span><input class="inp mono" id="m_user" placeholder="audit@corp.example.com" spellcheck="false"></label>
+      <label><span data-t="f_pw">Password</span><input class="inp" id="m_password" type="password" autocomplete="new-password"></label>
+      <label class="wide"><span data-t="f_tls">Connection security</span><select class="inp" id="m_security"><option value="ldaps" data-t="o_ldaps">LDAPS (636) — recommended</option><option value="starttls" data-t="o_starttls">StartTLS (389)</option></select></label>
+      <label class="wide"><span data-t="f_pin">Certificate fingerprint (only if the DC certificate is not trusted here)</span><input class="inp mono" id="m_pin" placeholder="SHA-256, from `dirauditor doctor`" spellcheck="false"></label>
+    </form>
+    <div class="infobar"><span class="ii">i</span><span data-t="f_hint">A normal user account covers ~80% of checks. The password is used once in memory and never saved.</span></div>
+
+    <div class="okbar hidden" id="connok"></div>
+    <div class="err hidden" id="connerr"><div><b id="connerr_msg"></b><div class="fix" id="connerr_fix"></div></div></div>
+    <div class="cta">
+      <button class="btn ghost" id="demo" data-t="demo">Try with demo data</button>
+      <button class="btn" id="connect" data-t="connect">Connect</button>
+    </div>
+  </section>
+
+  <!-- 2 · SCAN -->
+  <section class="screen view hidden" id="scan">
+    <h2 class="h2" data-t="sc_h">Choose a scan</h2>
+    <p class="cd" id="scantarget"></p>
+    <div class="copt sel" data-scan="fast"><span class="rdot"></span><div class="ctext"><div class="ct" data-t="fast">Fast scan</div><div class="cd" data-t="fast_d">The highest-value checks · about a minute · best first look.</div></div></div>
+    <div class="copt" data-scan="full"><span class="rdot"></span><div class="ctext"><div class="ct" data-t="full">Full scan</div><div class="cd" data-t="full_d">Every check your account can run · a few minutes.</div></div></div>
+    <div class="cta"><button class="btn ghost" data-go="welcome" data-t="back">Back</button><button class="btn" id="startscan" data-t="start">Start scan</button></div>
+    <div class="hidden" id="progress">
+      <div class="scanhead"><h2 id="scanning"></h2><button class="btn ghost sm" id="cancelscan" data-t="cancel">Cancel</button></div>
+      <div class="bar"><i id="pbar"></i></div>
+      <div class="scanmeta"><span id="pphase"></span><span data-t="ro">read-only</span></div>
+      <div class="log" id="scanlog"></div>
+      <div class="err hidden" id="scanerr"><div><b id="scanerr_msg"></b></div></div>
+    </div>
+  </section>
+
+  <!-- 3 · RESULTS -->
+  <section class="screen view hidden" id="report">
+    <div class="printcover"><div><div class="pc-t">Directory Auditor</div><div class="pc-s" data-t="pdf_sub">Directory security assessment</div></div><div class="pc-m" id="pc_meta"></div></div>
+    <div class="rtop">
+      <div class="gauge" id="gauge"><div class="in"><b id="score">–</b><span>/ 100</span></div></div>
+      <div class="rmeta">
+        <div class="t" data-t="r_target">Target</div>
+        <h2 class="mono" id="r_target"></h2>
+        <div class="sub" id="r_sub"></div>
+      </div>
+    </div>
+    <div class="infobar notice hidden" id="unsigned"><span class="ii">!</span><span data-t="unsigned">Unsigned check packs were loaded (development mode). Do not rely on this report.</span></div>
+    <div class="infobar notice hidden" id="nopacks"><span class="ii">i</span><span data-t="nopacks">No check packs are loaded yet: catalogue entries become checks only after human verification. The Tier-0 inventory below is complete.</span></div>
+
+    <div class="counts">
+      <div class="cnt"><b id="n_checked">0</b><span data-t="c_checked">checked</span></div>
+      <div class="cnt ok"><b id="n_passed">0</b><span data-t="c_passed">passed</span></div>
+      <div class="cnt crit"><b id="n_failed">0</b><span data-t="c_find">with findings</span></div>
+      <div class="cnt"><b id="n_findings">0</b><span data-t="c_findings">findings</span></div>
+      <div class="cnt"><b id="n_skipped">0</b><span data-t="c_skip">skipped</span></div>
+    </div>
+
+    <div class="dl">
+      <button class="btn sm" id="pdfbtn" data-t="dl_pdf">Download PDF report</button>
+      <a class="btn sm ghost" id="dlhtml" data-t="dl_html">HTML</a>
+      <a class="btn sm ghost" id="dljson" data-t="dl_json">JSON</a>
+      <button class="btn sm ghost" data-go="welcome" data-t="rescan">New scan</button>
+    </div>
+
+    <div class="sec" data-t="s_findings">Findings</div>
+    <div id="findings"></div>
+
+    <div class="sec"><span data-t="s_tier0">Tier 0 — who controls the domain, and why</span> (<span id="t0count">0</span>)</div>
+    <table class="inv"><thead><tr><th data-t="h_obj">Object</th><th data-t="h_path">Why it is Tier 0</th></tr></thead><tbody id="t0rows"></tbody></table>
+    <div class="hint hidden" id="t0more"></div>
+    <div class="hint hidden" id="t0unres"></div>
+
+    <div class="sec" data-t="s_skipped">Skipped — and why</div>
+    <div class="skip" id="skipbox"></div>
+
+    <div class="foot" id="foot"></div>
+  </section>
+ </div>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

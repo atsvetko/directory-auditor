@@ -102,9 +102,11 @@ func main() {
 			"operatingSystem": {"Windows Server 2022 Datacenter"}, "operatingSystemVersion": {"10.0 (20348)"}, "userAccountControl": {"532480"}, "pwdLastSet": {ft(12)}})
 	s.Skipped = []snapshot.Skipped{{Query: "sysvol", Reason: "tier", Detail: "tier 1 not requested"}}
 
-	if err := snapshot.WriteFile(*out, s); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	for _, path := range []string{*out, "internal/demo/synthetic-lab.json.zst"} {
+		if err := snapshot.WriteFile(path, s); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
 	h, _ := snapshot.Hash(s)
 	fmt.Printf("wrote %s (%d objects, sha256 %s)\n", *out, len(s.Objects), h[:16])

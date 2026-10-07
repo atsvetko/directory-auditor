@@ -33,16 +33,28 @@ should.
 | **Readable checks** | Every check is a signed YAML pack with a CEL condition, primary references, and remediation in English and Russian. |
 | **Honest report** | Score 0–100, what was checked, what passed, what was skipped and why. |
 
-## Try the skeleton
+## Try it
+
+**Double-click** `dirauditor` (or run it with no arguments). A local page opens in your browser:
+**1 Connect** (detected domain with your current logon, or domain + account) → **2 Scan** (fast or
+full) → **3 Results** (score, findings, Tier-0 inventory, PDF/HTML/JSON). No domain at hand?
+Click **Try with demo data**. The page is served on `127.0.0.1` only, behind a one-time token.
+
+Command line, for scripts and servers without a browser:
 
 ```sh
-go build ./cmd/dirauditor
-./dirauditor analyse --snapshot testdata/synthetic-lab.json.zst --packs testdata/packs --allow-unsigned --out out
-./dirauditor doctor --domain lab.example           # DNS SRV, TCP, LDAPS certificate diagnostics
-./dirauditor manifest                               # every behaviour of this binary
+dirauditor scan --server dc01.corp.example.com          # current logon (Kerberos), LDAPS, read-only
+dirauditor scan --server dc01.corp.example.com --user audit@corp.example.com   # password prompted once
+dirauditor analyse --snapshot dirauditor-out/snapshot-*.json.zst               # re-analyse, no DC traffic
+dirauditor doctor --domain corp.example.com             # DNS SRV, ports, certificate, clock skew
+dirauditor manifest --queries                           # every behaviour and every LDAP search
 ```
 
-The only pack today is a format fixture (`TEST-0001`). Real checks arrive with the catalogue.
+Build from source: `go build ./cmd/dirauditor` (Go 1.25+, no CGO).
+
+Checks are written only from catalogue entries a human has verified, so today the only pack is a
+format fixture (`TEST-0001`); the Tier-0 inventory ("who controls the domain, and why") is
+already complete.
 
 ## Documents
 

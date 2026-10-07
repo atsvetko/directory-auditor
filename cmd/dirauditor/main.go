@@ -2,7 +2,8 @@
 //
 // Run modes (see docs/requirements/approach.md §2):
 //
-//	dirauditor                 # web wizard on 127.0.0.1 (not implemented yet — prints status)
+//	dirauditor                 # web wizard on 127.0.0.1 (opens the browser)
+//	dirauditor ui      ...     # the same, with options (--no-browser, --packs, --out)
 //	dirauditor scan   ...      # collect a snapshot and analyse it
 //	dirauditor analyse FILE    # analyse an existing snapshot
 //	dirauditor doctor  ...     # diagnose connectivity: DNS SRV, LDAP, TLS
@@ -26,11 +27,8 @@ func main() {
 	defer stop()
 
 	if len(os.Args) < 2 {
-		// Express path (web wizard) is a later milestone; until then explain what exists.
-		fmt.Fprintln(os.Stderr, "Directory Auditor "+buildinfo.Version+" — engine skeleton.")
-		fmt.Fprintln(os.Stderr, "The web wizard is not implemented yet. Available: scan, analyse, doctor, manifest, version.")
-		fmt.Fprintln(os.Stderr, "Run `dirauditor help` for usage.")
-		os.Exit(2)
+		// Express path: double-click → local wizard in the browser.
+		os.Exit(app.Wizard(ctx, nil, os.Stderr))
 	}
 
 	code := run(ctx, os.Args[1], os.Args[2:])
@@ -44,6 +42,8 @@ func run(ctx context.Context, cmd string, args []string) int {
 		return 0
 	case "manifest":
 		return app.Manifest(args, os.Stdout)
+	case "ui", "wizard":
+		return app.Wizard(ctx, args, os.Stderr)
 	case "scan":
 		return app.Scan(ctx, args, os.Stdout, os.Stderr)
 	case "analyse", "analyze":
@@ -64,6 +64,8 @@ func usage(w *os.File) {
 	fmt.Fprint(w, `Directory Auditor — read-only security auditor for directory services.
 
 Usage:
+  dirauditor                                   # start the wizard in your browser (double-click)
+  dirauditor ui       [--no-browser] [--packs DIR] [--out DIR]
   dirauditor scan     --server HOST [--domain DOMAIN] [--packs DIR] [--out DIR] [--insecure-plaintext]
   dirauditor analyse  --snapshot FILE [--packs DIR] [--out DIR]
   dirauditor doctor   --domain DOMAIN [--server HOST]

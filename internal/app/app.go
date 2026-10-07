@@ -18,12 +18,14 @@ import (
 
 	"github.com/atsvetko/directory-auditor/internal/buildinfo"
 	"github.com/atsvetko/directory-auditor/internal/check"
+	"github.com/atsvetko/directory-auditor/internal/demo"
 	"github.com/atsvetko/directory-auditor/internal/doctor"
 	"github.com/atsvetko/directory-auditor/internal/ldapx"
 	"github.com/atsvetko/directory-auditor/internal/provider"
 	"github.com/atsvetko/directory-auditor/internal/provider/ad" // registers the AD / Samba provider
 	"github.com/atsvetko/directory-auditor/internal/report"
 	"github.com/atsvetko/directory-auditor/internal/snapshot"
+	"github.com/atsvetko/directory-auditor/internal/web"
 )
 
 // Scan collects a snapshot and analyses it in one go.
@@ -92,6 +94,46 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 		fmt.Fprintf(errw, "  not collected: %s (%s) %s\n", sk.Query, sk.Reason, sk.Detail)
 	}
 	return analyse(snap, packsDir, outDir, lang, allowUnsigned, quick, out, errw)
+}
+
+// Wizard starts the local web UI. With no arguments (double-click) it opens the
+// browser; `dirauditor ui --no-browser` only prints the address.
+func Wizard(ctx context.Context, args []string, errw io.Writer) int {
+	fs := flag.NewFlagSet("ui", flag.ContinueOnError)
+	fs.SetOutput(errw)
+	var packsDir, outDir string
+	var allowUnsigned, noBrowser bool
+	fs.StringVar(&packsDir, "packs", "", "directory with check packs (default: packs next to the binary, then ./packs)")
+	fs.StringVar(&outDir, "out", "dirauditor-out", "output directory for snapshots and reports")
+	fs.BoolVar(&allowUnsigned, "allow-unsigned", false, "load unsigned packs (development only)")
+	fs.BoolVar(&noBrowser, "no-browser", false, "do not open a browser; print the address only")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if packsDir == "" {
+		packsDir = defaultPacksDir()
+	}
+	err := web.Run(ctx, web.Options{
+		PacksDir: packsDir, OutDir: outDir, AllowUnsigned: allowUnsigned, Version: buildinfo.Version,
+		Demo: demo.Snapshot, OpenBrowser: !noBrowser, Log: errw,
+	})
+	if err != nil {
+		fmt.Fprintln(errw, "error:", err)
+		return 1
+	}
+	return 0
+}
+
+// defaultPacksDir prefers packs/ beside the executable (the release layout),
+// then packs/ in the working directory.
+func defaultPacksDir() string {
+	if exe, err := os.Executable(); err == nil {
+		p := filepath.Join(filepath.Dir(exe), "packs")
+		if st, err := os.Stat(p); err == nil && st.IsDir() {
+			return p
+		}
+	}
+	return "packs"
 }
 
 // Analyse re-runs the checks on an existing snapshot — no directory access at all.
@@ -217,7 +259,9 @@ func PrintManifest(w io.Writer) {
 Behaviours of this binary:
   network     : outbound only, to the directory server(s) you name (LDAP 389/636, DNS SRV lookups
                 through the OS resolver). No other hosts are contacted. No update checks. No telemetry.
-  listeners   : none (the local web UI is a later milestone and will bind to 127.0.0.1 only)
+  listeners   : wizard only (no arguments or 'ui'): 127.0.0.1, random port, one-time token in the URL;
+                CLI commands open no listener
+  processes   : the wizard asks the OS to open the default browser once (rundll32 / open / xdg-open)
   writes      : output directory only (snapshot, report.json, report.html)
   directory   : read-only — no LDAP modify/add/delete code is linked (scripts/readonly-check.sh)
   credentials : prompted on the terminal, used once, never written to disk or environment
