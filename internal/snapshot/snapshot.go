@@ -69,8 +69,11 @@ type Object struct {
 // the report must show (requirement AR-12).
 type Skipped struct {
 	Query  string `json:"query"`
-	Reason string `json:"reason"` // "tier", "permission", "provider", "error"
+	Reason string `json:"reason"` // "tier", "permission", "provider", "error", "absent"
 	Detail string `json:"detail,omitempty"`
+	// Classes lists the object classes the query would have returned, so the
+	// analyser can mark checks on them "not collected" instead of "pass".
+	Classes []string `json:"classes,omitempty"`
 }
 
 // Attr returns the first value of an attribute (case-insensitive name) or "".

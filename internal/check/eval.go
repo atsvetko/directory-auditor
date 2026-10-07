@@ -2,6 +2,7 @@ package check
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/common/types"
 	"cel.dev/cel-go/common/types/ref"
+	"cel.dev/cel-go/ext"
 
 	"github.com/atsvetko/directory-auditor/internal/snapshot"
 	"github.com/atsvetko/directory-auditor/internal/tier0"
@@ -94,6 +96,7 @@ var celEnv *cel.Env
 
 func init() {
 	env, err := cel.NewEnv(append([]cel.EnvOption{
+		ext.Strings(), // lowerAscii, split, trim, replace, … on strings
 		cel.Variable("obj", cel.MapType(cel.StringType, cel.DynType)),
 		// attr(obj, "name") -> first value or "" (case-insensitive)
 		cel.Function("attr",
@@ -219,9 +222,9 @@ func Evaluate(snap *snapshot.Snapshot, packs []Pack) (*Result, error) {
 func EvaluateWith(snap *snapshot.Snapshot, packs []Pack, opts EvalOptions) (*Result, error) {
 	evalMu.Lock()
 	defer evalMu.Unlock()
-	t0 := tier0.Resolve(snap.Objects, snap.Meta.DomainSID)
-	currentTier0 = t0
-	defer func() { currentTier0 = nil }()
+	t0 := tier0.ResolveFor(snap.Meta.Provider, snap.Objects, snap.Meta.DomainSID)
+	currentTier0, currentIndex, currentBase = t0, indexSnapshot(snap), snap.Meta.BaseDN
+	defer func() { currentTier0, currentIndex, currentBase = nil, nil, "" }()
 	now := snap.Collected.Unix()
 	inv := Inventory{Objects: len(snap.Objects), Collected: snap.Collected, Identity: snap.Meta.Identity,
 		Domain: snap.Meta.Domain, BaseDN: snap.Meta.BaseDN, Unresolved: t0.Unresolved, NotRead: snap.Skipped,
@@ -281,7 +284,9 @@ func (cr *CheckResult) Evidence(err error) {
 }
 
 func runPack(snap *snapshot.Snapshot, p *Pack, cr *CheckResult, now int64, t0 *tier0.Set) error {
-	filter, err := ParseFilter(p.Query.Filter)
+	// <default> in a pack filter stands for the snapshot's base DN, so packs
+	// can name containers (memberOf=cn=admins,…,<default>) without hard-coding a domain.
+	filter, err := ParseFilter(strings.ReplaceAll(p.Query.Filter, "<default>", snap.Meta.BaseDN))
 	if err != nil {
 		return err
 	}
@@ -312,10 +317,36 @@ func runPack(snap *snapshot.Snapshot, p *Pack, cr *CheckResult, now int64, t0 *t
 	}
 	if len(cr.Findings) > 0 {
 		cr.Status = "fail"
+	} else if cr.Matched == 0 && notCollected(snap, p.Query.Filter) {
+		// The objects this check looks at were not collected (no permission,
+		// absent container): say so instead of reporting a pass (AR-12).
+		cr.Status, cr.Skip = "skipped", "not-collected"
 	} else {
 		cr.Status = "pass"
 	}
 	return nil
+}
+
+var objectClassRe = regexp.MustCompile(`(?i)objectclass=([A-Za-z0-9_-]+)`)
+
+// notCollected reports whether a collection query that would have returned the
+// object classes named in filter was skipped by the collector.
+func notCollected(snap *snapshot.Snapshot, filter string) bool {
+	classes := map[string]bool{}
+	for _, m := range objectClassRe.FindAllStringSubmatch(filter, -1) {
+		classes[strings.ToLower(m[1])] = true
+	}
+	if len(classes) == 0 {
+		return false
+	}
+	for _, sk := range snap.Skipped {
+		for _, c := range sk.Classes {
+			if classes[strings.ToLower(c)] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func tally(res *Result, cr CheckResult) {

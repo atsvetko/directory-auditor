@@ -26,8 +26,9 @@ type Query struct {
 	Scope   ldapx.Scope
 	Filter  string
 	Attrs   []string
-	SD      bool   // read nTSecurityDescriptor (DACL only)
-	Purpose string // which catalogue entries need it
+	SD      bool     // read nTSecurityDescriptor (DACL only)
+	Purpose string   // which catalogue entries need it
+	Classes []string // object classes the query returns (for honest "not collected" states)
 }
 
 var (
@@ -46,21 +47,21 @@ var accountAttrs = []string{
 
 // Plan is the tier-0 (ordinary user) collection plan.
 var Plan = []Query{
-	{Name: "domain-head", Base: "default", Scope: ldapx.ScopeBase, Filter: "(objectClass=domainDNS)", SD: true,
+	{Name: "domain-head", Base: "default", Scope: ldapx.ScopeBase, Filter: "(objectClass=domainDNS)", SD: true, Classes: []string{"domainDNS", "domain"},
 		Attrs: []string{"objectClass", "name", "objectSid", "ms-DS-MachineAccountQuota", "minPwdLength",
 			"pwdHistoryLength", "maxPwdAge", "minPwdAge", "lockoutThreshold", "lockoutDuration",
 			"pwdProperties", "whenCreated", "msDS-Behavior-Version", "fSMORoleOwner", "gPLink"},
 		Purpose: "password policy, MAQ (DSA-0013), replication rights on the head (DSA-0014, DSA-0015)"},
-	{Name: "users", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(sAMAccountType=805306368)",
+	{Name: "users", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(sAMAccountType=805306368)", Classes: []string{"user"},
 		Attrs:   accountAttrs,
 		Purpose: "account flags, SPNs, delegation, password age, SID history (DSA-0001…0012, 0017, 0019)"},
-	{Name: "computers", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(sAMAccountType=805306369)",
+	{Name: "computers", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(sAMAccountType=805306369)", Classes: []string{"computer"},
 		Attrs:   append(append([]string{}, accountAttrs...), "operatingSystem", "operatingSystemVersion", "dNSHostName", "ms-DS-CreatorSID"),
 		Purpose: "delegation, RBCD, DCs, machine-account creators (DSA-0004…0006, 0013)"},
-	{Name: "groups", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(objectClass=group)",
+	{Name: "groups", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(objectClass=group)", Classes: []string{"group"},
 		Attrs:   []string{"objectClass", "sAMAccountName", "objectSid", "objectGUID", "sIDHistory", "member", "groupType", "adminCount", "whenChanged"},
 		Purpose: "Tier-0 membership resolution (catalogue/TIER0.md)"},
-	{Name: "trusts", Base: "CN=System", Scope: ldapx.ScopeOneLevel, Filter: "(objectClass=trustedDomain)",
+	{Name: "trusts", Base: "CN=System", Scope: ldapx.ScopeOneLevel, Filter: "(objectClass=trustedDomain)", Classes: []string{"trustedDomain"},
 		Attrs:   []string{"objectClass", "name", "trustPartner", "trustDirection", "trustType", "trustAttributes", "securityIdentifier", "whenCreated", "whenChanged"},
 		Purpose: "trust posture (DSA-0018), trusted-domain SIDs (DSA-0017)"},
 	{Name: "adminsdholder", Base: "CN=AdminSDHolder,CN=System", Scope: ldapx.ScopeBase, Filter: "(objectClass=*)", SD: true,
@@ -140,7 +141,7 @@ func collect(ctx context.Context, c searcher, meta snapshot.Meta, progress func(
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil, err
 			}
-			snap.Skipped = append(snap.Skipped, skipped(q.Name, err))
+			snap.Skipped = append(snap.Skipped, skipped(q, err))
 			continue
 		}
 		for _, e := range entries {
@@ -177,7 +178,9 @@ func collect(ctx context.Context, c searcher, meta snapshot.Meta, progress func(
 			}
 			sdErrs++
 			if sdErrs <= 5 {
-				snap.Skipped = append(snap.Skipped, skipped(SDBaseQuery.Name+" "+dn, err))
+				sk := skipped(SDBaseQuery, err)
+				sk.Query += " " + dn
+				snap.Skipped = append(snap.Skipped, sk)
 			}
 			continue
 		}
@@ -259,7 +262,7 @@ func convert(e ldapx.Entry) snapshot.Object {
 	return o
 }
 
-func skipped(query string, err error) snapshot.Skipped {
+func skipped(q Query, err error) snapshot.Skipped {
 	reason := "error"
 	if ldap.IsErrorWithCode(err, ldap.LDAPResultInsufficientAccessRights) {
 		reason = "permission"
@@ -267,7 +270,7 @@ func skipped(query string, err error) snapshot.Skipped {
 	if ldap.IsErrorWithCode(err, ldap.LDAPResultNoSuchObject) {
 		reason = "absent"
 	}
-	return snapshot.Skipped{Query: query, Reason: reason, Detail: err.Error()}
+	return snapshot.Skipped{Query: q.Name, Reason: reason, Detail: err.Error(), Classes: q.Classes}
 }
 
 func countWithout(objs []snapshot.Object, sdSeen map[string]bool, attr string) int {

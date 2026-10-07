@@ -69,6 +69,35 @@ func Get(name string) (Provider, bool) {
 	return p, ok
 }
 
+// Pick returns the provider named by name, or, for "auto" / "", the first
+// registered provider whose Detect matches the server. Each Detect is one
+// dial plus a rootDSE read; nothing is bound.
+func Pick(ctx context.Context, name string, t Target) (Provider, string, error) {
+	if name != "" && name != "auto" {
+		p, ok := Get(name)
+		if !ok {
+			return nil, "", fmt.Errorf("unknown provider %q (have %s)", name, Names())
+		}
+		return p, "", nil
+	}
+	var errs []string
+	for _, n := range Names() {
+		p, _ := Get(n)
+		ok, dialect, err := p.Detect(ctx, t)
+		if err != nil {
+			errs = append(errs, n+": "+err.Error())
+			continue
+		}
+		if ok {
+			return p, dialect, nil
+		}
+	}
+	if len(errs) > 0 {
+		return nil, "", fmt.Errorf("could not identify the directory: %s", errs[0])
+	}
+	return nil, "", fmt.Errorf("the server is not a directory type this build supports (%s)", Names())
+}
+
 // Names lists registered providers, sorted.
 func Names() []string {
 	mu.RLock()

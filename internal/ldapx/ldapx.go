@@ -124,6 +124,7 @@ func (c *Conn) RootDSE(ctx context.Context) (map[string]string, error) {
 		"domainFunctionality", "domainControllerFunctionality", "supportedCapabilities",
 		"supportedControl", "supportedLDAPVersion", "supportedSASLMechanisms", "vendorName",
 		"vendorVersion", "isGlobalCatalogReady", "highestCommittedUSN", "ldapServiceName", "currentTime",
+		"namingContexts", "supportedExtension",
 	}
 	res, err := c.search(ctx, "", ldap.ScopeBaseObject, "(objectClass=*)", attrs, 0)
 	if err != nil {
@@ -152,6 +153,9 @@ type Entry struct {
 type SearchOptions struct {
 	// Binary lists attributes to return as raw bytes (case-insensitive).
 	Binary []string
+	// SizeLimit caps the number of entries the server returns (0 = no cap);
+	// used by probes that only need to know whether anything is readable.
+	SizeLimit int
 	// SDFlags, when non-zero, attaches LDAP_SERVER_SD_FLAGS_OID so the server
 	// returns only the named parts of nTSecurityDescriptor. Use SDFlagsDACL for
 	// non-administrators: without the control AD also asks for the SACL and
@@ -184,8 +188,12 @@ func (c *Conn) SearchWith(ctx context.Context, baseDN string, scope Scope, filte
 	if o.SDFlags != 0 {
 		controls = append(controls, sdFlagsControl(o.SDFlags))
 	}
-	res, err := c.pagedSearch(ctx, baseDN, int(scope), filter, attrs, controls, 500)
-	if err != nil {
+	page := uint32(500)
+	if o.SizeLimit > 0 {
+		page = 0 // a capped probe is a single request
+	}
+	res, err := c.pagedSearchLimited(ctx, baseDN, int(scope), filter, attrs, controls, page, o.SizeLimit)
+	if err != nil && !(o.SizeLimit > 0 && ldap.IsErrorWithCode(err, ldap.LDAPResultSizeLimitExceeded)) {
 		return nil, err
 	}
 	binary := map[string]bool{}
@@ -335,6 +343,10 @@ func (c *Conn) search(ctx context.Context, base string, scope int, filter string
 // when page > 0. Every page is one request and passes through the throttle,
 // so --max-qps limits real load on the DC rather than logical searches.
 func (c *Conn) pagedSearch(ctx context.Context, base string, scope int, filter string, attrs []string, controls []ldap.Control, page uint32) ([]*ldap.Entry, error) {
+	return c.pagedSearchLimited(ctx, base, scope, filter, attrs, controls, page, 0)
+}
+
+func (c *Conn) pagedSearchLimited(ctx context.Context, base string, scope int, filter string, attrs []string, controls []ldap.Control, page uint32, sizeLimit int) ([]*ldap.Entry, error) {
 	c.queries++
 	var paging *ldap.ControlPaging
 	ctrls := append([]ldap.Control(nil), controls...)
@@ -342,7 +354,7 @@ func (c *Conn) pagedSearch(ctx context.Context, base string, scope int, filter s
 		paging = ldap.NewControlPaging(page)
 		ctrls = append(ctrls, paging)
 	}
-	req := ldap.NewSearchRequest(base, scope, ldap.NeverDerefAliases, 0, 0, false, filter, attrs, ctrls)
+	req := ldap.NewSearchRequest(base, scope, ldap.NeverDerefAliases, sizeLimit, 0, false, filter, attrs, ctrls)
 	var out []*ldap.Entry
 	for {
 		if err := c.wait(ctx); err != nil {

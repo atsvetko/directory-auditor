@@ -216,3 +216,98 @@ func fspSID(dn string) string {
 	}
 	return dn[3:strings.IndexByte(dn, ',')]
 }
+
+// ResolveFor picks the Tier-0 model by provider: the AD model (groups by SID)
+// or the FreeIPA model (the admins and trust admins groups, nested through
+// member, plus the IPA servers themselves).
+func ResolveFor(provider string, objs []snapshot.Object, domainSID string) *Set {
+	if provider == "freeipa" {
+		return resolveFreeIPA(objs)
+	}
+	return Resolve(objs, domainSID)
+}
+
+func resolveFreeIPA(objs []snapshot.Object) *Set {
+	s := &Set{Reason: map[string]string{}, SIDs: map[string]string{}}
+	byDN := make(map[string]*snapshot.Object, len(objs))
+	for i := range objs {
+		byDN[strings.ToLower(objs[i].DN)] = &objs[i]
+	}
+	type item struct {
+		o    *snapshot.Object
+		path string
+	}
+	var queue []item
+	mark := func(o *snapshot.Object, path string) bool {
+		k := strings.ToLower(o.DN)
+		if _, seen := s.Reason[k]; seen {
+			return false
+		}
+		s.Reason[k] = path
+		return true
+	}
+	for i := range objs {
+		o := &objs[i]
+		l := strings.ToLower(o.DN)
+		switch {
+		case strings.HasPrefix(l, "cn=admins,cn=groups,cn=accounts,"):
+			if mark(o, "admins") {
+				queue = append(queue, item{o, "admins"})
+			}
+		case strings.HasPrefix(l, "cn=trust admins,cn=groups,cn=accounts,"):
+			if mark(o, "trust admins") {
+				queue = append(queue, item{o, "trust admins"})
+			}
+		case strings.Contains(l, ",cn=masters,cn=ipa,cn=etc,"):
+			// cn=<fqdn>,cn=masters → the host object and its service principals
+			name := o.Attr("cn")
+			if h, ok := byDN["fqdn="+strings.ToLower(name)+",cn=computers,cn=accounts,"+suffixAfter(l, ",cn=masters,cn=ipa,cn=etc,")]; ok {
+				mark(h, "IPA server")
+			}
+			for j := range objs {
+				p := strings.ToLower(objs[j].Attr("krbPrincipalName"))
+				if strings.Contains(p, "/"+strings.ToLower(name)+"@") && strings.Contains(strings.ToLower(objs[j].DN), ",cn=services,cn=accounts,") {
+					mark(&objs[j], "service on IPA server "+name)
+				}
+			}
+		}
+	}
+	unresolved := map[string]bool{}
+	for len(queue) > 0 {
+		it := queue[0]
+		queue = queue[1:]
+		for _, m := range attrAll(it.o, "member") {
+			mo, ok := byDN[strings.ToLower(m)]
+			if !ok {
+				unresolved[m] = true
+				continue
+			}
+			p := it.path + " > " + displayIPA(mo)
+			if mark(mo, p) {
+				queue = append(queue, item{mo, p})
+			}
+		}
+	}
+	for dn := range unresolved {
+		s.Unresolved = append(s.Unresolved, dn)
+	}
+	sort.Strings(s.Unresolved)
+	return s
+}
+
+func displayIPA(o *snapshot.Object) string {
+	if n := o.Attr("uid"); n != "" {
+		return n
+	}
+	if n := o.Attr("cn"); n != "" {
+		return n
+	}
+	return o.DN
+}
+
+func suffixAfter(dn, marker string) string {
+	if i := strings.Index(dn, marker); i >= 0 {
+		return dn[i+len(marker):]
+	}
+	return ""
+}

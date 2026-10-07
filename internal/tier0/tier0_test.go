@@ -83,3 +83,31 @@ func TestResolve(t *testing.T) {
 		t.Errorf("unresolved = %v", s.Unresolved)
 	}
 }
+
+func TestResolveFreeIPA(t *testing.T) {
+	snap, err := snapshot.ReadFile("../../testdata/synthetic-freeipa.json.zst")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := ResolveFor("freeipa", snap.Objects, "")
+	want := map[string]string{
+		"uid=admin,cn=users,cn=accounts,dc=ipa,dc=example":                                            "admins > admin",
+		"uid=carol,cn=users,cn=accounts,dc=ipa,dc=example":                                            "admins > carol",
+		"fqdn=ipa.ipa.example,cn=computers,cn=accounts,dc=ipa,dc=example":                             "IPA server",
+		"krbprincipalname=ldap/ipa.ipa.example@IPA.EXAMPLE,cn=services,cn=accounts,dc=ipa,dc=example": "service on IPA server ipa.ipa.example",
+	}
+	for dn, reason := range want {
+		ok, r := s.IsDN(dn)
+		if !ok || r != reason {
+			t.Errorf("%s: ok=%v reason=%q, want %q", dn, ok, r, reason)
+		}
+	}
+	for _, dn := range []string{"uid=bob,cn=users,cn=accounts,dc=ipa,dc=example", "fqdn=web01.ipa.example,cn=computers,cn=accounts,dc=ipa,dc=example"} {
+		if ok, r := s.IsDN(dn); ok {
+			t.Errorf("%s wrongly Tier 0 (%s)", dn, r)
+		}
+	}
+	if len(s.Unresolved) != 0 {
+		t.Errorf("unresolved: %v", s.Unresolved)
+	}
+}

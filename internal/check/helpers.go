@@ -11,6 +11,7 @@ import (
 	"cel.dev/cel-go/common/types/ref"
 
 	"github.com/atsvetko/directory-auditor/internal/secdesc"
+	"github.com/atsvetko/directory-auditor/internal/snapshot"
 )
 
 // Helper functions available to pack conditions, in addition to attr, attrs,
@@ -33,6 +34,11 @@ import (
 //	                                               object_type, inherited_object_type, trustee_tier0}
 //	aces_of(obj, "msDS-AllowedToActOnBehalfOfOtherIdentity")  same, for another SD attribute
 //	sd_readable(obj)                              descriptor was collected (honest-state guard)
+//	objattr("cn=ipaConfig,cn=etc,<default>", "ipaUserAuthType")   first value of an attribute on
+//	                                              another snapshot object ("" when absent); <default>
+//	                                              is the base DN of the snapshot
+//	objattrs(dn, "attr")                          all values of that attribute
+//	objexists(dn)                                 the object was collected
 func helperOptions() []cel.EnvOption {
 	mapT := cel.MapType(cel.StringType, cel.DynType)
 	aceList := cel.ListType(cel.MapType(cel.StringType, cel.DynType))
@@ -108,6 +114,31 @@ func helperOptions() []cel.EnvOption {
 				cel.UnaryBinding(func(o ref.Val) ref.Val {
 					d, err := descriptorOf(o, "nTSecurityDescriptor")
 					return types.Bool(err == nil && d.Protected())
+				}))),
+		cel.Function("objattr",
+			cel.Overload("objattr_string_string", []*cel.Type{cel.StringType, cel.StringType}, cel.StringType,
+				cel.BinaryBinding(func(dn, name ref.Val) ref.Val {
+					vals := lookupAttr(string(dn.(types.String)), string(name.(types.String)))
+					if len(vals) == 0 {
+						return types.String("")
+					}
+					return types.String(vals[0])
+				}))),
+		cel.Function("objattrs",
+			cel.Overload("objattrs_string_string", []*cel.Type{cel.StringType, cel.StringType}, cel.ListType(cel.StringType),
+				cel.BinaryBinding(func(dn, name ref.Val) ref.Val {
+					vals := lookupAttr(string(dn.(types.String)), string(name.(types.String)))
+					out := make([]ref.Val, len(vals))
+					for i, v := range vals {
+						out[i] = types.String(v)
+					}
+					return types.NewRefValList(types.DefaultTypeAdapter, out)
+				}))),
+		cel.Function("objexists",
+			cel.Overload("objexists_string", []*cel.Type{cel.StringType}, cel.BoolType,
+				cel.UnaryBinding(func(dn ref.Val) ref.Val {
+					_, ok := lookupObject(string(dn.(types.String)))
+					return types.Bool(ok)
 				}))),
 		cel.Function("aces",
 			cel.Overload("aces_map", []*cel.Type{mapT}, aceList,
@@ -204,4 +235,41 @@ func aceVals(o ref.Val, attr string) ref.Val {
 		})
 	}
 	return types.NewDynamicList(types.DefaultTypeAdapter, out)
+}
+
+// Snapshot index for the objattr/objattrs/objexists helpers; set per evaluation
+// under evalMu like currentTier0.
+var (
+	currentIndex map[string]*snapshot.Object
+	currentBase  string
+)
+
+func indexSnapshot(snap *snapshot.Snapshot) map[string]*snapshot.Object {
+	idx := make(map[string]*snapshot.Object, len(snap.Objects))
+	for i := range snap.Objects {
+		idx[strings.ToLower(snap.Objects[i].DN)] = &snap.Objects[i]
+	}
+	return idx
+}
+
+func lookupObject(dn string) (*snapshot.Object, bool) {
+	if currentIndex == nil {
+		return nil, false
+	}
+	dn = strings.ReplaceAll(dn, "<default>", currentBase)
+	o, ok := currentIndex[strings.ToLower(dn)]
+	return o, ok
+}
+
+func lookupAttr(dn, name string) []string {
+	o, ok := lookupObject(dn)
+	if !ok {
+		return nil
+	}
+	for k, v := range o.Attrs {
+		if strings.EqualFold(k, name) {
+			return v
+		}
+	}
+	return nil
 }
