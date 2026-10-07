@@ -1,0 +1,64 @@
+id: DSA-0012
+title:
+  en: "Accounts restricted to DES or RC4 Kerberos encryption"
+  ru: "Учётные записи, ограниченные шифрованием Kerberos DES или RC4"
+domain: directory-core
+tier: 0
+severity: medium
+quick: false
+status: draft
+verified_by: ""
+verified_on: ""
+
+object: "Enabled user and computer accounts; trust accounts"
+attributes: [userAccountControl, msDS-SupportedEncryptionTypes, sAMAccountName, objectClass]
+
+condition: >
+  The account is enabled and either (a) userAccountControl has USE_DES_KEY_ONLY
+  (0x200000, decimal 2097152) set, or (b) msDS-SupportedEncryptionTypes is set to a
+  value that includes DES-CBC-CRC (0x1), DES-CBC-MD5 (0x2) or RC4-HMAC (0x4) and
+  includes neither AES128 (0x8) nor AES256 (0x10). Case (a) or any DES-only value is
+  high; RC4-only is medium. Accounts with an SPN are also covered by DSA-0003.
+threshold: "any occurrence"
+
+rationale: >
+  DES is obsolete and RC4 is weak; Microsoft's Kerberos specification states that
+  setting RC4 or DES only is weak and not recommended. An account pinned to these
+  types forces weaker tickets and keys for every service that uses it, and keeps
+  legacy algorithms enabled in the domain long after they could be retired.
+
+remediation:
+  en: >
+    Clear "Use only Kerberos DES encryption types" and set
+    msDS-SupportedEncryptionTypes to include AES (0x18 for AES128 + AES256). Reset the
+    account password once afterwards so AES keys are generated. Find the application
+    that required the legacy type and upgrade or replace it.
+  ru: >
+    Снимите флаг «Использовать только типы шифрования DES для Kerberos» и задайте
+    msDS-SupportedEncryptionTypes с AES (0x18 — AES128 + AES256). Затем один раз
+    смените пароль учётной записи, чтобы создались ключи AES. Найдите приложение,
+    которому требовался устаревший тип, и обновите или замените его.
+
+attack:
+  - { id: T1558.003, name: "Steal or Forge Kerberos Tickets: Kerberoasting" }
+
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: "(&(|(userAccountControl:1.2.840.113556.1.4.803:=2097152)(msDS-SupportedEncryptionTypes=*))(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
+  attributes: [sAMAccountName, userAccountControl, msDS-SupportedEncryptionTypes, objectClass]
+
+references:
+  - title: "MS-KILE 2.2.7 Supported Encryption Types Bit Flags"
+    url: "https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-kile/6cfc7b50-11ed-4b4d-846d-6f08f0812919"
+  - title: "Microsoft — Windows configurations for Kerberos supported encryption type"
+    url: "https://learn.microsoft.com/en-us/archive/blogs/openspecification/windows-configurations-for-kerberos-supported-encryption-type"
+  - title: "Microsoft Learn — Use the UserAccountControl flags (USE_DES_KEY_ONLY 0x200000)"
+    url: "https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties"
+  - title: "MITRE ATT&CK — T1558.003 Kerberoasting"
+    url: "https://attack.mitre.org/techniques/T1558/003/"
+
+notes: >
+  The CEL condition evaluates the bit combination; the LDAP filter only narrows to
+  accounts where the attribute or flag is present.
