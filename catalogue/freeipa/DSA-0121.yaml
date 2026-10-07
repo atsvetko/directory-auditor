@@ -1,0 +1,82 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0121
+title:
+  en: Permission grants write, add or delete to anonymous or to all authenticated users
+  ru: >-
+    Разрешение даёт права записи, добавления или удаления анонимным или всем аутентифицированным пользователям
+domain: freeipa
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Permissions (objectClass ipaPermission) under cn=permissions,cn=pbac
+attributes:
+- cn
+- ipaPermBindRuleType
+- ipaPermRight
+- ipaPermDefaultAttr
+- ipaPermLocation
+- ipaPermTarget
+- ipaPermissionType
+condition: >-
+  ipaPermBindRuleType is anonymous or all, and ipaPermRight includes write, add, delete or all. Read-only
+  permissions with these bind rules (FreeIPA ships several) are not findings.
+threshold: any occurrence
+rationale: >-
+  A permission with bind rule 'all' applies to every authenticated principal — every user, host and service
+  — and 'anonymous' to anyone who can open an LDAP connection. Granting write rights that way is a hidden
+  delegation to the whole domain: for example 'write userPassword' lets any account reset any other account's
+  password, and 'add' under cn=computers lets anyone create hosts.
+remediation:
+  en: >-
+    Change the bind rule to permission (`ipa permission-mod NAME --bindtype=permission`) and attach the
+    permission to a privilege and role held by the intended group; review what the right was used for
+    and whether it was exercised.
+  ru: >-
+    Измените тип привязки на permission (`ipa permission-mod ИМЯ --bindtype=permission`) и подключите
+    разрешение к привилегии и роли нужной группы; проверьте, для чего использовалось право и применялось
+    ли оно.
+attack:
+- id: T1098
+  name: Account Manipulation
+- id: T1484
+  name: Domain or Tenant Policy Modification
+engine: declarative
+query_sketch:
+  base: cn=permissions,cn=pbac,<default>
+  scope: one
+  filter: >-
+    (&(objectClass=ipaPermission)(|(ipaPermBindRuleType=anonymous)(ipaPermBindRuleType=all))(|(ipaPermRight=write)(ipaPermRight=add)(ipaPermRight=delete)(ipaPermRight=all)))
+  attributes:
+  - cn
+  - ipaPermRight
+  - ipaPermDefaultAttr
+  - ipaPermLocation
+references:
+- title: >-
+    FreeIPA source — ipaserver/plugins/permission.py (ipapermbindruletype values permission, all, anonymous;
+    'System: Read Permissions')
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/ipaserver/plugins/permission.py
+- title: >-
+    FreeIPA source — install/share/default-aci.ldif ('Deny all modifications for anonymous binds' backstop
+    ACI)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/install/share/default-aci.ldif
+- title: Red Hat — Managing role-based access controls in IdM using the CLI
+  url: >-
+    https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/managing_idm_users_groups_hosts_and_access_control_rules/managing-role-based-access-controls-in-idm-using-the-cli_managing-users-groups-hosts
+- title: MITRE ATT&CK — T1098 Account Manipulation
+  url: https://attack.mitre.org/techniques/T1098/
+notes: >-
+  Needs the 'RBAC Readers' privilege; otherwise reported as not collected. FreeIPA's own backstop ACI
+  denies anonymous writes regardless, so an anonymous write permission is a misconfiguration rather than
+  an open door — but 'all' is enforced as written.
+condition_cel: attr(obj, "ipaPermBindRuleType").lowerAscii() in ["anonymous", "all"] && attrs(obj, "ipaPermRight").exists(r,
+  r.lowerAscii() in ["write", "add", "delete", "all"])
+expect:
+- cn=Helpdesk reset passwords,cn=permissions,cn=pbac,dc=ipa,dc=example
+- cn=Add hosts anonymously,cn=permissions,cn=pbac,dc=ipa,dc=example

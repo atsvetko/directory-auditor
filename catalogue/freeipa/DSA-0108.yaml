@@ -1,0 +1,77 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0108
+title:
+  en: Account lockout after failed logons is disabled
+  ru: Блокировка учётной записи после неудачных попыток входа отключена
+domain: freeipa
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Password policies (krbPwdPolicy) and the global configuration cn=ipaConfig,cn=etc
+attributes:
+- cn
+- krbPwdMaxFailure
+- krbPwdFailureCountInterval
+- krbPwdLockoutDuration
+- ipaConfigString
+condition: >-
+  krbPwdMaxFailure is present and equal to 0 on a password policy (unlimited failed attempts), or ipaConfigString
+  on cn=ipaConfig contains KDC:Disable Lockout (the KDC ignores lockout for every policy).
+threshold: any occurrence
+rationale: >-
+  Lockout is what turns online password guessing from minutes into years. FreeIPA's default is 6 failures
+  within 60 seconds and a 10-minute lock; both knobs can be switched off — per policy or globally with
+  a KDC switch that is easy to set during replication troubleshooting and forget. With lockout off, every
+  account protected by a password alone (DSA-0105) is exposed to unlimited guessing against the KDC and
+  LDAP.
+remediation:
+  en: >-
+    Set a non-zero maximum (`ipa pwpolicy-mod [GROUP] --maxfail=6 --failinterval=60 --lockouttime=600`)
+    and remove the global switch (`ipa config-mod --delattr=ipaconfigstring='KDC:Disable Lockout'`). If
+    lockout was disabled to avoid replication load, prefer the default 'KDC:Disable Last Success' instead.
+  ru: >-
+    Задайте ненулевой предел (`ipa pwpolicy-mod [ГРУППА] --maxfail=6 --failinterval=60 --lockouttime=600`)
+    и удалите глобальный переключатель (`ipa config-mod --delattr=ipaconfigstring='KDC:Disable Lockout'`).
+    Если блокировку отключали ради снижения нагрузки на репликацию, оставьте только значение по умолчанию
+    «KDC:Disable Last Success».
+attack:
+- id: T1110.001
+  name: 'Brute Force: Password Guessing'
+- id: T1110.003
+  name: 'Brute Force: Password Spraying'
+engine: declarative
+query_sketch:
+  base: <default>
+  scope: subtree
+  filter: >-
+    (|(&(objectClass=krbPwdPolicy)(krbPwdMaxFailure=0))(&(objectClass=ipaGuiConfig)(ipaConfigString=KDC:Disable
+    Lockout)))
+  attributes:
+  - cn
+  - krbPwdMaxFailure
+  - ipaConfigString
+references:
+- title: FreeIPA source — ipaserver/plugins/config.py (ipaconfigstring value 'KDC:Disable Lockout')
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/ipaserver/plugins/config.py
+- title: >-
+    FreeIPA source — install/share/kerberos.ldif (default krbPwdMaxFailure 6, interval 60, lockout 600)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/install/share/kerberos.ldif
+- title: Red Hat — Defining IdM password policies
+  url: >-
+    https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/8/html/using_ansible_to_install_and_manage_identity_management/defining-idm-password-policies_using-ansible-to-install-and-manage-idm
+- title: MITRE ATT&CK — T1110.003 Password Spraying
+  url: https://attack.mitre.org/techniques/T1110/003/
+notes: >-
+  The policy part needs 'Password Policy Readers'; the configuration part is readable by all authenticated
+  users.
+condition_cel: (hasattr(obj, "krbPwdMaxFailure") && intattr(obj, "krbPwdMaxFailure") == 0) || attrs(obj,
+  "ipaConfigString").exists(s, s.lowerAscii() == "kdc:disable lockout")
+expect:
+- cn=global_policy,cn=IPA.EXAMPLE,cn=kerberos,dc=ipa,dc=example
+- cn=ipaConfig,cn=etc,dc=ipa,dc=example

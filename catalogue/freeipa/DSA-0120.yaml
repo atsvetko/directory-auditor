@@ -1,0 +1,56 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0120
+title:
+  en: KDC no longer requires pre-authentication for service principals by default
+  ru: KDC по умолчанию не требует предварительной аутентификации для служебных принципалов
+domain: freeipa
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The global configuration cn=ipaConfig,cn=etc
+attributes:
+- ipaConfigString
+condition: ipaConfigString contains 'KDC:Disable Default Preauth for SPNs'.
+threshold: any occurrence
+rationale: >-
+  This switch makes the KDC treat every service principal as if pre-authentication were not required unless
+  the principal's own flags say otherwise. Service keys then become obtainable through AS requests by
+  anyone (DSA-0111 at realm scale), and the usual per-principal review no longer tells the whole story.
+remediation:
+  en: >-
+    Remove the value (`ipa config-mod --delattr=ipaconfigstring='KDC:Disable Default Preauth for SPNs'`)
+    and fix the individual services that needed it with explicit flags instead.
+  ru: >-
+    Удалите значение (`ipa config-mod --delattr=ipaconfigstring='KDC:Disable Default Preauth for SPNs'`)
+    и для отдельных служб, которым это требовалось, задайте явные флаги.
+attack:
+- id: T1558.004
+  name: 'Steal or Forge Kerberos Tickets: AS-REP Roasting'
+engine: declarative
+query_sketch:
+  base: cn=ipaConfig,cn=etc,<default>
+  scope: base
+  filter: (&(objectClass=ipaGuiConfig)(ipaConfigString=KDC:Disable Default Preauth for SPNs))
+  attributes:
+  - ipaConfigString
+references:
+- title: >-
+    FreeIPA source — ipaserver/plugins/config.py (ipaconfigstring value 'KDC:Disable Default Preauth for
+    SPNs')
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/ipaserver/plugins/config.py
+- title: >-
+    MIT Kerberos — kdb.h principal attribute flags (KRB5_KDB_REQUIRES_PRE_AUTH 0x80, OK_AS_DELEGATE 0x100000,
+    OK_TO_AUTH_AS_DELEGATE 0x200000)
+  url: https://github.com/krb5/krb5/blob/master/src/include/kdb.h
+- title: MITRE ATT&CK — T1558.004 AS-REP Roasting
+  url: https://attack.mitre.org/techniques/T1558/004/
+notes: Readable by all authenticated users.
+condition_cel: attrs(obj, "ipaConfigString").exists(s, s.lowerAscii() == "kdc:disable default preauth
+  for spns")
+expect:
+- cn=ipaConfig,cn=etc,dc=ipa,dc=example

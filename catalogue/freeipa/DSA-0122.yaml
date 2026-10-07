@@ -1,0 +1,71 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0122
+title:
+  en: Role or privilege is held by every user (ipausers is a member)
+  ru: Роль или привилегия выдана всем пользователям (группа ipausers входит в состав)
+domain: freeipa
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Roles under cn=roles,cn=accounts and privileges under cn=privileges,cn=pbac (groupOfNames)
+attributes:
+- cn
+- member
+- memberOf
+condition: >-
+  The entry lives under cn=roles,cn=accounts or cn=privileges,cn=pbac and its member attribute includes
+  cn=ipausers,cn=groups,cn=accounts — the default primary group of every user. Roles and privileges whose
+  members are named users or specific groups are not findings; ordinary groups that contain ipausers are
+  expected and ignored.
+threshold: any occurrence
+rationale: >-
+  Roles bundle privileges and permissions; a role held by ipausers is held by every account in the domain,
+  including service users and contractors. Typical accidents are 'helpdesk' roles that reset passwords
+  or 'host enrollment' roles added to ipausers to simplify provisioning.
+remediation:
+  en: >-
+    Remove ipausers from the role or privilege (`ipa role-remove-member ROLE --groups=ipausers`) and add
+    the specific group that needs it.
+  ru: >-
+    Удалите ipausers из роли или привилегии (`ipa role-remove-member РОЛЬ --groups=ipausers`) и добавьте
+    конкретную группу, которой это нужно.
+attack:
+- id: T1098
+  name: Account Manipulation
+- id: T1078
+  name: Valid Accounts
+engine: complex:container_scope
+query_sketch:
+  base: <default>
+  scope: subtree
+  filter: (&(objectClass=groupOfNames)(member=cn=ipausers,cn=groups,cn=accounts,<default>))
+  attributes:
+  - cn
+  - member
+  notes: >-
+    Only entries under cn=roles,cn=accounts and cn=privileges,cn=pbac count; ordinary groups containing
+    ipausers are expected.
+references:
+- title: >-
+    FreeIPA source — ipaserver/plugins/role.py (roles are groupOfNames under cn=roles,cn=accounts)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/ipaserver/plugins/role.py
+- title: >-
+    FreeIPA source — install/share/bootstrap-template.ldif (ipausers is ipaDefaultPrimaryGroup)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/install/share/bootstrap-template.ldif
+- title: Red Hat — Managing role-based access controls in IdM using the CLI
+  url: >-
+    https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/managing_idm_users_groups_hosts_and_access_control_rules/managing-role-based-access-controls-in-idm-using-the-cli_managing-users-groups-hosts
+- title: MITRE ATT&CK — T1098 Account Manipulation
+  url: https://attack.mitre.org/techniques/T1098/
+notes: Needs 'RBAC Readers'; otherwise reported as not collected.
+condition_cel: (obj.dn.lowerAscii().contains(",cn=roles,cn=accounts,") || obj.dn.lowerAscii().contains(",cn=privileges,cn=pbac,"))
+  && attrs(obj, "member").exists(m, m.lowerAscii().startsWith("cn=ipausers,cn=groups,cn=accounts,"))
+expect:
+- cn=helpdesk,cn=roles,cn=accounts,dc=ipa,dc=example
+- cn=Password Policy Readers,cn=privileges,cn=pbac,dc=ipa,dc=example

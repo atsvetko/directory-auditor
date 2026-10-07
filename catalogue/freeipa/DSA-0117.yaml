@@ -1,0 +1,60 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0117
+title:
+  en: Migration mode is enabled
+  ru: Включён режим миграции
+domain: freeipa
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The global configuration cn=ipaConfig,cn=etc (objectClass ipaGuiConfig)
+attributes:
+- ipaMigrationEnabled
+condition: ipaMigrationEnabled is TRUE. The installation default is FALSE.
+threshold: any occurrence
+rationale: >-
+  Migration mode exists to move users from another LDAP server: it allows user entries to be added with
+  pre-hashed passwords and lets such users obtain Kerberos keys by binding to LDAP with their old password.
+  Left on after the migration, it keeps a password-hash import path open and a weaker authentication path
+  (an LDAP bind with a hash-only account) that bypasses the Kerberos policy — including a second factor.
+remediation:
+  en: >-
+    Turn it off once migrated users have logged in once (`ipa config-mod --enable-migration=false`) and
+    check that no accounts remain without Kerberos keys (`ipa user-find --all` and look for missing krbPrincipalKey
+    via `ipa migrate-ds` reports).
+  ru: >-
+    Отключите режим после того, как перенесённые пользователи выполнили первый вход (`ipa config-mod --enable-migration=false`),
+    и убедитесь, что не осталось учётных записей без ключей Kerberos.
+attack:
+- id: T1556
+  name: Modify Authentication Process
+- id: T1078
+  name: Valid Accounts
+engine: declarative
+query_sketch:
+  base: cn=ipaConfig,cn=etc,<default>
+  scope: base
+  filter: (&(objectClass=ipaGuiConfig)(ipaMigrationEnabled=TRUE))
+  attributes:
+  - ipaMigrationEnabled
+references:
+- title: >-
+    FreeIPA source — install/share/60ipaconfig.ldif (ipaMigrationEnabled: allow adding user entries with
+    pre-hashed passwords)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/install/share/60ipaconfig.ldif
+- title: FreeIPA source — install/share/bootstrap-template.ldif (default ipaMigrationEnabled FALSE)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/install/share/bootstrap-template.ldif
+- title: FreeIPA — NIS accounts migration preserving passwords (migration mode)
+  url: https://www.freeipa.org/page/NIS_accounts_migration_preserving_Passwords
+- title: MITRE ATT&CK — T1556 Modify Authentication Process
+  url: https://attack.mitre.org/techniques/T1556/
+notes: 'Readable by all authenticated users (''System: Read Global Configuration'').'
+condition_cel: attr(obj, "ipaMigrationEnabled").upperAscii() == "TRUE"
+expect:
+- cn=ipaConfig,cn=etc,dc=ipa,dc=example

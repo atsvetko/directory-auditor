@@ -1,0 +1,68 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0104
+title:
+  en: Sudo rule does not require a password (!authenticate)
+  ru: Правило sudo не требует пароля (!authenticate)
+domain: freeipa
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Sudo rules (objectClass ipaSudoRule)
+attributes:
+- cn
+- ipaEnabledFlag
+- ipaSudoOpt
+- cmdCategory
+- memberAllowCmd
+- memberUser
+- memberHost
+condition: >-
+  An enabled rule carries the sudo option !authenticate. Severity is high when the rule also allows all
+  commands (cmdCategory = all), medium when it is limited to named commands.
+threshold: any occurrence
+rationale: >-
+  Without re-authentication, anyone who obtains a user's session (an unlocked terminal, a stolen SSH agent,
+  a web shell running as that user) can run the permitted commands as root immediately. Combined with
+  an all-commands rule this is a silent, password-less path to root on every host in scope.
+remediation:
+  en: >-
+    Remove the !authenticate option (`ipa sudorule-remove-option RULE --sudooption='!authenticate'`) unless
+    the rule is limited to specific non-interactive commands run by automation; for those, limit the commands
+    and the host group and document the exception.
+  ru: >-
+    Удалите параметр !authenticate (`ipa sudorule-remove-option ПРАВИЛО --sudooption='!authenticate'`),
+    если правило не ограничено конкретными неинтерактивными командами, которые выполняет автоматизация;
+    для таких правил ограничьте команды и группу узлов и задокументируйте исключение.
+attack:
+- id: T1548.003
+  name: 'Abuse Elevation Control Mechanism: Sudo and Sudo Caching'
+engine: declarative
+query_sketch:
+  base: cn=sudorules,cn=sudo,<default>
+  scope: one
+  filter: (&(objectClass=ipaSudoRule)(ipaSudoOpt=!authenticate))
+  attributes:
+  - cn
+  - ipaEnabledFlag
+  - cmdCategory
+  - memberAllowCmd
+  - memberUser
+  - memberHost
+references:
+- title: FreeIPA source — install/share/65ipasudo.ldif (ipaSudoOpt attribute)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/install/share/65ipasudo.ldif
+- title: Red Hat — Modifying sudo rules (sudorule-add-option, !authenticate)
+  url: >-
+    https://docs.redhat.com/en/documentation/Red_Hat_Enterprise_Linux/7/html/linux_domain_identity_authentication_and_policy_guide/modify-sudo-rules
+- title: MITRE ATT&CK — T1548.003 Sudo and Sudo Caching
+  url: https://attack.mitre.org/techniques/T1548/003/
+notes: ipaSudoOpt uses caseExactIA5Match; the option is compared verbatim.
+condition_cel: attr(obj, "ipaEnabledFlag").upperAscii() == "TRUE" && attrs(obj, "ipaSudoOpt").exists(o,
+  o.trim() == "!authenticate")
+expect:
+- ipaUniqueID=ops_nopasswd,cn=sudorules,cn=sudo,dc=ipa,dc=example

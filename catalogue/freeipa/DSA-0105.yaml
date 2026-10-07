@@ -1,0 +1,88 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0105
+title:
+  en: Members of the admins group can sign in with a password alone
+  ru: Члены группы admins могут входить только по паролю, без второго фактора
+domain: freeipa
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  User accounts that are members of cn=admins; the global configuration cn=ipaConfig,cn=etc for the default
+  authentication types
+attributes:
+- uid
+- memberOf
+- ipaUserAuthType
+- krbPrincipalName
+condition: >-
+  The user is a member (direct or nested, via memberOf) of cn=admins,cn=groups,cn=accounts and the effective
+  authentication types — the user's ipaUserAuthType, or the global ipaUserAuthType when the user has none
+  — are empty (FreeIPA's default, password) or include password or hardened. Users whose effective types
+  are only otp, radius, pkinit, idp or passkey, or only disabled, are not findings.
+threshold: any occurrence
+rationale: >-
+  admins is FreeIPA's built-in administrative group: its members can change any user, policy and host.
+  When such an account accepts a plain password, a phished or guessed password is enough to take over
+  the domain. FreeIPA supports a second factor per user or globally (otp, radius, pkinit, passkey); the
+  setting is per account, so it is easy to protect ordinary users and forget the administrators.
+remediation:
+  en: >-
+    Enrol a token for each administrator (`ipa otptoken-add --owner USER`) and set `ipa user-mod USER
+    --user-auth-type=otp` (or pkinit/passkey). Set the global default with `ipa config-mod --user-auth-type=otp`
+    once every account has a token, and keep a documented break-glass account offline. Enable EnforceLDAPOTP
+    so LDAP binds cannot bypass the second factor.
+  ru: >-
+    Выпустите токен каждому администратору (`ipa otptoken-add --owner ПОЛЬЗОВАТЕЛЬ`) и задайте `ipa user-mod
+    ПОЛЬЗОВАТЕЛЬ --user-auth-type=otp` (или pkinit/passkey). Когда токены есть у всех, установите глобальное
+    значение `ipa config-mod --user-auth-type=otp` и храните задокументированную аварийную учётную запись
+    отдельно. Включите EnforceLDAPOTP, чтобы привязки LDAP не обходили второй фактор.
+attack:
+- id: T1078
+  name: Valid Accounts
+- id: T1110
+  name: Brute Force
+- id: T1556.006
+  name: 'Modify Authentication Process: Multi-Factor Authentication'
+engine: complex:effective_auth_type
+query_sketch:
+  base: cn=users,cn=accounts,<default>
+  scope: one
+  filter: (&(objectClass=posixAccount)(memberOf=cn=admins,cn=groups,cn=accounts,<default>))
+  attributes:
+  - uid
+  - ipaUserAuthType
+  - memberOf
+  notes: Also read ipaUserAuthType from cn=ipaConfig,cn=etc,<default>.
+references:
+- title: >-
+    FreeIPA source — ipaserver/plugins/config.py (ipauserauthtype values: password, radius, otp, pkinit,
+    hardened, idp, passkey, disabled)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/ipaserver/plugins/config.py
+- title: >-
+    Red Hat — Restricting access to services and hosts based on how users authenticate (authentication
+    types, OTP)
+  url: >-
+    https://docs.redhat.com/en/documentation/Red_Hat_Enterprise_Linux/7/html/linux_domain_identity_authentication_and_policy_guide/auth-indicators
+- title: Red Hat — Enforcing OTP usage for all LDAP clients (RHEL 10 IdM)
+  url: >-
+    https://docs.redhat.com/ja/documentation/red_hat_enterprise_linux/10/html/accessing_identity_management_services/enforcing-otp-usage-for-all-ldap-clients
+- title: MITRE ATT&CK — T1556.006 Multi-Factor Authentication
+  url: https://attack.mitre.org/techniques/T1556/006/
+notes: >-
+  memberOf on users is maintained by the 389-ds memberOf plugin and includes nested membership. 'hardened'
+  is still a single factor (password with brute-force protection). Readable by all authenticated users
+  ('System: Read User IPA Attributes', 'System: Read User Membership', 'System: Read Global Configuration').
+condition_cel: 'attrs(obj, "memberOf").exists(m, m.lowerAscii().startsWith("cn=admins,cn=groups,cn=accounts,"))
+  && ((size(attrs(obj, "ipaUserAuthType")) > 0 ? attrs(obj, "ipaUserAuthType") : objattrs("cn=ipaConfig,cn=etc,<default>",
+  "ipaUserAuthType")).size() == 0 || (size(attrs(obj, "ipaUserAuthType")) > 0 ? attrs(obj, "ipaUserAuthType")
+  : objattrs("cn=ipaConfig,cn=etc,<default>", "ipaUserAuthType")).exists(t, t.lowerAscii() == "password"
+  || t.lowerAscii() == "hardened"))'
+expect:
+- uid=admin,cn=users,cn=accounts,dc=ipa,dc=example
+- uid=carol,cn=users,cn=accounts,dc=ipa,dc=example

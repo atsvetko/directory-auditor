@@ -1,0 +1,77 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0116
+title:
+  en: AD trust incoming SID blocklist is missing well-known SIDs
+  ru: В списке блокировки входящих SID доверия с AD отсутствуют известные SID
+domain: freeipa
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Trusted AD domains (objectClass ipaNTTrustedDomain) under cn=trusts
+attributes:
+- cn
+- ipaNTTrustPartner
+- ipaNTTrustDirection
+- ipaNTSIDBlacklistIncoming
+- ipaNTSIDBlacklistOutgoing
+condition: >-
+  ipaNTSIDBlacklistIncoming is empty, or lacks any of the 24 well-known SIDs FreeIPA adds when the trust
+  is created (S-1-0, S-1-1, S-1-2, S-1-3, S-1-5-1 … S-1-5-20).
+threshold: any occurrence
+rationale: >-
+  When a user from the trusted AD forest authenticates, the IPA KDC filters the SIDs in the incoming MS-PAC
+  against this list; SIDs on it are dropped. The defaults block the well-known authorities (Everyone,
+  Authenticated Users, SYSTEM, built-in domains) so that an AD-side token cannot smuggle in identities
+  that mean something locally. A trimmed list means an administrator of the AD side — or anyone who can
+  forge a PAC there — can present those SIDs to IPA.
+remediation:
+  en: >-
+    Restore the default list (`ipa trust-mod DOMAIN --sid-blacklist-incoming=S-1-0,S-1-1,…,S-1-5-20`)
+    and add the SIDs of any IPA-side groups that must never arrive from the trust. Review the outgoing
+    list for the same reason.
+  ru: >-
+    Восстановите список по умолчанию (`ipa trust-mod ДОМЕН --sid-blacklist-incoming=S-1-0,S-1-1,…,S-1-5-20`)
+    и добавьте SID групп на стороне IPA, которые никогда не должны приходить через доверие. По той же
+    причине проверьте список для исходящих SID.
+attack:
+- id: T1134.005
+  name: 'Access Token Manipulation: SID-History Injection'
+- id: T1484.002
+  name: 'Domain or Tenant Policy Modification: Trust Modification'
+engine: complex:sid_list
+query_sketch:
+  base: cn=trusts,<default>
+  scope: subtree
+  filter: (objectClass=ipaNTTrustedDomain)
+  attributes:
+  - cn
+  - ipaNTSIDBlacklistIncoming
+  - ipaNTSIDBlacklistOutgoing
+references:
+- title: 'FreeIPA source — util/ipa_mspac.h (ipa_mspac_well_known_sids: the 24 default SIDs)'
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/util/ipa_mspac.h
+- title: >-
+    FreeIPA source — daemons/ipa-sam/ipa_sam.c (default blocklists added only when the attribute is absent)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/daemons/ipa-sam/ipa_sam.c
+- title: FreeIPA — Configurable SID Blacklists (design)
+  url: https://www.freeipa.org/page/V3/Configurable_SID_Blacklists
+- title: Red Hat — Verifying your IdM and AD trust configuration using IdM Healthcheck
+  url: >-
+    https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/using_idm_healthcheck_to_monitor_your_idm_environment/verifying-your-idm-and-ad-trust-configuration-using-idm-healthcheck_using-idm-healthcheck-to-monitor-your-idm-environment
+- title: MITRE ATT&CK — T1134.005 SID-History Injection
+  url: https://attack.mitre.org/techniques/T1134/005/
+notes: >-
+  Readable by all authenticated users ('System: Read Trust Information'). The filtering itself is in daemons/ipa-kdb/ipa_kdb_mspac.c
+  (filter_logon_info).
+condition_cel: size(attrs(obj, "ipaNTSIDBlacklistIncoming")) == 0 || ["S-1-0", "S-1-1", "S-1-2", "S-1-3",
+  "S-1-5-1", "S-1-5-2", "S-1-5-3", "S-1-5-4", "S-1-5-5", "S-1-5-6", "S-1-5-7", "S-1-5-8", "S-1-5-9", "S-1-5-10",
+  "S-1-5-11", "S-1-5-12", "S-1-5-13", "S-1-5-14", "S-1-5-15", "S-1-5-16", "S-1-5-17", "S-1-5-18", "S-1-5-19",
+  "S-1-5-20"].exists(s, !(s in attrs(obj, "ipaNTSIDBlacklistIncoming")))
+expect:
+- cn=partner.example,cn=ad,cn=trusts,dc=ipa,dc=example

@@ -1,0 +1,75 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0101
+title:
+  en: Default HBAC rule allow_all is still enabled
+  ru: Правило HBAC по умолчанию allow_all всё ещё включено
+domain: freeipa
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: HBAC rules (objectClass ipaHBACRule) under cn=hbac
+attributes:
+- cn
+- accessRuleType
+- ipaEnabledFlag
+- userCategory
+- hostCategory
+- serviceCategory
+condition: >-
+  The rule named allow_all exists, accessRuleType is allow and ipaEnabledFlag is TRUE. FreeIPA creates
+  it at installation with userCategory, hostCategory and serviceCategory set to all.
+threshold: any occurrence
+rationale: >-
+  While allow_all is enabled, every user may log in to every enrolled host through every PAM service,
+  and any host-based access rule written afterwards adds nothing — HBAC is allow-only, so the broadest
+  rule wins. A single compromised account then has an interactive foothold on every machine in the domain.
+  FreeIPA documents disabling allow_all as the first step of restricting access.
+remediation:
+  en: >-
+    Write the HBAC rules that describe the intended access (per host group and service), verify them with
+    `ipa hbactest`, then disable allow_all with `ipa hbacrule-disable allow_all`. Keep allow_systemd-user,
+    which only lets pam_systemd start user sessions. Do not delete allow_all until the replacement rules
+    have been in use for a while.
+  ru: >-
+    Опишите требуемый доступ правилами HBAC (по группам узлов и службам), проверьте их командой `ipa hbactest`,
+    затем отключите allow_all командой `ipa hbacrule-disable allow_all`. Правило allow_systemd-user оставьте:
+    оно лишь позволяет pam_systemd запускать пользовательские сеансы. Не удаляйте allow_all, пока новые
+    правила не поработают какое-то время.
+attack:
+- id: T1078
+  name: Valid Accounts
+- id: T1021.004
+  name: 'Remote Services: SSH'
+engine: declarative
+query_sketch:
+  base: cn=hbac,<default>
+  scope: one
+  filter: (objectClass=ipaHBACRule)
+  attributes:
+  - cn
+  - accessRuleType
+  - ipaEnabledFlag
+  - userCategory
+  - hostCategory
+  - serviceCategory
+references:
+- title: >-
+    FreeIPA source — install/share/default-hbac.ldif (allow_all created with all categories, enabled)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/install/share/default-hbac.ldif
+- title: Red Hat — Configuring host-based access control rules (IdM)
+  url: >-
+    https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/managing_idm_users_groups_hosts_and_access_control_rules/configuring-host-based-access-control-rules_managing-users-groups-hosts
+- title: MITRE ATT&CK — T1078 Valid Accounts
+  url: https://attack.mitre.org/techniques/T1078/
+notes: >-
+  Readable by every authenticated user ('System: Read HBAC Rules', bind rule all). HBAC is enforced by
+  SSSD on the client; hosts with a local override are out of scope.
+condition_cel: attr(obj, "cn").lowerAscii() == "allow_all" && attr(obj, "ipaEnabledFlag").upperAscii()
+  == "TRUE" && attr(obj, "accessRuleType").lowerAscii() == "allow"
+expect:
+- ipaUniqueID=allow_all,cn=hbac,dc=ipa,dc=example

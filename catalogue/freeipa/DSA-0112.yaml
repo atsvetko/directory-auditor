@@ -1,0 +1,82 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0112
+title:
+  en: Constrained-delegation rule lets a non-IPA service act as users against the IPA directory
+  ru: >-
+    Правило ограниченного делегирования позволяет сторонней службе действовать от имени пользователей
+    в каталоге IPA
+domain: freeipa
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  Delegation rules (objectClass ipaKrb5DelegationACL) and target groups (groupOfPrincipals) under cn=s4u2proxy,cn=etc;
+  the IPA server list under cn=masters,cn=ipa,cn=etc
+attributes:
+- cn
+- memberPrincipal
+- ipaAllowedTarget
+condition: >-
+  A rule's ipaAllowedTarget points to a target group containing an ldap/ principal, and the rule's memberPrincipal
+  includes a principal that is not HTTP/<ipa-server> for a server listed under cn=masters. The installation-created
+  rule ipa-http-delegation (HTTP/<server> → ldap and cifs targets) is therefore not a finding.
+threshold: any occurrence
+rationale: >-
+  A service listed as memberPrincipal may obtain tickets to the targets as any user that authenticated
+  to it (and, with OK_TO_AUTH_AS_DELEGATE, as any user at all). When the target is the IPA directory itself,
+  that service can perform any LDAP operation the impersonated user may — for an administrator, everything.
+  FreeIPA needs this only for its own web front end; any other service in such a rule is an identity-takeover
+  path.
+remediation:
+  en: >-
+    Remove the foreign principal from the rule (`ipa servicedelegationrule-remove-member RULE --principals=…`)
+    or point the rule at a dedicated target group that does not include ldap/. Review the hosts running
+    the remaining member principals as Tier-0 systems.
+  ru: >-
+    Удалите сторонний принципал из правила (`ipa servicedelegationrule-remove-member ПРАВИЛО --principals=…`)
+    или направьте правило на отдельную группу целей без ldap/. Узлы, на которых работают оставшиеся принципалы-участники,
+    рассматривайте как системы нулевого уровня.
+attack:
+- id: T1558
+  name: Steal or Forge Kerberos Tickets
+- id: T1134
+  name: Access Token Manipulation
+engine: complex:delegation_targets
+query_sketch:
+  base: cn=s4u2proxy,cn=etc,<default>
+  scope: one
+  filter: (objectClass=ipaKrb5DelegationACL)
+  attributes:
+  - cn
+  - memberPrincipal
+  - ipaAllowedTarget
+  notes: Resolve each ipaAllowedTarget's memberPrincipal; read cn=masters for the server list.
+references:
+- title: >-
+    FreeIPA source — install/share/bootstrap-template.ldif (ipa-http-delegation rule and its ldap/cifs
+    targets)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/install/share/bootstrap-template.ldif
+- title: >-
+    FreeIPA source — install/share/60basev3.ldif (ipaKrb5DelegationACL, memberPrincipal, ipaAllowedTarget)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/install/share/60basev3.ldif
+- title: FreeIPA design — Constrained delegation for Kerberos services
+  url: https://freeipa.readthedocs.io/en/latest/designs/rbcd.html
+- title: Red Hat — Using constrained delegation in IdM
+  url: >-
+    https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/using_ansible_to_install_and_manage_identity_management/assembly_using-constrained-delegation-in-idm_using-ansible-to-install-and-manage-identity-management
+- title: MITRE ATT&CK — T1558 Steal or Forge Kerberos Tickets
+  url: https://attack.mitre.org/techniques/T1558/
+notes: >-
+  Reading rules needs 'Service Administrators' (System: Read Service Delegations, bind rule permission);
+  otherwise reported as not collected.
+condition_cel: attrs(obj, "ipaAllowedTarget").exists(t, objattrs(t, "memberPrincipal").exists(p, p.lowerAscii().startsWith("ldap/")))
+  && attrs(obj, "memberPrincipal").exists(p, !(p.startsWith("HTTP/") && objexists("cn=" + p.substring(5).split("@")[0]
+  + ",cn=masters,cn=ipa,cn=etc,<default>")))
+expect:
+- cn=portal-to-ldap,cn=s4u2proxy,cn=etc,dc=ipa,dc=example

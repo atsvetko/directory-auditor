@@ -38,6 +38,13 @@ type Entry struct {
 	References  []Reference       `yaml:"references"`
 	Notes       string            `yaml:"notes"`
 
+	// Implementation, written alongside the spec so the engine can run and test
+	// the check before a pack exists. ConditionCEL is the pack condition; Expect
+	// lists the DNs in the matching synthetic snapshot (testdata/) that must fire
+	// and nothing else may. Both are optional for entries still being designed.
+	ConditionCEL string   `yaml:"condition_cel"`
+	Expect       []string `yaml:"expect"`
+
 	Path string `yaml:"-"`
 }
 

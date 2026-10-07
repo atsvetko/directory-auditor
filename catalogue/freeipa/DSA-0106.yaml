@@ -1,0 +1,68 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0106
+title:
+  en: Built-in admin account password has not been changed for over a year
+  ru: Пароль встроенной учётной записи admin не менялся больше года
+domain: freeipa
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The built-in user uid=admin,cn=users,cn=accounts
+attributes:
+- uid
+- krbLastPwdChange
+- krbPasswordExpiration
+- nsAccountLock
+condition: >-
+  krbLastPwdChange on uid=admin is older than 365 days, or the attribute is absent. Evidence: last change
+  date and whether the account is locked.
+threshold: age > 365 days
+rationale: >-
+  admin is created at installation, is a member of admins and trust admins, and its password is typed
+  during setup, written in runbooks and pasted into automation. The longer it stays, the more places it
+  has leaked to. Unlike a personal administrator account it is rarely tied to one person, so rotation
+  is the only control.
+remediation:
+  en: >-
+    Change the password (`ipa passwd admin`) and store it in a vault; use personal administrator accounts
+    for daily work and keep admin as a break-glass account with a token or disabled (`ipa user-disable
+    admin`) if your procedures allow it.
+  ru: >-
+    Смените пароль (`ipa passwd admin`) и поместите его в хранилище секретов; для повседневной работы
+    используйте персональные административные учётные записи, а admin оставьте как аварийную — с токеном
+    или отключённой (`ipa user-disable admin`), если это допускают ваши процедуры.
+attack:
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+- id: T1110
+  name: Brute Force
+engine: declarative
+query_sketch:
+  base: cn=users,cn=accounts,<default>
+  scope: one
+  filter: (&(objectClass=posixAccount)(uid=admin))
+  attributes:
+  - krbLastPwdChange
+  - krbPasswordExpiration
+  - nsAccountLock
+references:
+- title: >-
+    FreeIPA source — ipaserver/plugins/user.py ('System: Read User Kerberos Attributes' exposes krbLastPwdChange
+    to authenticated users)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/ipaserver/plugins/user.py
+- title: Red Hat — Defining IdM password policies
+  url: >-
+    https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/8/html/using_ansible_to_install_and_manage_identity_management/defining-idm-password-policies_using-ansible-to-install-and-manage-idm
+- title: MITRE ATT&CK — T1078.002 Domain Accounts
+  url: https://attack.mitre.org/techniques/T1078/002/
+notes: >-
+  krbLastPwdChange is GeneralizedTime (YYYYMMDDHHMMSSZ). Age is measured against the snapshot's collection
+  time.
+condition_cel: age_days(obj, "krbLastPwdChange") > 365 || age_days(obj, "krbLastPwdChange") == -1
+expect:
+- uid=admin,cn=users,cn=accounts,dc=ipa,dc=example

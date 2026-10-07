@@ -1,0 +1,59 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0114
+title:
+  en: Kerberos ticket lifetime or renewable age above FreeIPA defaults
+  ru: Срок действия или срок продления билетов Kerberos превышает значения по умолчанию FreeIPA
+domain: freeipa
+tier: 0
+severity: low
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: The realm container cn=<REALM>,cn=kerberos (krbTicketPolicyAux)
+attributes:
+- cn
+- krbMaxTicketLife
+- krbMaxRenewableAge
+condition: >-
+  krbMaxTicketLife is greater than 86400 seconds (1 day) or krbMaxRenewableAge is greater than 604800
+  seconds (7 days), FreeIPA's installation defaults.
+threshold: ticket life > 1 day or renewable age > 7 days
+rationale: >-
+  A stolen ticket stays valid for its remaining lifetime whatever happens to the account; renewable age
+  bounds how long a stolen renewable TGT can be kept alive without the password. Long lifetimes are usually
+  set to spare users re-authentication and silently extend the window for pass-the-ticket.
+remediation:
+  en: >-
+    Return to the defaults (`ipa krbtpolicy-mod --maxlife=86400 --maxrenew=604800`) and use per-user policies
+    only where a batch service needs more. Pair with a second factor for administrators (DSA-0105).
+  ru: >-
+    Вернитесь к значениям по умолчанию (`ipa krbtpolicy-mod --maxlife=86400 --maxrenew=604800`) и используйте
+    политики для отдельных пользователей только там, где пакетная служба требует большего. Дополните вторым
+    фактором для администраторов (DSA-0105).
+attack:
+- id: T1550.003
+  name: 'Use Alternate Authentication Material: Pass the Ticket'
+engine: declarative
+query_sketch:
+  base: cn=kerberos,<default>
+  scope: one
+  filter: (&(objectClass=krbRealmContainer)(|(krbMaxTicketLife>=86401)(krbMaxRenewableAge>=604801)))
+  attributes:
+  - krbMaxTicketLife
+  - krbMaxRenewableAge
+references:
+- title: >-
+    FreeIPA source — install/share/kerberos.ldif (krbMaxTicketLife 86400, krbMaxRenewableAge 604800)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/install/share/kerberos.ldif
+- title: Red Hat — Managing Kerberos Flags and Principal Aliases (IdM)
+  url: >-
+    https://docs.redhat.com/en/documentation/Red_Hat_Enterprise_Linux/7/html/linux_domain_identity_authentication_and_policy_guide/kerberos-for-entries
+- title: MITRE ATT&CK — T1550.003 Pass the Ticket
+  url: https://attack.mitre.org/techniques/T1550/003/
+notes: Same read privilege as DSA-0113.
+condition_cel: intattr(obj, "krbMaxTicketLife") > 86400 || intattr(obj, "krbMaxRenewableAge") > 604800
+expect:
+- cn=IPA.EXAMPLE,cn=kerberos,dc=ipa,dc=example

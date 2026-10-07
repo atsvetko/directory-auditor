@@ -1,0 +1,71 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0110
+title:
+  en: Service may obtain tickets as any user (OK_TO_AUTH_AS_DELEGATE, protocol transition)
+  ru: >-
+    Служба может получать билеты от имени любого пользователя (OK_TO_AUTH_AS_DELEGATE, protocol transition)
+domain: freeipa
+tier: 2
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Hosts (ipaHost) and services (ipaService)
+attributes:
+- krbPrincipalName
+- fqdn
+- krbTicketFlags
+- managedBy
+condition: >-
+  krbTicketFlags has bit 0x00200000 (KRB5_KDB_OK_TO_AUTH_AS_DELEGATE, 'Trusted to authenticate as user')
+  set.
+threshold: any occurrence
+rationale: >-
+  This flag lets the service ask the KDC for a forwardable ticket to itself for any user without that
+  user ever authenticating (S4U2Self), and then use it against targets allowed by a delegation rule. Control
+  of such a service means impersonating any user — including administrators — towards those targets; the
+  FreeIPA design notes that the per-user restriction (ipaAllowToImpersonate) is not implemented.
+remediation:
+  en: >-
+    Clear the flag unless the service is a documented identity gateway (`ipa service-mod PRINCIPAL --ok-to-auth-as-delegate=false`).
+    For the remaining ones, keep the delegation rule's targets minimal (DSA-0112) and protect the host
+    like an IPA server.
+  ru: >-
+    Снимите флаг, если служба не является задокументированным шлюзом идентификации (`ipa service-mod ПРИНЦИПАЛ
+    --ok-to-auth-as-delegate=false`). Для оставшихся служб сведите цели правила делегирования к минимуму
+    (DSA-0112) и защищайте узел как сервер IPA.
+attack:
+- id: T1558
+  name: Steal or Forge Kerberos Tickets
+- id: T1550.003
+  name: 'Use Alternate Authentication Material: Pass the Ticket'
+engine: declarative
+query_sketch:
+  base: cn=accounts,<default>
+  scope: subtree
+  filter: (|(objectClass=ipaHost)(objectClass=ipaService))
+  attributes:
+  - krbPrincipalName
+  - krbTicketFlags
+references:
+- title: FreeIPA source — ipaserver/plugins/service.py (ipakrboktoauthasdelegate 0x00200000)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/ipaserver/plugins/service.py
+- title: >-
+    MIT Kerberos — kdb.h principal attribute flags (KRB5_KDB_REQUIRES_PRE_AUTH 0x80, OK_AS_DELEGATE 0x100000,
+    OK_TO_AUTH_AS_DELEGATE 0x200000)
+  url: https://github.com/krb5/krb5/blob/master/src/include/kdb.h
+- title: FreeIPA design — Constrained delegation for Kerberos services
+  url: https://freeipa.readthedocs.io/en/latest/designs/rbcd.html
+- title: Red Hat — Using constrained delegation in IdM
+  url: >-
+    https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/using_ansible_to_install_and_manage_identity_management/assembly_using-constrained-delegation-in-idm_using-ansible-to-install-and-manage-identity-management
+- title: MITRE ATT&CK — T1558 Steal or Forge Kerberos Tickets
+  url: https://attack.mitre.org/techniques/T1558/
+notes: Tier 2 for the same reason as DSA-0109.
+condition_cel: flags(obj, "krbTicketFlags", 2097152)
+expect:
+- >-
+  krbprincipalname=HTTP/web01.ipa.example@IPA.EXAMPLE,cn=services,cn=accounts,dc=ipa,dc=example

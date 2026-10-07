@@ -1,0 +1,69 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0123
+title:
+  en: Anonymous LDAP clients can enumerate user accounts
+  ru: Анонимные клиенты LDAP могут перечислять учётные записи пользователей
+domain: freeipa
+tier: 1
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  Probe result: an unauthenticated one-level search of cn=users,cn=accounts for (uid=*) with a size limit
+  of 3 (recorded as cn=anonymous-ldap-probe,cn=dirauditor)
+attributes:
+- probe
+- result
+- sample
+condition: >-
+  The anonymous search returned at least one entry. FreeIPA's default permission 'System: Read User Standard
+  Attributes' has bind rule anonymous, so this is the installation state unless anonymous access was restricted.
+threshold: any entry returned
+rationale: >-
+  User names, numeric IDs, home directories and group memberships handed to anyone on the network are
+  the input to password spraying and phishing; they also reveal naming conventions and service accounts.
+  FreeIPA allows this by default for legacy NIS-style clients, and most deployments never need it.
+remediation:
+  en: >-
+    Restrict anonymous binds on each server (389-ds `nsslapd-allow-anonymous-access: rootdse`, applied
+    with dsconf or `ldapmodify` on cn=config) after confirming no client relies on anonymous reads (compat
+    tree, old sudo/automount clients), or change the bind rule of the user read permissions to all.
+  ru: >-
+    Ограничьте анонимные привязки на каждом сервере (параметр 389-ds `nsslapd-allow-anonymous-access:
+    rootdse` через dsconf или `ldapmodify` в cn=config), убедившись, что ни один клиент не полагается
+    на анонимное чтение (дерево совместимости, старые клиенты sudo/automount), либо смените тип привязки
+    разрешений на чтение пользователей на all.
+attack:
+- id: T1087.002
+  name: 'Account Discovery: Domain Account'
+- id: T1589.003
+  name: 'Gather Victim Identity Information: Employee Names'
+engine: complex:anonymous_probe
+query_sketch:
+  base: cn=dirauditor
+  scope: one
+  filter: (objectClass=dirauditorProbe)
+  attributes:
+  - probe
+  - result
+  - sample
+  notes: >-
+    The probe itself is an unauthenticated one-level search of cn=users,cn=accounts,<default> for (uid=*),
+    size limit 3, run before binding; tier 1 because it is unauthenticated.
+references:
+- title: >-
+    FreeIPA source — ipaserver/plugins/user.py ('System: Read User Standard Attributes' bind rule anonymous)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/ipaserver/plugins/user.py
+- title: FreeIPA source — install/share/default-aci.ldif (anonymous access notes)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/install/share/default-aci.ldif
+- title: MITRE ATT&CK — T1087.002 Domain Account
+  url: https://attack.mitre.org/techniques/T1087/002/
+notes: The probe reads at most three entries and stores only their uid values as evidence.
+condition_cel: attr(obj, "probe") == "anonymous-user-enumeration" && attr(obj, "result") == "allowed"
+expect:
+- cn=anonymous-ldap-probe,cn=dirauditor

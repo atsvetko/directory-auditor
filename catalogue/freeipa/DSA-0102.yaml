@@ -1,0 +1,71 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0102
+title:
+  en: Custom HBAC rule grants all users access to all hosts and services
+  ru: Пользовательское правило HBAC даёт всем пользователям доступ ко всем узлам и службам
+domain: freeipa
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: HBAC rules (objectClass ipaHBACRule) other than allow_all
+attributes:
+- cn
+- accessRuleType
+- ipaEnabledFlag
+- userCategory
+- hostCategory
+- serviceCategory
+- description
+condition: >-
+  An enabled allow rule whose cn is not allow_all has userCategory, hostCategory and serviceCategory all
+  equal to all. Rules that are disabled, or that name at least one user, host or service, are not findings.
+threshold: any occurrence
+rationale: >-
+  Administrators who disable allow_all sometimes recreate it under another name as a stop-gap ('temporary',
+  'migration') and forget it. The effect is identical to the default rule, but it no longer shows up in
+  reviews that only look for allow_all.
+remediation:
+  en: >-
+    Replace the rule with rules scoped to host groups and services, test with `ipa hbactest`, then disable
+    and delete the broad rule.
+  ru: >-
+    Замените правило правилами, ограниченными группами узлов и службами, проверьте командой `ipa hbactest`,
+    затем отключите и удалите широкое правило.
+attack:
+- id: T1078
+  name: Valid Accounts
+- id: T1021.004
+  name: 'Remote Services: SSH'
+engine: declarative
+query_sketch:
+  base: cn=hbac,<default>
+  scope: one
+  filter: (&(objectClass=ipaHBACRule)(userCategory=all)(hostCategory=all)(serviceCategory=all))
+  attributes:
+  - cn
+  - ipaEnabledFlag
+  - description
+references:
+- title: >-
+    FreeIPA source — install/share/60basev2.ldif (ipaHBACRule, userCategory/hostCategory/serviceCategory,
+    ipaEnabledFlag)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/install/share/60basev2.ldif
+- title: Red Hat — Configuring host-based access control rules (IdM)
+  url: >-
+    https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/managing_idm_users_groups_hosts_and_access_control_rules/configuring-host-based-access-control-rules_managing-users-groups-hosts
+- title: MITRE ATT&CK — T1078 Valid Accounts
+  url: https://attack.mitre.org/techniques/T1078/
+notes: >-
+  Rules with userCategory=all and hostCategory=all but a specific service (like the default allow_systemd-user)
+  are not findings here; they are listed in the report inventory for review.
+condition_cel: attr(obj, "cn").lowerAscii() != "allow_all" && attr(obj, "ipaEnabledFlag").upperAscii()
+  == "TRUE" && attr(obj, "accessRuleType").lowerAscii() == "allow" && attr(obj, "userCategory").lowerAscii()
+  == "all" && attr(obj, "hostCategory").lowerAscii() == "all" && attr(obj, "serviceCategory").lowerAscii()
+  == "all"
+expect:
+- ipaUniqueID=devs_everywhere,cn=hbac,dc=ipa,dc=example

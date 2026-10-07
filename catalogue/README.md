@@ -14,4 +14,13 @@ Each entry (one YAML file per check, `catalogue/<domain>/DSA-NNNN.yaml`) records
 - `attack`, `bdu`, `compliance` mappings
 - `verified_by` — the human who confirmed the entry against its source, and the date
 
-Status: not started. Target for v1: ~50 entries across directory-core, dns, gpo, pki, kerberos.
+ID blocks: `DSA-0001…0099` directory-core (AD / Samba), `DSA-0101…0199` FreeIPA / IdM (verified
+against the FreeIPA source tree, commit `13a1df3`, and Red Hat IdM documentation), DNS and Group
+Policy blocks to follow.
+
+Implemented entries carry `condition_cel` (the pack condition, evaluated by the engine) and `expect`
+(the objects in the matching synthetic snapshot under `testdata/` that must fire). `go test
+./internal/catalogue` runs every implemented entry against its snapshot, so a check is proven before
+the pack is written. Packs are still written only from entries with `verified_by` filled.
+
+Status: 19 directory-core and 23 FreeIPA entries, all `draft` (awaiting human verification).

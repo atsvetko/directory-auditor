@@ -1,0 +1,71 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0118
+title:
+  en: DNS zone accepts dynamic updates from any identity
+  ru: DNS-зона принимает динамические обновления от любого субъекта
+domain: freeipa
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: DNS zones (objectClass idnsZone) under cn=dns
+attributes:
+- idnsName
+- idnsZoneActive
+- idnsAllowDynUpdate
+- idnsUpdatePolicy
+condition: >-
+  idnsAllowDynUpdate is TRUE and idnsUpdatePolicy contains a grant whose identity is * (for example 'grant
+  * wildcard * ANY;'). FreeIPA's default policy grants krb5-self updates only, i.e. each host may change
+  its own A, AAAA and SSHFP records; an empty policy denies all updates.
+threshold: any occurrence
+rationale: >-
+  With an identity of *, anyone who can reach the DNS server can add or overwrite records in the zone
+  without authentication: redirect a service name to their own host, add a name that clients will trust,
+  or break name resolution. In an IPA domain, names are what Kerberos service tickets are bound to, so
+  a hijacked record becomes a credential-capture position.
+remediation:
+  en: >-
+    Set the policy back to the default (`ipa dnszone-mod ZONE --update-policy='grant REALM krb5-self *
+    A; grant REALM krb5-self * AAAA; grant REALM krb5-self * SSHFP;'`) or disable dynamic updates (`--dynamic-update=false`)
+    for zones that do not need them.
+  ru: >-
+    Верните политику по умолчанию (`ipa dnszone-mod ЗОНА --update-policy='grant REALM krb5-self * A; grant
+    REALM krb5-self * AAAA; grant REALM krb5-self * SSHFP;'`) или отключите динамические обновления (`--dynamic-update=false`)
+    для зон, которым они не нужны.
+attack:
+- id: T1557
+  name: Adversary-in-the-Middle
+- id: T1565.001
+  name: 'Data Manipulation: Stored Data Manipulation'
+engine: declarative
+query_sketch:
+  base: cn=dns,<default>
+  scope: subtree
+  filter: (&(objectClass=idnsZone)(idnsAllowDynUpdate=TRUE)(idnsUpdatePolicy=*grant \2a*))
+  attributes:
+  - idnsName
+  - idnsUpdatePolicy
+references:
+- title: >-
+    FreeIPA source — ipalib/util.py (get_dns_forward_zone_update_policy: grant REALM krb5-self * A/AAAA/SSHFP)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/ipalib/util.py
+- title: bind-dyndb-ldap — README (idnsAllowDynUpdate, idnsUpdatePolicy, idnsAllowTransfer)
+  url: https://github.com/freeipa/bind-dyndb-ldap/blob/master/README.md
+- title: bind-dyndb-ldap — src/settings.c (empty update policy denies all updates)
+  url: https://github.com/freeipa/bind-dyndb-ldap/blob/master/src/settings.c
+- title: Red Hat — Managing dynamic DNS updates (IdM)
+  url: >-
+    https://docs.redhat.com/en/documentation/Red_Hat_Enterprise_Linux/7/html/linux_domain_identity_authentication_and_policy_guide/managing-dynamic-dns-updates
+- title: MITRE ATT&CK — T1557 Adversary-in-the-Middle
+  url: https://attack.mitre.org/techniques/T1557/
+notes: >-
+  Reading zones needs 'DNS Administrators' (or the DNS Servers privilege held by IPA servers); otherwise
+  reported as not collected. krb5-subdomain grants are the default for reverse zones and are not findings.
+condition_cel: attr(obj, "idnsAllowDynUpdate").upperAscii() == "TRUE" && attr(obj, "idnsUpdatePolicy").matches("(?i)grant\\s+\\*")
+expect:
+- idnsname=lab.example.,cn=dns,dc=ipa,dc=example

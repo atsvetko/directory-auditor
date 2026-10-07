@@ -1,0 +1,74 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0103
+title:
+  en: Sudo rule lets everyone, or every host, run any command
+  ru: Правило sudo позволяет всем пользователям или на всех узлах выполнять любые команды
+domain: freeipa
+tier: 0
+severity: critical
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Sudo rules (objectClass ipaSudoRule) under cn=sudorules,cn=sudo
+attributes:
+- cn
+- ipaEnabledFlag
+- cmdCategory
+- userCategory
+- hostCategory
+- ipaSudoRunAsUserCategory
+- memberUser
+- memberHost
+condition: >-
+  An enabled rule has cmdCategory = all and userCategory = all or hostCategory = all. Severity is critical
+  when both categories are all (any user, any host, any command as root).
+threshold: any occurrence
+rationale: >-
+  Sudo rules are distributed by SSSD to every enrolled host. A rule that allows all commands to all users
+  is a domain-wide root grant: any compromised user account becomes root on every machine the rule applies
+  to. Even with a user group, hostCategory = all means a single service account's rule reaches the IPA
+  servers themselves.
+remediation:
+  en: >-
+    Restrict the rule to the commands actually needed (sudo command groups), to a user group and to a
+    host group; prefer several narrow rules over one wide one. Remove ipaSudoRunAsUserCategory = all where
+    the target user is known.
+  ru: >-
+    Ограничьте правило нужными командами (группы команд sudo), группой пользователей и группой узлов;
+    лучше несколько узких правил, чем одно широкое. Уберите ipaSudoRunAsUserCategory = all там, где целевой
+    пользователь известен.
+attack:
+- id: T1548.003
+  name: 'Abuse Elevation Control Mechanism: Sudo and Sudo Caching'
+- id: T1078
+  name: Valid Accounts
+engine: declarative
+query_sketch:
+  base: cn=sudorules,cn=sudo,<default>
+  scope: one
+  filter: (&(objectClass=ipaSudoRule)(cmdCategory=all)(|(userCategory=all)(hostCategory=all)))
+  attributes:
+  - cn
+  - ipaEnabledFlag
+  - userCategory
+  - hostCategory
+  - memberUser
+  - memberHost
+references:
+- title: >-
+    FreeIPA source — install/share/65ipasudo.ldif (ipaSudoRule, cmdCategory, ipaSudoRunAsUserCategory)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/install/share/65ipasudo.ldif
+- title: Red Hat — Granting sudo access to an IdM user on an IdM client
+  url: >-
+    https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/8/html/configuring_and_managing_identity_management/granting-sudo-access-to-an-idm-user-on-an-idm-client_configuring-and-managing-idm
+- title: MITRE ATT&CK — T1548.003 Sudo and Sudo Caching
+  url: https://attack.mitre.org/techniques/T1548/003/
+notes: 'Readable by every authenticated user (''System: Read Sudo Rules'', bind rule all).'
+condition_cel: attr(obj, "ipaEnabledFlag").upperAscii() == "TRUE" && attr(obj, "cmdCategory").lowerAscii()
+  == "all" && (attr(obj, "userCategory").lowerAscii() == "all" || attr(obj, "hostCategory").lowerAscii()
+  == "all")
+expect:
+- ipaUniqueID=root_everything,cn=sudorules,cn=sudo,dc=ipa,dc=example

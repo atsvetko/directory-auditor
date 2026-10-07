@@ -1,0 +1,72 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0113
+title:
+  en: Realm permits weak Kerberos encryption types (RC4, DES)
+  ru: Область Kerberos допускает слабые типы шифрования (RC4, DES)
+domain: freeipa
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The realm container cn=<REALM>,cn=kerberos (krbRealmContainer)
+attributes:
+- cn
+- krbSupportedEncSaltTypes
+- krbDefaultEncSaltTypes
+condition: >-
+  krbSupportedEncSaltTypes or krbDefaultEncSaltTypes contains an entry starting with arcfour, rc4 or des.
+  FreeIPA's current defaults list only AES (SHA-1 and SHA-2 variants) and Camellia; arcfour-hmac and des3
+  were removed from the defaults.
+threshold: any occurrence
+rationale: >-
+  Keys of a permitted type are generated for every principal at the next password or keytab change, and
+  the KDC will issue tickets with them to any client that asks. RC4 keys are the unsalted NT hash, so
+  a service ticket encrypted with RC4 can be cracked offline at NT-hash speed; DES is broken outright.
+  Realms upgraded from old versions commonly keep arcfour-hmac in the supported list for years.
+remediation:
+  en: >-
+    Remove the weak types (`ipa krbtpolicy-mod`, or edit krbSupportedEncSaltTypes/krbDefaultEncSaltTypes
+    on the realm entry) after confirming no client needs them, then rotate keys of service principals
+    created before the change (`ipa-getkeytab`) and user passwords on their next change.
+  ru: >-
+    Удалите слабые типы (`ipa krbtpolicy-mod` или правка krbSupportedEncSaltTypes/krbDefaultEncSaltTypes
+    на записи области), убедившись, что они не нужны ни одному клиенту; затем перевыпустите ключи служебных
+    принципалов, созданных до изменения (`ipa-getkeytab`), а пароли пользователей обновятся при следующей
+    смене.
+attack:
+- id: T1558.003
+  name: 'Steal or Forge Kerberos Tickets: Kerberoasting'
+- id: T1557
+  name: Adversary-in-the-Middle
+engine: declarative
+query_sketch:
+  base: cn=kerberos,<default>
+  scope: one
+  filter: >-
+    (&(objectClass=krbRealmContainer)(|(krbSupportedEncSaltTypes=arcfour*)(krbSupportedEncSaltTypes=des*)(krbDefaultEncSaltTypes=arcfour*)(krbDefaultEncSaltTypes=des*)))
+  attributes:
+  - krbSupportedEncSaltTypes
+  - krbDefaultEncSaltTypes
+references:
+- title: >-
+    FreeIPA source — ipaplatform/base/tasks.py (get_supported_enctypes / get_default_enctypes: AES and
+    Camellia only; arcfour-hmac and des3 removed)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/ipaplatform/base/tasks.py
+- title: >-
+    FreeIPA source — install/share/kerberos.ldif (realm entry carries krbSupportedEncSaltTypes and krbDefaultEncSaltTypes)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/install/share/kerberos.ldif
+- title: MITRE ATT&CK — T1558.003 Kerberoasting
+  url: https://attack.mitre.org/techniques/T1558/003/
+notes: >-
+  Needs 'Kerberos Ticket Policy Readers' (System: Read Default Kerberos Ticket Policy); otherwise reported
+  as not collected. AD trusts may still require RC4 on the trust object only — that is a separate setting
+  and not covered here.
+condition_cel: (attrs(obj, "krbSupportedEncSaltTypes") + attrs(obj, "krbDefaultEncSaltTypes")).exists(e,
+  e.lowerAscii().matches("^(arcfour|rc4|des)"))
+expect:
+- cn=IPA.EXAMPLE,cn=kerberos,dc=ipa,dc=example

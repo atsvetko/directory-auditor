@@ -1,0 +1,55 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0119
+title:
+  en: DNS zone allows zone transfers to anyone
+  ru: DNS-зона разрешает передачу зоны кому угодно
+domain: freeipa
+tier: 0
+severity: medium
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: DNS zones (objectClass idnsZone)
+attributes:
+- idnsName
+- idnsAllowTransfer
+condition: idnsAllowTransfer contains the ACL element any.
+threshold: any occurrence
+rationale: >-
+  A zone transfer hands the complete list of hosts, services and addresses of the domain to whoever asks
+  — the reconnaissance an attacker would otherwise have to assemble by guessing. FreeIPA leaves idnsAllowTransfer
+  unset so the zone inherits named.conf, where transfers are limited to the IPA servers' own replication.
+remediation:
+  en: >-
+    Remove the setting or restrict it to secondary name servers (`ipa dnszone-mod ZONE --allow-transfer='192.0.2.10;
+    192.0.2.11;'`).
+  ru: >-
+    Удалите значение или ограничьте его вторичными серверами имён (`ipa dnszone-mod ЗОНА --allow-transfer='192.0.2.10;
+    192.0.2.11;'`).
+attack:
+- id: T1590.002
+  name: 'Gather Victim Network Information: DNS'
+- id: T1018
+  name: Remote System Discovery
+engine: declarative
+query_sketch:
+  base: cn=dns,<default>
+  scope: subtree
+  filter: (&(objectClass=idnsZone)(idnsAllowTransfer=*any*))
+  attributes:
+  - idnsName
+  - idnsAllowTransfer
+references:
+- title: bind-dyndb-ldap — README (idnsAllowDynUpdate, idnsUpdatePolicy, idnsAllowTransfer)
+  url: https://github.com/freeipa/bind-dyndb-ldap/blob/master/README.md
+- title: Red Hat — Managing dynamic DNS updates (IdM)
+  url: >-
+    https://docs.redhat.com/en/documentation/Red_Hat_Enterprise_Linux/7/html/linux_domain_identity_authentication_and_policy_guide/managing-dynamic-dns-updates
+- title: MITRE ATT&CK — T1590.002 DNS
+  url: https://attack.mitre.org/techniques/T1590/002/
+notes: Same read privilege as DSA-0118.
+condition_cel: attr(obj, "idnsAllowTransfer").matches("(?i)(^|[\\s;!])any\\s*(;|$)") && !attr(obj, "idnsAllowTransfer").matches("(?i)!\\s*any")
+expect:
+- idnsname=old.example.,cn=dns,dc=ipa,dc=example

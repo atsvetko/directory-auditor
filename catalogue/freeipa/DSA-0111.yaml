@@ -1,0 +1,69 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0111
+title:
+  en: Principal does not require Kerberos pre-authentication
+  ru: Принципал не требует предварительной аутентификации Kerberos
+domain: freeipa
+tier: 2
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Users, hosts and services with krbTicketFlags present
+attributes:
+- krbPrincipalName
+- uid
+- fqdn
+- krbTicketFlags
+condition: >-
+  krbTicketFlags is present and bit 0x80 (KRB5_KDB_REQUIRES_PRE_AUTH) is clear. Objects without the attribute
+  use FreeIPA's default (0x80) and are not findings.
+threshold: any occurrence
+rationale: >-
+  Without pre-authentication the KDC hands out, to anyone who asks, an AS reply encrypted with the principal's
+  long-term key, which can be attacked offline (AS-REP roasting). For users with a password this exposes
+  the password; for service principals it exposes the keytab-derived key.
+remediation:
+  en: >-
+    Set the flag back (`ipa service-mod PRINCIPAL --requires-pre-auth=true`, `ipa host-mod HOST --requires-pre-auth=true`);
+    for users, correct krbTicketFlags with `ipa user-mod USER --setattr=krbTicketFlags=128` and rotate
+    the password.
+  ru: >-
+    Верните флаг (`ipa service-mod ПРИНЦИПАЛ --requires-pre-auth=true`, `ipa host-mod УЗЕЛ --requires-pre-auth=true`);
+    для пользователей исправьте krbTicketFlags командой `ipa user-mod ПОЛЬЗОВАТЕЛЬ --setattr=krbTicketFlags=128`
+    и смените пароль.
+attack:
+- id: T1558.004
+  name: 'Steal or Forge Kerberos Tickets: AS-REP Roasting'
+engine: declarative
+query_sketch:
+  base: cn=accounts,<default>
+  scope: subtree
+  filter: >-
+    (&(|(objectClass=ipaHost)(objectClass=ipaService)(objectClass=posixAccount))(krbTicketFlags=*))
+  attributes:
+  - krbPrincipalName
+  - krbTicketFlags
+references:
+- title: FreeIPA source — ipaserver/plugins/service.py (ipakrbrequirespreauth 0x80 is the default)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/ipaserver/plugins/service.py
+- title: >-
+    MIT Kerberos — kdb.h principal attribute flags (KRB5_KDB_REQUIRES_PRE_AUTH 0x80, OK_AS_DELEGATE 0x100000,
+    OK_TO_AUTH_AS_DELEGATE 0x200000)
+  url: https://github.com/krb5/krb5/blob/master/src/include/kdb.h
+- title: Red Hat — Managing Kerberos Flags and Principal Aliases (IdM)
+  url: >-
+    https://docs.redhat.com/en/documentation/Red_Hat_Enterprise_Linux/7/html/linux_domain_identity_authentication_and_policy_guide/kerberos-for-entries
+- title: MITRE ATT&CK — T1558.004 AS-REP Roasting
+  url: https://attack.mitre.org/techniques/T1558/004/
+notes: >-
+  The global switch 'KDC:Disable Default Preauth for SPNs' is a separate entry (DSA-0120) because it is
+  readable at tier 0.
+condition_cel: hasattr(obj, "krbTicketFlags") && !flags(obj, "krbTicketFlags", 128)
+expect:
+- uid=svc-legacy,cn=users,cn=accounts,dc=ipa,dc=example
+- >-
+  krbprincipalname=cifs/legacy.ipa.example@IPA.EXAMPLE,cn=services,cn=accounts,dc=ipa,dc=example

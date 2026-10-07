@@ -1,0 +1,79 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0109
+title:
+  en: Host or service trusted for unconstrained delegation (OK_AS_DELEGATE)
+  ru: Узел или служба с неограниченным делегированием (флаг OK_AS_DELEGATE)
+domain: freeipa
+tier: 2
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Hosts (ipaHost) and services (ipaService) under cn=accounts
+attributes:
+- krbPrincipalName
+- fqdn
+- krbTicketFlags
+- managedBy
+condition: >-
+  krbTicketFlags has bit 0x00100000 (KRB5_KDB_OK_AS_DELEGATE, 'Trusted for delegation' in the IPA UI)
+  set. FreeIPA's default for new hosts and services is 0x80 (pre-authentication required) only.
+threshold: any occurrence
+rationale: >-
+  With OK_AS_DELEGATE the KDC tells clients that they may forward their ticket-granting ticket to this
+  service. Whoever controls the host then holds usable TGTs of every user that connected — including administrators
+  — and can act as them against any service in the realm. This is the Kerberos equivalent of unconstrained
+  delegation in Active Directory.
+remediation:
+  en: >-
+    Clear the flag (`ipa host-mod HOST --ok-as-delegate=false`, `ipa service-mod PRINCIPAL --ok-as-delegate=false`).
+    Where a service must act on behalf of users, use a constrained-delegation rule (`ipa servicedelegationrule-add`)
+    that names the target services instead.
+  ru: >-
+    Снимите флаг (`ipa host-mod УЗЕЛ --ok-as-delegate=false`, `ipa service-mod ПРИНЦИПАЛ --ok-as-delegate=false`).
+    Если служба должна действовать от имени пользователей, используйте правило ограниченного делегирования
+    (`ipa servicedelegationrule-add`) с перечислением целевых служб.
+attack:
+- id: T1550.003
+  name: 'Use Alternate Authentication Material: Pass the Ticket'
+- id: T1558
+  name: Steal or Forge Kerberos Tickets
+engine: declarative
+query_sketch:
+  base: cn=accounts,<default>
+  scope: subtree
+  filter: >-
+    (&(|(objectClass=ipaHost)(objectClass=ipaService))(krbTicketFlags:1.2.840.113556.1.4.803:=1048576))
+  attributes:
+  - krbPrincipalName
+  - krbTicketFlags
+  notes: >-
+    389-ds has no bitwise matching rule; the engine evaluates the flag on collected objects instead of
+    in the filter.
+references:
+- title: >-
+    FreeIPA source — ipaserver/plugins/service.py (_ticket_flags_map: ipakrbokasdelegate 0x00100000; default
+    flags 0x80)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/ipaserver/plugins/service.py
+- title: >-
+    MIT Kerberos — kdb.h principal attribute flags (KRB5_KDB_REQUIRES_PRE_AUTH 0x80, OK_AS_DELEGATE 0x100000,
+    OK_TO_AUTH_AS_DELEGATE 0x200000)
+  url: https://github.com/krb5/krb5/blob/master/src/include/kdb.h
+- title: Red Hat — Managing Kerberos Flags and Principal Aliases (IdM)
+  url: >-
+    https://docs.redhat.com/en/documentation/Red_Hat_Enterprise_Linux/7/html/linux_domain_identity_authentication_and_policy_guide/kerberos-for-entries
+- title: FreeIPA design — Constrained delegation for Kerberos services
+  url: https://freeipa.readthedocs.io/en/latest/designs/rbcd.html
+- title: MITRE ATT&CK — T1550.003 Pass the Ticket
+  url: https://attack.mitre.org/techniques/T1550/003/
+notes: >-
+  krbTicketFlags is readable only by admins ('Admin can manage any entry' ACI) — hence tier 2. Non-admin
+  runs report the check as skipped by tier.
+condition_cel: flags(obj, "krbTicketFlags", 1048576)
+expect:
+- fqdn=nfs01.ipa.example,cn=computers,cn=accounts,dc=ipa,dc=example
+- >-
+  krbprincipalname=nfs/nfs01.ipa.example@IPA.EXAMPLE,cn=services,cn=accounts,dc=ipa,dc=example

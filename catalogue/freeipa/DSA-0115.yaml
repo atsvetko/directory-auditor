@@ -1,0 +1,79 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0115
+title:
+  en: CA ACL lets any user, host or service request certificates from any profile
+  ru: >-
+    Правило CA ACL позволяет любому пользователю, узлу или службе запрашивать сертификаты по любому профилю
+domain: freeipa
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: CA ACLs (objectClass ipaCaAcl) under cn=caacls,cn=ca
+attributes:
+- cn
+- ipaEnabledFlag
+- userCategory
+- hostCategory
+- serviceCategory
+- ipaCertProfileCategory
+- ipaCaCategory
+- ipaMemberCertProfile
+condition: >-
+  An enabled ACL has ipaCertProfileCategory = all and at least one of userCategory, hostCategory or serviceCategory
+  equal to all. The installation default hosts_services_caIPAserviceCert (all hosts and services, one
+  profile) is not a finding.
+threshold: any occurrence
+rationale: >-
+  CA ACLs decide who may obtain which kind of certificate from the IPA CA. With every profile open to
+  everyone, any user can request a certificate for a user profile and, where certificate authentication
+  (PKINIT or certificate mapping) is enabled, use it to log in — or request a server certificate for a
+  name they do not own.
+remediation:
+  en: >-
+    Replace the open ACL with one ACL per profile that names the groups allowed to use it (`ipa caacl-add
+    … ; ipa caacl-add-profile … ; ipa caacl-add-user --groups=…`). Keep profiles that issue client-authentication
+    certificates to the smallest possible group.
+  ru: >-
+    Замените открытое правило отдельными правилами для каждого профиля с перечислением групп, которым
+    он разрешён (`ipa caacl-add … ; ipa caacl-add-profile … ; ipa caacl-add-user --groups=…`). Профили,
+    выпускающие сертификаты для проверки подлинности клиентов, оставьте для минимально возможной группы.
+attack:
+- id: T1649
+  name: Steal or Forge Authentication Certificates
+- id: T1550
+  name: Use Alternate Authentication Material
+engine: declarative
+query_sketch:
+  base: cn=caacls,cn=ca,<default>
+  scope: one
+  filter: >-
+    (&(objectClass=ipaCaAcl)(ipaCertProfileCategory=all)(|(userCategory=all)(hostCategory=all)(serviceCategory=all)))
+  attributes:
+  - cn
+  - ipaEnabledFlag
+  - ipaCaCategory
+references:
+- title: >-
+    FreeIPA source — ipaserver/install/cainstance.py (default ACL hosts_services_caIPAserviceCert: hostcategory
+    all, servicecategory all, profile caIPAserviceCert)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/ipaserver/install/cainstance.py
+- title: >-
+    FreeIPA source — install/share/60certificate-profiles.ldif (ipaCaAcl, ipaCertProfileCategory, ipaCaCategory)
+  url: >-
+    https://github.com/freeipa/freeipa/blob/13a1df391f11b6f575c0281f1290363afd4f1ec7/install/share/60certificate-profiles.ldif
+- title: Red Hat — CA ACLs (IdM certificate profiles)
+  url: >-
+    https://docs.redhat.com/fr/documentation/red_hat_enterprise_linux/7/html/linux_domain_identity_authentication_and_policy_guide/ca-acls
+- title: MITRE ATT&CK — T1649 Steal or Forge Authentication Certificates
+  url: https://attack.mitre.org/techniques/T1649/
+notes: 'Readable by all authenticated users (''System: Read CA ACLs'', bind rule all).'
+condition_cel: attr(obj, "ipaEnabledFlag").upperAscii() == "TRUE" && attr(obj, "ipaCertProfileCategory").lowerAscii()
+  == "all" && (attr(obj, "userCategory").lowerAscii() == "all" || attr(obj, "hostCategory").lowerAscii()
+  == "all" || attr(obj, "serviceCategory").lowerAscii() == "all")
+expect:
+- ipaUniqueID=everyone_any_profile,cn=caacls,cn=ca,dc=ipa,dc=example
