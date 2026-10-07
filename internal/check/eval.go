@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cel.dev/cel-go/cel"
@@ -12,6 +13,7 @@ import (
 	"cel.dev/cel-go/common/types/ref"
 
 	"github.com/atsvetko/directory-auditor/internal/snapshot"
+	"github.com/atsvetko/directory-auditor/internal/tier0"
 )
 
 // Finding is one check firing on one object.
@@ -65,7 +67,7 @@ type Counts struct {
 var celEnv *cel.Env
 
 func init() {
-	env, err := cel.NewEnv(
+	env, err := cel.NewEnv(append([]cel.EnvOption{
 		cel.Variable("obj", cel.MapType(cel.StringType, cel.DynType)),
 		// attr(obj, "name") -> first value or "" (case-insensitive)
 		cel.Function("attr",
@@ -97,7 +99,7 @@ func init() {
 				cel.BinaryBinding(func(o, name ref.Val) ref.Val {
 					return types.Bool(len(allAttr(o, string(name.(types.String)))) > 0)
 				}))),
-	)
+	}, helperOptions()...)...)
 	if err != nil {
 		panic("check: cel env: " + err.Error())
 	}
@@ -116,7 +118,7 @@ func CompileCondition(expr string) (cel.Program, error) {
 	return celEnv.Program(ast, cel.EvalOptions(cel.OptOptimize))
 }
 
-func objectToCEL(o snapshot.Object) map[string]any {
+func objectToCEL(o snapshot.Object, now int64, t0 *tier0.Set) map[string]any {
 	attrs := make(map[string]any, len(o.Attrs))
 	for k, v := range o.Attrs {
 		vals := make([]any, len(v))
@@ -129,7 +131,13 @@ func objectToCEL(o snapshot.Object) map[string]any {
 	for i, c := range o.Class {
 		cls[i] = c
 	}
-	return map[string]any{"dn": o.DN, "class": cls, "attrs": attrs}
+	m := map[string]any{"dn": o.DN, "class": cls, "attrs": attrs, "now": now, "tier0": false, "tier0_reason": ""}
+	if t0 != nil {
+		if ok, why := t0.IsDN(o.DN); ok {
+			m["tier0"], m["tier0_reason"] = true, why
+		}
+	}
+	return m
 }
 
 func firstAttr(o ref.Val, name string) string {
@@ -162,10 +170,34 @@ func allAttr(o ref.Val, name string) []string {
 	return out
 }
 
+// EvalOptions tunes a run.
+type EvalOptions struct {
+	Quick bool // run only packs marked quick: true; the rest are reported as skipped ("quick")
+}
+
+// currentTier0 is the Tier-0 set of the snapshot being evaluated, read by the
+// tier0_sid and aces helpers. evalMu serialises evaluations that set it.
+var (
+	evalMu       sync.Mutex
+	currentTier0 *tier0.Set
+)
+
 // Evaluate runs every pack against the snapshot and returns the Result.
 // Packs for another provider or a higher tier than the snapshot are skipped
 // with a reason — never silently dropped.
 func Evaluate(snap *snapshot.Snapshot, packs []Pack) (*Result, error) {
+	return EvaluateWith(snap, packs, EvalOptions{})
+}
+
+// EvaluateWith is Evaluate with options.
+func EvaluateWith(snap *snapshot.Snapshot, packs []Pack, opts EvalOptions) (*Result, error) {
+	evalMu.Lock()
+	defer evalMu.Unlock()
+	t0 := tier0.Resolve(snap.Objects, snap.Meta.DomainSID)
+	currentTier0 = t0
+	defer func() { currentTier0 = nil }()
+	now := snap.Collected.Unix()
+
 	hash, err := snapshot.Hash(snap)
 	if err != nil {
 		return nil, err
@@ -186,12 +218,14 @@ func Evaluate(snap *snapshot.Snapshot, packs []Pack) (*Result, error) {
 			res.Unsigned = true
 		}
 		switch {
+		case opts.Quick && !p.Quick:
+			cr.Status, cr.Skip = "skipped", "quick"
 		case !contains(p.Provider, dialect) && !contains(p.Provider, snap.Meta.Provider):
 			cr.Status, cr.Skip = "skipped", "provider"
 		case p.Tier > snap.Meta.Tier:
 			cr.Status, cr.Skip = "skipped", "tier"
 		default:
-			if err := runPack(snap, &p, &cr); err != nil {
+			if err := runPack(snap, &p, &cr, now, t0); err != nil {
 				cr.Status, cr.Skip = "skipped", "error"
 				cr.Findings = nil
 				cr.Evidence(err)
@@ -210,7 +244,7 @@ func (cr *CheckResult) Evidence(err error) {
 	cr.Findings = append(cr.Findings, Finding{CheckID: cr.ID, Severity: "info", DN: "", Evidence: map[string]string{"error": err.Error()}})
 }
 
-func runPack(snap *snapshot.Snapshot, p *Pack, cr *CheckResult) error {
+func runPack(snap *snapshot.Snapshot, p *Pack, cr *CheckResult, now int64, t0 *tier0.Set) error {
 	filter, err := ParseFilter(p.Query.Filter)
 	if err != nil {
 		return err
@@ -224,7 +258,8 @@ func runPack(snap *snapshot.Snapshot, p *Pack, cr *CheckResult) error {
 			continue
 		}
 		cr.Matched++
-		out, _, err := prog.Eval(map[string]any{"obj": objectToCEL(o)})
+		obj := objectToCEL(o, now, t0)
+		out, _, err := prog.Eval(map[string]any{"obj": obj})
 		if err != nil {
 			return fmt.Errorf("evaluating %s on %s: %w", p.ID, o.DN, err)
 		}
@@ -232,6 +267,9 @@ func runPack(snap *snapshot.Snapshot, p *Pack, cr *CheckResult) error {
 			f := Finding{CheckID: p.ID, Severity: p.Severity, DN: o.DN, Evidence: map[string]string{}}
 			for _, a := range p.Evidence {
 				f.Evidence[a] = strings.Join(values(o, a), "; ")
+			}
+			if why, _ := obj["tier0_reason"].(string); why != "" {
+				f.Evidence["tier0"] = why
 			}
 			cr.Findings = append(cr.Findings, f)
 		}

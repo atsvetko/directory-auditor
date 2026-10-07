@@ -123,7 +123,7 @@ func (c *Conn) RootDSE(ctx context.Context) (map[string]string, error) {
 		"rootDomainNamingContext", "dnsHostName", "serverName", "forestFunctionality",
 		"domainFunctionality", "domainControllerFunctionality", "supportedCapabilities",
 		"supportedControl", "supportedLDAPVersion", "supportedSASLMechanisms", "vendorName",
-		"vendorVersion", "isGlobalCatalogReady", "highestCommittedUSN", "ldapServiceName",
+		"vendorVersion", "isGlobalCatalogReady", "highestCommittedUSN", "ldapServiceName", "currentTime",
 	}
 	res, err := c.search(ctx, "", ldap.ScopeBaseObject, "(objectClass=*)", attrs, 0)
 	if err != nil {

@@ -32,7 +32,8 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 	fs.SetOutput(errw)
 	var t provider.Target
 	var packsDir, outDir, lang string
-	var allowUnsigned bool
+	var allowUnsigned, quick bool
+	fs.BoolVar(&quick, "quick", false, "quick scan: run only checks marked quick")
 	fs.StringVar(&t.Server, "server", "", "domain controller host[:port]")
 	fs.StringVar(&t.Domain, "domain", "", "DNS domain name")
 	fs.StringVar(&t.BindUser, "user", "", "bind identity (DN or UPN); empty = current logon via Kerberos (no password)")
@@ -90,7 +91,7 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 	for _, sk := range snap.Skipped {
 		fmt.Fprintf(errw, "  not collected: %s (%s) %s\n", sk.Query, sk.Reason, sk.Detail)
 	}
-	return analyse(snap, packsDir, outDir, lang, allowUnsigned, out, errw)
+	return analyse(snap, packsDir, outDir, lang, allowUnsigned, quick, out, errw)
 }
 
 // Analyse re-runs the checks on an existing snapshot — no directory access at all.
@@ -98,7 +99,8 @@ func Analyse(ctx context.Context, args []string, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("analyse", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	var snapPath, packsDir, outDir, lang string
-	var allowUnsigned bool
+	var allowUnsigned, quick bool
+	fs.BoolVar(&quick, "quick", false, "quick scan: run only checks marked quick")
 	fs.StringVar(&snapPath, "snapshot", "", "snapshot file (.json.zst)")
 	fs.StringVar(&packsDir, "packs", "packs", "directory with check packs")
 	fs.StringVar(&outDir, "out", "dirauditor-out", "output directory")
@@ -120,10 +122,10 @@ func Analyse(ctx context.Context, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(errw, "error:", err)
 		return 1
 	}
-	return analyse(snap, packsDir, outDir, lang, allowUnsigned, out, errw)
+	return analyse(snap, packsDir, outDir, lang, allowUnsigned, quick, out, errw)
 }
 
-func analyse(snap *snapshot.Snapshot, packsDir, outDir, lang string, allowUnsigned bool, out, errw io.Writer) int {
+func analyse(snap *snapshot.Snapshot, packsDir, outDir, lang string, allowUnsigned, quick bool, out, errw io.Writer) int {
 	packs, err := check.LoadDir(packsDir, check.LoadOptions{AllowUnsigned: allowUnsigned})
 	if err != nil {
 		fmt.Fprintln(errw, "error:", err)
@@ -132,7 +134,7 @@ func analyse(snap *snapshot.Snapshot, packsDir, outDir, lang string, allowUnsign
 	if allowUnsigned {
 		fmt.Fprintln(errw, "WARNING: --allow-unsigned is set; packs were not verified (development mode)")
 	}
-	res, err := check.Evaluate(snap, packs)
+	res, err := check.EvaluateWith(snap, packs, check.EvalOptions{Quick: quick})
 	if err != nil {
 		fmt.Fprintln(errw, "error:", err)
 		return 1

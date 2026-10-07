@@ -1,0 +1,207 @@
+package check
+
+import (
+	"encoding/base64"
+	"strconv"
+	"strings"
+	"time"
+
+	"cel.dev/cel-go/cel"
+	"cel.dev/cel-go/common/types"
+	"cel.dev/cel-go/common/types/ref"
+
+	"github.com/atsvetko/directory-auditor/internal/secdesc"
+)
+
+// Helper functions available to pack conditions, in addition to attr, attrs,
+// intattr and hasattr. CEL has no bitwise operators and no notion of AD time
+// formats or security descriptors; these fill exactly those gaps and nothing
+// more. Time is always measured against the snapshot's collection time, so an
+// analysis re-run next month gives the same answer.
+//
+//	flags(obj, "userAccountControl", 0x400000)   all bits of the mask set
+//	anyflag(obj, "trustAttributes", 0x40|0x800)   at least one bit set
+//	mask_has(m, 0x40000)                          bits on a plain int (ACE masks)
+//	age_days(obj, "pwdLastSet")                   days before collection; -1 when absent/never
+//	sid_rid("S-1-5-21-…-512")                     512
+//	sid_domain("S-1-5-21-…-512")                  "S-1-5-21-…"
+//	tier0(obj)                                    principal or object is Tier 0 (catalogue/TIER0.md)
+//	tier0_sid("S-1-5-…")                          SID is Tier 0
+//	sd_protected(obj)                             DACL inheritance disabled
+//	aces(obj)                                     list of ACE maps from nTSecurityDescriptor:
+//	                                              {trustee, mask, allow, inherited, effective,
+//	                                               object_type, inherited_object_type, trustee_tier0}
+//	aces_of(obj, "msDS-AllowedToActOnBehalfOfOtherIdentity")  same, for another SD attribute
+//	sd_readable(obj)                              descriptor was collected (honest-state guard)
+func helperOptions() []cel.EnvOption {
+	mapT := cel.MapType(cel.StringType, cel.DynType)
+	aceList := cel.ListType(cel.MapType(cel.StringType, cel.DynType))
+	return []cel.EnvOption{
+		cel.Function("flags",
+			cel.Overload("flags_map_string_int", []*cel.Type{mapT, cel.StringType, cel.IntType}, cel.BoolType,
+				cel.FunctionBinding(func(a ...ref.Val) ref.Val {
+					v, ok := intOf(a[0], string(a[1].(types.String)))
+					m := uint64(a[2].(types.Int))
+					return types.Bool(ok && v&m == m)
+				}))),
+		cel.Function("anyflag",
+			cel.Overload("anyflag_map_string_int", []*cel.Type{mapT, cel.StringType, cel.IntType}, cel.BoolType,
+				cel.FunctionBinding(func(a ...ref.Val) ref.Val {
+					v, ok := intOf(a[0], string(a[1].(types.String)))
+					return types.Bool(ok && v&uint64(a[2].(types.Int)) != 0)
+				}))),
+		cel.Function("mask_has",
+			cel.Overload("mask_has_int_int", []*cel.Type{cel.IntType, cel.IntType}, cel.BoolType,
+				cel.BinaryBinding(func(m, b ref.Val) ref.Val {
+					mm, bb := uint64(m.(types.Int)), uint64(b.(types.Int))
+					return types.Bool(mm&bb == bb)
+				}))),
+		cel.Function("age_days",
+			cel.Overload("age_days_map_string", []*cel.Type{mapT, cel.StringType}, cel.IntType,
+				cel.BinaryBinding(func(o, name ref.Val) ref.Val {
+					t, ok := timeOf(firstAttr(o, string(name.(types.String))))
+					if !ok {
+						return types.Int(-1)
+					}
+					return types.Int(int64(nowOf(o).Sub(t).Hours() / 24))
+				}))),
+		cel.Function("sid_rid",
+			cel.Overload("sid_rid_string", []*cel.Type{cel.StringType}, cel.IntType,
+				cel.UnaryBinding(func(s ref.Val) ref.Val {
+					str := string(s.(types.String))
+					n, _ := strconv.ParseInt(str[strings.LastIndexByte(str, '-')+1:], 10, 64)
+					return types.Int(n)
+				}))),
+		cel.Function("sid_domain",
+			cel.Overload("sid_domain_string", []*cel.Type{cel.StringType}, cel.StringType,
+				cel.UnaryBinding(func(s ref.Val) ref.Val {
+					str := string(s.(types.String))
+					if i := strings.LastIndexByte(str, '-'); i > 0 {
+						return types.String(str[:i])
+					}
+					return s
+				}))),
+		cel.Function("tier0",
+			cel.Overload("tier0_map", []*cel.Type{mapT}, cel.BoolType,
+				cel.UnaryBinding(func(o ref.Val) ref.Val {
+					m, _ := o.Value().(map[string]any)
+					b, _ := m["tier0"].(bool)
+					return types.Bool(b)
+				}))),
+		cel.Function("tier0_sid",
+			cel.Overload("tier0_sid_string", []*cel.Type{cel.StringType}, cel.BoolType,
+				cel.UnaryBinding(func(s ref.Val) ref.Val {
+					if currentTier0 == nil {
+						return types.False
+					}
+					ok, _ := currentTier0.IsSID(string(s.(types.String)))
+					return types.Bool(ok)
+				}))),
+		cel.Function("sd_readable",
+			cel.Overload("sd_readable_map", []*cel.Type{mapT}, cel.BoolType,
+				cel.UnaryBinding(func(o ref.Val) ref.Val {
+					_, err := descriptorOf(o, "nTSecurityDescriptor")
+					return types.Bool(err == nil)
+				}))),
+		cel.Function("sd_protected",
+			cel.Overload("sd_protected_map", []*cel.Type{mapT}, cel.BoolType,
+				cel.UnaryBinding(func(o ref.Val) ref.Val {
+					d, err := descriptorOf(o, "nTSecurityDescriptor")
+					return types.Bool(err == nil && d.Protected())
+				}))),
+		cel.Function("aces",
+			cel.Overload("aces_map", []*cel.Type{mapT}, aceList,
+				cel.UnaryBinding(func(o ref.Val) ref.Val { return aceVals(o, "nTSecurityDescriptor") }))),
+		cel.Function("aces_of",
+			cel.Overload("aces_of_map_string", []*cel.Type{mapT, cel.StringType}, aceList,
+				cel.BinaryBinding(func(o, name ref.Val) ref.Val { return aceVals(o, string(name.(types.String))) }))),
+	}
+}
+
+// intOf reads an attribute as an unsigned bit field. AD stores 32-bit flag
+// attributes as signed decimals (userAccountControl can be negative in LDIF
+// exports); the value is reinterpreted as uint32 in that case.
+func intOf(o ref.Val, name string) (uint64, bool) {
+	s := firstAttr(o, name)
+	if s == "" {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	if n < 0 && n >= -1<<31 {
+		return uint64(uint32(int32(n))), true
+	}
+	return uint64(n), true
+}
+
+// timeOf parses the two AD time encodings: FILETIME integers (pwdLastSet,
+// lastLogonTimestamp, accountExpires — 100 ns since 1601-01-01 UTC) and
+// GeneralizedTime (whenCreated "20240131120000.0Z"). 0 and the "never" value
+// 0x7FFFFFFFFFFFFFFF are reported as absent.
+func timeOf(s string) (time.Time, bool) {
+	if s == "" {
+		return time.Time{}, false
+	}
+	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+		if n <= 0 || n == 0x7FFFFFFFFFFFFFFF {
+			return time.Time{}, false
+		}
+		const epochDiff = 116444736000000000 // 1601→1970 in 100 ns
+		return time.Unix(0, (n-epochDiff)*100).UTC(), true
+	}
+	for _, layout := range []string{"20060102150405.0Z0700", "20060102150405Z0700", "20060102150405.0Z", "20060102150405Z"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.UTC(), true
+		}
+	}
+	return time.Time{}, false
+}
+
+func nowOf(o ref.Val) time.Time {
+	m, _ := o.Value().(map[string]any)
+	if n, ok := m["now"].(int64); ok {
+		return time.Unix(n, 0).UTC()
+	}
+	return time.Now().UTC()
+}
+
+func descriptorOf(o ref.Val, attr string) (*secdesc.Descriptor, error) {
+	s := firstAttr(o, attr)
+	if s == "" {
+		return nil, errNoSD
+	}
+	raw, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return nil, err
+	}
+	return secdesc.Parse(raw)
+}
+
+type sdErr string
+
+func (e sdErr) Error() string { return string(e) }
+
+const errNoSD = sdErr("no security descriptor collected")
+
+func aceVals(o ref.Val, attr string) ref.Val {
+	d, err := descriptorOf(o, attr)
+	if err != nil {
+		return types.NewDynamicList(types.DefaultTypeAdapter, []map[string]any{})
+	}
+	out := make([]map[string]any, 0, len(d.DACL))
+	for _, a := range d.DACL {
+		t0 := false
+		if currentTier0 != nil {
+			t0, _ = currentTier0.IsSID(a.Trustee)
+		}
+		out = append(out, map[string]any{
+			"trustee": a.Trustee, "mask": int64(a.Mask), "allow": a.Allow(),
+			"inherited": a.Inherited(), "effective": a.Effective(),
+			"object_type": a.ObjectType, "inherited_object_type": a.InheritedObjectType,
+			"trustee_tier0": t0,
+		})
+	}
+	return types.NewDynamicList(types.DefaultTypeAdapter, out)
+}

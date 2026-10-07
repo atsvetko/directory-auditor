@@ -1,7 +1,7 @@
 // Package doctor diagnoses why a connection to a directory fails and prints the
-// cause and a one-line fix (requirement AR-3). The skeleton covers DNS SRV,
-// TCP reachability and the TLS certificate; Kerberos and LDAP-signing checks
-// arrive with the AD provider.
+// cause and a one-line fix (requirement AR-3): DNS SRV, TCP reachability, the
+// TLS certificate, an anonymous rootDSE read (server type) and clock skew
+// against the DC, which breaks Kerberos beyond five minutes.
 package doctor
 
 import (
@@ -15,6 +15,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/atsvetko/directory-auditor/internal/ldapx"
 )
 
 // Step is one diagnostic with a verdict and, on failure, a cause and a fix.
@@ -62,8 +64,7 @@ func Run(ctx context.Context, domain, server string) []Step {
 		return steps
 	}
 
-	// 2. Time skew (Kerberos tolerates 5 minutes) — only a hint until Kerberos arrives.
-	// 3. TCP 389 / 636.
+	// 2. TCP 389 / 636.
 	for _, port := range []string{"389", "636"} {
 		s := Step{Name: "TCP " + net.JoinHostPort(server, port)}
 		d := net.Dialer{Timeout: timeout}
@@ -78,7 +79,7 @@ func Run(ctx context.Context, domain, server string) []Step {
 		steps = append(steps, s)
 	}
 
-	// 4. TLS on 636: certificate chain and fingerprint.
+	// 3. TLS on 636: certificate chain and fingerprint.
 	s := Step{Name: "LDAPS certificate " + server}
 	d := &net.Dialer{Timeout: timeout}
 	raw, err := d.DialContext(ctx, "tcp", net.JoinHostPort(server, "636"))
@@ -88,6 +89,7 @@ func Run(ctx context.Context, domain, server string) []Step {
 		steps = append(steps, s)
 		return steps
 	}
+	var fingerprint string // of the leaf certificate, for the anonymous rootDSE read below
 	tc := tls.Client(raw, &tls.Config{ServerName: server, MinVersion: tls.VersionTLS12})
 	if err := tc.HandshakeContext(ctx); err != nil {
 		// Retry without verification to show the fingerprint for pinning.
@@ -98,7 +100,8 @@ func Run(ctx context.Context, domain, server string) []Step {
 			if tc2.HandshakeContext(ctx) == nil && len(tc2.ConnectionState().PeerCertificates) > 0 {
 				c := tc2.ConnectionState().PeerCertificates[0]
 				sum := sha256.Sum256(c.Raw)
-				s.Info = fmt.Sprintf("subject %s, issuer %s, SHA-256 %s", c.Subject.CommonName, c.Issuer.CommonName, hex.EncodeToString(sum[:]))
+				fingerprint = hex.EncodeToString(sum[:])
+				s.Info = fmt.Sprintf("subject %s, issuer %s, SHA-256 %s", c.Subject.CommonName, c.Issuer.CommonName, fingerprint)
 			}
 			tc2.Close()
 		}
@@ -109,13 +112,86 @@ func Run(ctx context.Context, domain, server string) []Step {
 		if len(st.PeerCertificates) > 0 {
 			c := st.PeerCertificates[0]
 			sum := sha256.Sum256(c.Raw)
-			s.Info = fmt.Sprintf("subject %s, issuer %s, expires %s, SHA-256 %s", c.Subject.CommonName, c.Issuer.CommonName, c.NotAfter.Format("2006-01-02"), hex.EncodeToString(sum[:]))
+			fingerprint = hex.EncodeToString(sum[:])
+			s.Info = fmt.Sprintf("subject %s, issuer %s, expires %s, SHA-256 %s", c.Subject.CommonName, c.Issuer.CommonName, c.NotAfter.Format("2006-01-02"), fingerprint)
 		}
 		s.OK = true
 		tc.Close()
 	}
 	steps = append(steps, s)
+	if fingerprint != "" {
+		steps = append(steps, rootDSESteps(ctx, server, fingerprint, timeout, time.Now)...)
+	}
 	return steps
+}
+
+// rootDSESteps reads the rootDSE anonymously over LDAPS — pinned to the
+// certificate just inspected, no bind, no credentials — to identify the server
+// and compare its clock with ours.
+func rootDSESteps(ctx context.Context, server, pin string, timeout time.Duration, now func() time.Time) []Step {
+	s := Step{Name: "LDAP rootDSE " + server}
+	c, err := ldapx.Dial(ctx, ldapx.Options{Server: server, UseLDAPS: true, PinSHA256: pin, Timeout: timeout})
+	if err != nil {
+		s.Cause, s.Fix = err.Error(), "LDAPS answered TLS but not LDAP; check that the host is a directory server"
+		return []Step{s}
+	}
+	defer c.Close()
+	root, err := c.RootDSE(ctx)
+	if err != nil {
+		s.Cause, s.Fix = err.Error(), "the server refused an anonymous rootDSE read; collection still works after bind"
+		return []Step{s}
+	}
+	s.OK = true
+	s.Info = describeRoot(root)
+	return []Step{s, skewStep(root["currentTime"], now())}
+}
+
+func describeRoot(root map[string]string) string {
+	kind := "directory"
+	switch {
+	case strings.Contains(strings.ToLower(root["vendorName"]), "samba"):
+		kind = "Samba AD DC " + root["vendorVersion"]
+	case root["domainControllerFunctionality"] != "":
+		kind = "Active Directory DC (functional level " + root["domainControllerFunctionality"] + ")"
+	}
+	if nc := root["defaultNamingContext"]; nc != "" {
+		kind += ", " + nc
+	}
+	return kind
+}
+
+// skewStep compares the DC's currentTime with local time. Kerberos rejects
+// requests when clocks differ by more than the realm's tolerance (5 minutes by
+// default), which shows up as a confusing bind failure.
+func skewStep(current string, local time.Time) Step {
+	s := Step{Name: "clock skew vs DC"}
+	dc, err := parseGeneralized(current)
+	if err != nil {
+		s.OK = true
+		s.Info = "DC did not report currentTime; skipped"
+		return s
+	}
+	d := local.Sub(dc)
+	if d < 0 {
+		d = -d
+	}
+	s.Info = fmt.Sprintf("DC %s, local %s, difference %s", dc.Format(time.RFC3339), local.UTC().Format(time.RFC3339), d.Round(time.Second))
+	if d > 5*time.Minute {
+		s.Cause = "clocks differ by more than 5 minutes; Kerberos sign-in (current logon) will fail"
+		s.Fix = "sync this host's time with the domain (Windows: w32tm /resync; Linux: chronyc makestep) or use --user"
+		return s
+	}
+	s.OK = true
+	return s
+}
+
+func parseGeneralized(v string) (time.Time, error) {
+	for _, layout := range []string{"20060102150405.0Z", "20060102150405Z", "20060102150405.0Z0700", "20060102150405Z0700"} {
+		if t, err := time.Parse(layout, v); err == nil {
+			return t.UTC(), nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unparsable time %q", v)
 }
 
 // Print writes the steps in a console-friendly form.
