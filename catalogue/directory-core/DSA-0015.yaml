@@ -13,18 +13,16 @@ verified_by: ""
 verified_on: ""
 
 object: >
-  Security descriptors (nTSecurityDescriptor, DACL only) of Tier-0 objects: the domain
-  naming-context head, CN=AdminSDHolder, the groups Administrators, Domain Admins,
-  Enterprise Admins, Schema Admins, Account Operators, Backup Operators, Server
-  Operators, Print Operators, the OU=Domain Controllers object, domain-controller
-  computer objects, the krbtgt account, and every member of the listed groups.
+  Security descriptors (nTSecurityDescriptor, DACL only) of every Tier-0 object as
+  defined in catalogue/TIER0.md: the domain naming-context head, CN=AdminSDHolder,
+  each protected group in Microsoft's Appendix C list and its members, the Domain
+  Controllers OU, domain-controller computer objects and krbtgt.
 attributes: [nTSecurityDescriptor, objectSid, distinguishedName, adminCount]
 
 condition: >
   An allow ACE on a Tier-0 object grants any of the rights below to a trustee that is
-  not itself Tier-0 (not a member, directly or nested, of the groups listed above, and
-  not SYSTEM, a domain controller, Enterprise Domain Controllers or the object's own
-  SELF where that is the default).
+  not itself Tier 0 per catalogue/TIER0.md (SYSTEM, domain controllers, Enterprise
+  Domain Controllers and the object's own SELF are excluded where that is the default).
     - GenericAll (full control)
     - WriteDacl or WriteOwner
     - GenericWrite, or WriteProperty on all properties
