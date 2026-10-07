@@ -1,0 +1,68 @@
+id: DSA-0014
+title:
+  en: "Directory replication rights granted to principals outside Tier 0"
+  ru: "Права репликации каталога выданы субъектам вне нулевого уровня"
+domain: directory-core
+tier: 0
+severity: critical
+quick: true
+status: draft
+verified_by: ""
+verified_on: ""
+
+object: "Security descriptor (DACL) of the domain naming-context head"
+attributes: [nTSecurityDescriptor, objectSid]
+
+condition: >
+  An allow ACE on the domain head grants "Replicating Directory Changes All"
+  (DS-Replication-Get-Changes-All, rights GUID 1131f6ad-9c07-11d1-f79f-00c04fc2dcd2)
+  to a trustee other than: Domain Controllers, Enterprise Domain Controllers,
+  Read-only Domain Controllers (for the non-"All" right only), Administrators,
+  Domain Admins, Enterprise Admins. A trustee that also holds "Replicating Directory
+  Changes" (GUID 1131f6aa-9c07-11d1-f79f-00c04fc2dcd2) is reported with both rights.
+  GenericAll on the domain head implies both rights and is reported the same way.
+threshold: "any occurrence"
+
+rationale: >
+  Together these rights let a principal request replication of secret attributes,
+  which includes the password hashes of every account in the domain, krbtgt
+  included. In practice that is domain compromise without being a member of any
+  administrative group. Grants are commonly left behind by synchronisation
+  products, backup tools and past troubleshooting.
+
+remediation:
+  en: >
+    Remove the replication rights from every principal that is not a domain
+    controller or a documented Tier-0 service. If a product genuinely needs them
+    (for example a directory synchronisation service), treat its service account and
+    the server it runs on as Tier 0. Alert on any new grant of these rights on the
+    domain head.
+  ru: >
+    Отзовите права репликации у всех субъектов, кроме контроллеров домена и
+    задокументированных служб нулевого уровня. Если продукту они действительно нужны
+    (например, службе синхронизации каталога), относите её служебную учётную запись и
+    сервер к нулевому уровню. Настройте оповещение о любой новой выдаче этих прав на
+    корне домена.
+
+attack:
+  - { id: T1003.006, name: "OS Credential Dumping: DCSync" }
+
+engine: "complex:tier0_acl"
+query_sketch:
+  base: default
+  scope: base
+  notes: "Read nTSecurityDescriptor with SD_FLAGS = DACL only."
+
+references:
+  - title: "Microsoft Learn — Replicating Directory Changes All (DS-Replication-Get-Changes-All)"
+    url: "https://learn.microsoft.com/en-us/windows/win32/adschema/r-ds-replication-get-changes-all"
+  - title: "Microsoft Learn — Replicating Directory Changes (DS-Replication-Get-Changes)"
+    url: "https://learn.microsoft.com/en-us/windows/win32/adschema/r-ds-replication-get-changes"
+  - title: "MITRE ATT&CK — T1003.006 DCSync"
+    url: "https://attack.mitre.org/techniques/T1003/006/"
+  - title: "ADSecurity — Mimikatz DCSync Usage, Exploitation, and Detection"
+    url: "https://adsecurity.org/?p=1729"
+
+notes: >
+  Verify the default trustee list on a fresh Windows Server 2022 domain and on
+  Samba AD DC before implementing; Samba's default domain-head DACL may differ.
