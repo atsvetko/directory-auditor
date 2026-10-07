@@ -1,0 +1,65 @@
+id: DSA-0016
+title:
+  en: "AdminSDHolder carries permissions for non-Tier-0 principals"
+  ru: "AdminSDHolder содержит разрешения для субъектов вне нулевого уровня"
+domain: directory-core
+tier: 0
+severity: critical
+quick: true
+status: draft
+verified_by: ""
+verified_on: ""
+
+object: "CN=AdminSDHolder,CN=System,<domain> — its security descriptor"
+attributes: [nTSecurityDescriptor, whenChanged]
+
+condition: >
+  The AdminSDHolder DACL contains an allow ACE for a trustee that is not Tier 0
+  (same Tier-0 set and resolver as DSA-0015) granting GenericAll, GenericWrite,
+  WriteDacl, WriteOwner, WriteProperty, or any extended right. Also reported as
+  "info": the object's owner is not Domain Admins or Administrators.
+threshold: "any occurrence"
+
+rationale: >
+  The Security Descriptor Propagator (SDProp) regularly copies the AdminSDHolder
+  DACL onto every protected account and group (Domain Admins, Enterprise Admins,
+  Administrators and the other groups in Microsoft's Appendix C, plus their
+  members). A permission added here is therefore re-applied to all of them every
+  time SDProp runs, which makes it a durable way to keep control of privileged
+  objects and defeats manual clean-up on the individual objects.
+
+remediation:
+  en: >
+    Restore the AdminSDHolder DACL to the operating-system default and remove every
+    non-Tier-0 trustee. Then wait for SDProp (or trigger it) and re-run the scan to
+    confirm protected objects no longer carry the ACE (DSA-0015). Audit changes to
+    AdminSDHolder and treat any change as a security incident.
+  ru: >
+    Верните DACL объекта AdminSDHolder к значению по умолчанию и удалите всех
+    субъектов вне нулевого уровня. Затем дождитесь работы SDProp (или запустите его) и
+    повторите сканирование, чтобы убедиться, что ACE исчез с защищённых объектов
+    (DSA-0015). Включите аудит изменений AdminSDHolder и рассматривайте любое
+    изменение как инцидент безопасности.
+
+attack:
+  - { id: T1098, name: "Account Manipulation" }
+  - { id: T1222.001, name: "File and Directory Permissions Modification: Windows" }
+
+engine: "complex:tier0_acl"
+query_sketch:
+  base: "CN=AdminSDHolder,CN=System,<default>"
+  scope: base
+  notes: "Read nTSecurityDescriptor with SD_FLAGS = DACL | OWNER."
+
+references:
+  - title: "Microsoft Learn — Appendix C: Protected accounts and groups in Active Directory (AdminSDHolder and SDProp)"
+    url: "https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory"
+  - title: "ADSecurity — Sneaky AD Persistence #15: Leverage AdminSDHolder & SDProp"
+    url: "https://adsecurity.org/?p=1906"
+  - title: "MITRE ATT&CK — T1098 Account Manipulation"
+    url: "https://attack.mitre.org/techniques/T1098/"
+
+notes: >
+  The default AdminSDHolder DACL differs by OS version and by optional components
+  (e.g. Exchange adds ACEs). Keep a per-version baseline in testdata and report
+  vendor ACEs as findings with a note rather than suppressing them.
