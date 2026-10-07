@@ -1,7 +1,7 @@
 // Package doctor diagnoses why a connection to a directory fails and prints the
 // cause and a one-line fix (requirement AR-3). The skeleton covers DNS SRV,
 // TCP reachability and the TLS certificate; Kerberos and LDAP-signing checks
-// arrive with the AD provider at K3.
+// arrive with the AD provider.
 package doctor
 
 import (

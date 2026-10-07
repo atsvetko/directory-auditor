@@ -35,7 +35,7 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 	var allowUnsigned bool
 	fs.StringVar(&t.Server, "server", "", "domain controller host[:port]")
 	fs.StringVar(&t.Domain, "domain", "", "DNS domain name")
-	fs.StringVar(&t.BindUser, "user", "", "bind identity (DN or UPN); empty = current logon (not yet implemented)")
+	fs.StringVar(&t.BindUser, "user", "", "bind identity (DN or UPN); empty = current logon via Kerberos (no password)")
 	fs.BoolVar(&t.UseLDAPS, "ldaps", true, "use LDAPS (636)")
 	fs.BoolVar(&t.StartTLS, "starttls", false, "use StartTLS on 389 instead of LDAPS")
 	fs.BoolVar(&t.InsecurePlaintext, "insecure-plaintext", false, "allow LDAP without TLS (lab only)")

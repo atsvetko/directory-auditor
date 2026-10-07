@@ -19,7 +19,7 @@ type Target struct {
 	StartTLS          bool
 	InsecurePlaintext bool
 	PinSHA256         string
-	BindUser          string // empty = current logon (Kerberos; not yet implemented)
+	BindUser          string // empty = current logon (Kerberos)
 	BindPassword      string // used once, never stored
 	Tier              int    // 0 = user LDAP only (default)
 	MaxQPS            int

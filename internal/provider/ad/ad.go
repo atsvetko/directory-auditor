@@ -88,7 +88,11 @@ func bind(c *ldapx.Conn, t provider.Target) (string, error) {
 		}
 		return t.BindUser, nil
 	}
-	return "", fmt.Errorf("ad: Kerberos (current logon) bind is not implemented yet; pass --user for a lab")
+	id, err := c.BindCurrentUser()
+	if err != nil {
+		return "", fmt.Errorf("ad: %w", err)
+	}
+	return id + " (Kerberos)", nil
 }
 
 func dial(ctx context.Context, t provider.Target) (*ldapx.Conn, error) {
