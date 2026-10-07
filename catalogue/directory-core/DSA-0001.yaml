@@ -1,0 +1,56 @@
+id: DSA-0001
+title:
+  en: "Accounts that do not require Kerberos pre-authentication"
+  ru: "Учётные записи без обязательной предварительной аутентификации Kerberos"
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ""
+verified_on: ""
+
+object: "Enabled user accounts"
+attributes: [userAccountControl, sAMAccountName, pwdLastSet, adminCount]
+
+condition: >
+  userAccountControl has DONT_REQ_PREAUTH (0x400000, decimal 4194304) set and
+  ACCOUNTDISABLE (0x2) not set. Severity is raised to critical when the account is
+  Tier 0 (adminCount = 1 or resolved Tier-0 membership).
+threshold: "any occurrence"
+
+rationale: >
+  When pre-authentication is not required, the domain controller answers an
+  authentication request for the account without first checking that the requester
+  knows the password, and the answer contains data encrypted with a key derived
+  from the password. That data can be tested against password guesses offline, so
+  the account's security depends entirely on password strength.
+
+remediation:
+  en: >
+    Clear "Do not require Kerberos preauthentication" on the account. If a legacy
+    client genuinely needs it, document the exception, give the account a long random
+    password, keep it out of privileged groups and monitor its authentication events.
+  ru: >
+    Снимите флаг «Не требовать предварительной проверки подлинности Kerberos». Если
+    он действительно нужен устаревшему клиенту, задокументируйте исключение, задайте
+    длинный случайный пароль, исключите учётную запись из привилегированных групп и
+    отслеживайте события её аутентификации.
+
+attack:
+  - { id: T1558.004, name: "Steal or Forge Kerberos Tickets: AS-REP Roasting" }
+
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: "(&(objectCategory=person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=4194304)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
+  attributes: [sAMAccountName, userAccountControl, pwdLastSet, adminCount]
+
+references:
+  - title: "Microsoft Learn — Use the UserAccountControl flags to manipulate user account properties"
+    url: "https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties"
+  - title: "MITRE ATT&CK — T1558.004 AS-REP Roasting"
+    url: "https://attack.mitre.org/techniques/T1558/004/"
+
+notes: "Filter uses the documented LDAP_MATCHING_RULE_BIT_AND (1.2.840.113556.1.4.803)."
