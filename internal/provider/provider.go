@@ -32,8 +32,18 @@ type Provider interface {
 	// Detect inspects a server (rootDSE and friends) and returns true when this
 	// provider should handle it, with a dialect string for the snapshot.
 	Detect(ctx context.Context, t Target) (match bool, dialect string, err error)
+	// Check connects and binds without collecting — the wizard's "Connect" step.
+	Check(ctx context.Context, t Target) (CheckResult, error)
 	// Collect performs a read-only collection and returns a snapshot.
 	Collect(ctx context.Context, t Target, progress func(string)) (*snapshot.Snapshot, error)
+}
+
+// CheckResult describes a successful test connection.
+type CheckResult struct {
+	Identity string // who we are bound as
+	Dialect  string // ad, samba
+	Domain   string // DNS domain derived from the naming context
+	BaseDN   string
 }
 
 var (

@@ -37,6 +37,31 @@ type CheckResult struct {
 	Findings []Finding `json:"findings,omitempty"`
 	Signed   bool      `json:"signed"`
 	Duration string    `json:"duration"`
+
+	Attack      []string               `json:"attack,omitempty"`
+	Remediation map[string]Remediation `json:"remediation,omitempty"`
+	References  []Reference            `json:"references,omitempty"`
+}
+
+// Inventory is what the engine learned about the directory independent of any
+// check: how much was collected, what could not be, and who is Tier 0 and why.
+type Inventory struct {
+	Objects    int                `json:"objects"`
+	Collected  time.Time          `json:"collected_at"`
+	Identity   string             `json:"identity,omitempty"`
+	Domain     string             `json:"domain,omitempty"`
+	BaseDN     string             `json:"base_dn,omitempty"`
+	Tier0      []Tier0Entry       `json:"tier0"`
+	Unresolved []string           `json:"tier0_unresolved,omitempty"`
+	NotRead    []snapshot.Skipped `json:"not_collected,omitempty"`
+	Duration   string             `json:"collection_duration,omitempty"`
+	Searches   int                `json:"searches"`
+}
+
+// Tier0Entry is one Tier-0 principal or object with the path that makes it so.
+type Tier0Entry struct {
+	DN     string `json:"dn"`
+	Reason string `json:"reason"`
 }
 
 // Result is the whole analysis — the input to every report format.
@@ -51,6 +76,7 @@ type Result struct {
 	Score        int           `json:"score"` // 0–100, 100 = nothing found
 	AnalysedAt   time.Time     `json:"analysed_at"`
 	Unsigned     bool          `json:"unsigned_packs"` // true when any loaded pack was unsigned
+	Inventory    Inventory     `json:"inventory"`
 }
 
 // Counts are the honest states shown at the top of every report (AR-12).
@@ -197,6 +223,15 @@ func EvaluateWith(snap *snapshot.Snapshot, packs []Pack, opts EvalOptions) (*Res
 	currentTier0 = t0
 	defer func() { currentTier0 = nil }()
 	now := snap.Collected.Unix()
+	inv := Inventory{Objects: len(snap.Objects), Collected: snap.Collected, Identity: snap.Meta.Identity,
+		Domain: snap.Meta.Domain, BaseDN: snap.Meta.BaseDN, Unresolved: t0.Unresolved, NotRead: snap.Skipped,
+		Duration: snap.Meta.Duration, Searches: snap.Meta.QueryCount, Tier0: []Tier0Entry{}}
+	for _, o := range snap.Objects {
+		if ok, why := t0.IsDN(o.DN); ok {
+			inv.Tier0 = append(inv.Tier0, Tier0Entry{DN: o.DN, Reason: why})
+		}
+	}
+	sort.Slice(inv.Tier0, func(i, j int) bool { return inv.Tier0[i].Reason < inv.Tier0[j].Reason })
 
 	hash, err := snapshot.Hash(snap)
 	if err != nil {
@@ -205,7 +240,7 @@ func EvaluateWith(snap *snapshot.Snapshot, packs []Pack, opts EvalOptions) (*Res
 	res := &Result{
 		SnapshotHash: hash, Provider: snap.Meta.Provider, Dialect: snap.Meta.Dialect,
 		Target: snap.Meta.Target, Tier: snap.Meta.Tier, AnalysedAt: time.Now().UTC(),
-		Counts: Counts{BySev: map[string]int{}, BySkip: map[string]int{}},
+		Counts: Counts{BySev: map[string]int{}, BySkip: map[string]int{}}, Inventory: inv,
 	}
 	dialect := snap.Meta.Dialect
 	if dialect == "" {
@@ -213,7 +248,8 @@ func EvaluateWith(snap *snapshot.Snapshot, packs []Pack, opts EvalOptions) (*Res
 	}
 	for _, p := range packs {
 		start := time.Now()
-		cr := CheckResult{ID: p.ID, Title: p.Title, Domain: p.Domain, Tier: p.Tier, Severity: p.Severity, Signed: p.Signed}
+		cr := CheckResult{ID: p.ID, Title: p.Title, Domain: p.Domain, Tier: p.Tier, Severity: p.Severity, Signed: p.Signed,
+			Attack: p.Attack, Remediation: p.Remediation, References: p.References}
 		if !p.Signed {
 			res.Unsigned = true
 		}

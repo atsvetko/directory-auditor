@@ -55,6 +55,37 @@ func Fingerprint(root map[string]string) string {
 	return ""
 }
 
+// Check dials, binds and reads the rootDSE — proof that a scan will be able to start.
+func (p Provider) Check(ctx context.Context, t provider.Target) (provider.CheckResult, error) {
+	c, err := dial(ctx, t)
+	if err != nil {
+		return provider.CheckResult{}, err
+	}
+	defer c.Close()
+	id, err := bind(c, t)
+	if err != nil {
+		return provider.CheckResult{}, err
+	}
+	root, err := c.RootDSE(ctx)
+	if err != nil {
+		return provider.CheckResult{}, fmt.Errorf("ad: rootDSE: %w", err)
+	}
+	return provider.CheckResult{Identity: id, Dialect: Fingerprint(root), BaseDN: root["defaultNamingContext"],
+		Domain: DomainFromDN(root["defaultNamingContext"])}, nil
+}
+
+// DomainFromDN turns DC=corp,DC=example,DC=com into corp.example.com.
+func DomainFromDN(dn string) string {
+	var parts []string
+	for _, rdn := range strings.Split(dn, ",") {
+		kv := strings.SplitN(strings.TrimSpace(rdn), "=", 2)
+		if len(kv) == 2 && strings.EqualFold(kv[0], "DC") {
+			parts = append(parts, kv[1])
+		}
+	}
+	return strings.Join(parts, ".")
+}
+
 // Collect binds and runs the read-only collection plan (see Plan).
 func (p Provider) Collect(ctx context.Context, t provider.Target, progress func(string)) (*snapshot.Snapshot, error) {
 	if progress == nil {

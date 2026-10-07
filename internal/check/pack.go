@@ -57,16 +57,16 @@ type Query struct {
 
 // Remediation carries the four mandatory fields (requirement AR-6).
 type Remediation struct {
-	Why    string `yaml:"why"`
-	Abuse  string `yaml:"abuse"`
-	Fix    string `yaml:"fix"`
-	Verify string `yaml:"verify"`
+	Why    string `yaml:"why" json:"why"`
+	Abuse  string `yaml:"abuse" json:"abuse"`
+	Fix    string `yaml:"fix" json:"fix"`
+	Verify string `yaml:"verify" json:"verify"`
 }
 
 // Reference is a primary source.
 type Reference struct {
-	Title string `yaml:"title"`
-	URL   string `yaml:"url"`
+	Title string `yaml:"title" json:"title"`
+	URL   string `yaml:"url" json:"url"`
 }
 
 var (
