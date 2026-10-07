@@ -1,0 +1,68 @@
+id: DSA-0007
+title:
+  en: "Tier-0 user accounts not protected from credential delegation"
+  ru: "Учётные записи пользователей нулевого уровня не защищены от делегирования учётных данных"
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ""
+verified_on: ""
+
+object: "Enabled Tier-0 user accounts (human administrators; not service or computer accounts)"
+attributes: [userAccountControl, memberOf, primaryGroupID, adminCount, sAMAccountName, servicePrincipalName]
+
+condition: >
+  A Tier-0 user account (adminCount = 1 or resolved Tier-0 membership) has neither
+  NOT_DELEGATED (0x100000, decimal 1048576) set in userAccountControl nor membership
+  in the Protected Users group (well-known RID 525). Accounts with an SPN are
+  excluded and listed as "service account — see DSA-0002", because Microsoft advises
+  against adding service accounts to Protected Users.
+threshold: "any occurrence"
+
+rationale: >
+  Delegation weaknesses elsewhere in the domain (DSA-0004, DSA-0005, DSA-0006) only
+  turn into domain compromise if an administrator's credentials can be delegated.
+  Marking administrators "sensitive and cannot be delegated", or placing them in
+  Protected Users, removes that path. Protected Users also stops NTLM, DES and RC4
+  for its members and limits their Kerberos tickets to four hours.
+
+remediation:
+  en: >
+    Set "Account is sensitive and cannot be delegated" on every human Tier-0 account
+    and add those accounts to Protected Users (domain functional level Windows Server
+    2012 R2 or later). Test first: members cannot use NTLM, need AES keys (old
+    accounts may need one password reset), and cannot sign in offline. Do not add
+    service or computer accounts to Protected Users.
+  ru: >
+    Установите флаг «Учётная запись важна и не может быть делегирована» для каждой
+    учётной записи администратора нулевого уровня и добавьте их в группу Protected
+    Users (функциональный уровень домена не ниже Windows Server 2012 R2). Сначала
+    проверьте последствия: членам группы недоступен NTLM, нужны ключи AES (старым
+    учётным записям может потребоваться однократная смена пароля), вход без связи с
+    контроллером невозможен. Не добавляйте в Protected Users служебные учётные записи
+    и учётные записи компьютеров.
+
+attack:
+  - { id: T1550.003, name: "Use Alternate Authentication Material: Pass the Ticket" }
+  - { id: T1550.002, name: "Use Alternate Authentication Material: Pass the Hash" }
+
+engine: "complex:tier0_membership"
+query_sketch:
+  base: default
+  scope: subtree
+  filter: "(&(objectCategory=person)(objectClass=user)(adminCount=1)(!(userAccountControl:1.2.840.113556.1.4.803:=1048576))(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
+  attributes: [sAMAccountName, userAccountControl, memberOf, primaryGroupID, servicePrincipalName]
+
+references:
+  - title: "Microsoft Learn — Protected Users security group (protections, caveats, 2012 R2 functional level)"
+    url: "https://learn.microsoft.com/en-us/windows-server/security/credentials-protection-and-management/protected-users-security-group"
+  - title: "Microsoft Learn — Use the UserAccountControl flags (NOT_DELEGATED 0x100000)"
+    url: "https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties"
+  - title: "Microsoft Learn — Well-known SIDs"
+    url: "https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids"
+  - title: "MITRE ATT&CK — T1550.003 Pass the Ticket"
+    url: "https://attack.mitre.org/techniques/T1550/003/"
+
+notes: "Protected Users = DOMAIN_GROUP_RID_PROTECTED_USERS 0x20D (525), per Microsoft's well-known SIDs table. Tier-0 set: catalogue/TIER0.md."
