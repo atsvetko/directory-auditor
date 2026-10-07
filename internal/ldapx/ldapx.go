@@ -3,6 +3,10 @@
 // Delete or ModifyDN method here, and scripts/readonly-check.sh verifies that
 // none of go-ldap's write entry points survive linking into the release binary
 // (requirement N-9, review-pack artefact 11).
+//
+// Never convert *Conn (or anything holding it) to an interface: the linker then
+// keeps every method of the embedded *ldap.Conn, write methods included, and the
+// gate fails. Pass method values instead (see provider/ad.searcher).
 package ldapx
 
 import (

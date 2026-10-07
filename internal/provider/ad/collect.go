@@ -80,11 +80,20 @@ var SDBaseQuery = Query{Name: "tier0-sd", Base: "<each Tier-0 DN>", Scope: ldapx
 	Attrs: []string{"objectClass"}, Purpose: "ACLs of Tier-0 objects not marked adminCount=1 (DSA-0015)"}
 
 // searcher is the subset of *ldapx.Conn the collector uses; tests supply a fake.
-type searcher interface {
-	RootDSE(ctx context.Context) (map[string]string, error)
-	SearchWith(ctx context.Context, base string, scope ldapx.Scope, filter string, attrs []string, o ldapx.SearchOptions) ([]ldapx.Entry, error)
-	Queries() int
-	Requests() int
+//
+// It is a struct of method values, not an interface, on purpose: converting
+// *ldapx.Conn to an interface makes the linker keep every method of the
+// embedded *ldap.Conn — including Modify/Add/Del — which the read-only gate
+// (scripts/readonly-check.sh) rightly rejects.
+type searcher struct {
+	RootDSE    func(ctx context.Context) (map[string]string, error)
+	SearchWith func(ctx context.Context, base string, scope ldapx.Scope, filter string, attrs []string, o ldapx.SearchOptions) ([]ldapx.Entry, error)
+	Queries    func() int
+	Requests   func() int
+}
+
+func connSearcher(c *ldapx.Conn) searcher {
+	return searcher{RootDSE: c.RootDSE, SearchWith: c.SearchWith, Queries: c.Queries, Requests: c.Requests}
 }
 
 // collect runs the plan against an authenticated session and returns the snapshot.

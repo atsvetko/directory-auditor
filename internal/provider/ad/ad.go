@@ -69,7 +69,7 @@ func (p Provider) Collect(ctx context.Context, t provider.Target, progress func(
 	if err != nil {
 		return nil, err
 	}
-	return collect(ctx, c, snapshot.Meta{
+	return collect(ctx, connSearcher(c), snapshot.Meta{
 		Provider: p.Name(),
 		Target:   t.Server,
 		Domain:   t.Domain,

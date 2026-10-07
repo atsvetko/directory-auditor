@@ -86,7 +86,7 @@ func TestCollect(t *testing.T) {
 	}, errs: map[string]error{
 		"CN=System," + base + "|(objectClass=trustedDomain)": ldap.NewError(ldap.LDAPResultInsufficientAccessRights, errors.New("insufficient access")),
 	}}
-	snap, err := collect(context.Background(), f, metaForTest(), func(string) {})
+	snap, err := collect(context.Background(), searcher{RootDSE: f.RootDSE, SearchWith: f.SearchWith, Queries: f.Queries, Requests: f.Requests}, metaForTest(), func(string) {})
 	if err != nil {
 		t.Fatal(err)
 	}
