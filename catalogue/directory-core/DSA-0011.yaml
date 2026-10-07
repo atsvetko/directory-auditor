@@ -1,0 +1,68 @@
+id: DSA-0011
+title:
+  en: "Passwords stored with reversible encryption"
+  ru: "Пароли хранятся с обратимым шифрованием"
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ""
+verified_on: ""
+
+object: "Enabled user accounts; the domain naming-context head"
+attributes: [userAccountControl, pwdProperties, sAMAccountName, pwdLastSet]
+
+condition: >
+  Either (a) an enabled account has ENCRYPTED_TEXT_PWD_ALLOWED (0x80, decimal 128) in
+  userAccountControl, or (b) the domain head's pwdProperties has
+  DOMAIN_PASSWORD_STORE_CLEARTEXT (16) set, which applies to every account in the
+  domain. Case (b) is reported once at domain level with severity critical.
+  Fine-grained password policies (msDS-PasswordReversibleEncryptionEnabled) are
+  covered by a separate credentials-domain entry.
+threshold: "any occurrence"
+
+rationale: >
+  With this setting the domain stores each password in a form that can be decrypted
+  back to the original text. Anyone who obtains a copy of the directory database or
+  its replicated secrets therefore gets the actual passwords — which users often
+  reuse on other systems — not just hashes. Microsoft's default for the policy is
+  Disabled.
+
+remediation:
+  en: >
+    Disable "Store password using reversible encryption" at domain level and clear
+    the flag on each account. The setting takes effect on the next password change,
+    so force a password change for the affected accounts. If an application really
+    needs it (Microsoft names CHAP and IIS Digest Authentication), scope it to the few
+    accounts that use that application, never to the whole domain.
+  ru: >
+    Отключите параметр «Хранить пароли, используя обратимое шифрование» на уровне
+    домена и снимите флаг у каждой учётной записи. Параметр действует при следующей
+    смене пароля, поэтому принудительно смените пароли затронутых учётных записей. Если
+    приложению он действительно нужен (Microsoft называет CHAP и дайджест-проверку
+    подлинности IIS), ограничьте его теми немногими учётными записями, которые
+    используют это приложение, а не всем доменом.
+
+attack:
+  - { id: T1003.006, name: "OS Credential Dumping: DCSync" }
+  - { id: T1003.003, name: "OS Credential Dumping: NTDS" }
+
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: "(&(objectCategory=person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=128)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
+  attributes: [sAMAccountName, userAccountControl, pwdLastSet]
+
+references:
+  - title: "Microsoft Learn — Store passwords using reversible encryption (default Disabled; CHAP/Digest exception)"
+    url: "https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/security-policy-settings/store-passwords-using-reversible-encryption"
+  - title: "Microsoft Learn — pwdProperties attribute (DOMAIN_PASSWORD_STORE_CLEARTEXT = 16)"
+    url: "https://learn.microsoft.com/en-us/windows/win32/adschema/a-pwdproperties"
+  - title: "Microsoft Learn — Use the UserAccountControl flags to manipulate user account properties"
+    url: "https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties"
+  - title: "MITRE ATT&CK — T1003.003 NTDS"
+    url: "https://attack.mitre.org/techniques/T1003/003/"
+
+notes: "The domain-level part (b) needs a second query on the domain head; the pack will hold two queries or be split."
