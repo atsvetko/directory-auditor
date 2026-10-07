@@ -1,6 +1,10 @@
 package catalogue
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/atsvetko/directory-auditor/internal/check"
+)
 
 // TestRepositoryCatalogue validates every entry committed under catalogue/.
 func TestRepositoryCatalogue(t *testing.T) {
@@ -10,6 +14,13 @@ func TestRepositoryCatalogue(t *testing.T) {
 	}
 	if len(entries) == 0 {
 		t.Fatal("no catalogue entries found")
+	}
+	for _, e := range entries {
+		if f, ok := e.QuerySketch["filter"].(string); ok && f != "" {
+			if _, err := check.ParseFilter(f); err != nil {
+				t.Errorf("%s: query_sketch.filter does not parse: %v", e.ID, err)
+			}
+		}
 	}
 	t.Logf("%d catalogue entries valid", len(entries))
 }

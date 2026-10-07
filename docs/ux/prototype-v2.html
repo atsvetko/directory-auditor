@@ -238,6 +238,13 @@
   .hright{margin-left:auto;height:48px}
   .pivot{order:3;flex:0 0 100%;justify-content:flex-start;height:44px;border-top:1px solid var(--line);margin:0 -16px;padding:0 6px}
   @media(max-width:700px){.ptab span:not(.num){display:inline}}
+
+  /* Fluent MessageBar — informative (blue) */
+  .infobar{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border-radius:4px;font-size:13px;
+    background:var(--soft);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);color:var(--ink);font-weight:400}
+  .infobar .ii{flex:none;width:18px;height:18px;border-radius:50%;background:var(--accent);color:var(--accent-ink);
+    display:grid;place-items:center;font-size:11px;font-weight:700;font-style:italic;font-family:Georgia,serif;margin-top:1px}
+  select.inp{padding:0 8px;line-height:normal;height:32px}
 </style>
 </head>
 <body>
@@ -285,7 +292,7 @@
       <label><span data-t="f_user">User</span><input class="inp mono" placeholder="audit@corp.example.ru"></label>
       <label><span data-t="f_pw">Password</span><input class="inp" type="password" placeholder="••••••••"></label>
       <label class="wide"><span data-t="f_tls">Connection security</span><select class="inp"><option>LDAPS (636) — recommended</option><option>StartTLS (389)</option></select></label>
-      <p class="hint wide" data-t="f_hint">A normal user account covers ~80% of checks. The password is used once in memory and never saved.</p>
+      <div class="infobar wide"><span class="ii">i</span><span data-t="f_hint">A normal user account covers ~80% of checks. The password is used once in memory and never saved.</span></div>
     </div>
     <div class="okbar hidden" id="connok"><b>✓</b> <span data-t="connok">Connected as <b>audit@lab.example</b> · Domain Users · 212 checks available (admin-only checks need an admin account).</span></div>
     <div class="cta">
