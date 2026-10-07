@@ -1,0 +1,300 @@
+package check
+
+import (
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"cel.dev/cel-go/cel"
+	"cel.dev/cel-go/common/types"
+	"cel.dev/cel-go/common/types/ref"
+
+	"github.com/atsvetko/directory-auditor/internal/snapshot"
+)
+
+// Finding is one check firing on one object.
+type Finding struct {
+	CheckID  string            `json:"check_id"`
+	Severity string            `json:"severity"`
+	DN       string            `json:"dn"`
+	Evidence map[string]string `json:"evidence,omitempty"`
+}
+
+// CheckResult summarises one pack's run: findings, or why it did not run.
+type CheckResult struct {
+	ID       string    `json:"id"`
+	Title    Text      `json:"title"`
+	Domain   string    `json:"domain"`
+	Tier     int       `json:"tier"`
+	Severity string    `json:"severity"`
+	Status   string    `json:"status"`                // "pass", "fail", "skipped"
+	Skip     string    `json:"skip_reason,omitempty"` // "provider", "tier", "error"
+	Matched  int       `json:"objects_matched"`
+	Findings []Finding `json:"findings,omitempty"`
+	Signed   bool      `json:"signed"`
+	Duration string    `json:"duration"`
+}
+
+// Result is the whole analysis — the input to every report format.
+type Result struct {
+	SnapshotHash string        `json:"snapshot_hash"`
+	Provider     string        `json:"provider"`
+	Dialect      string        `json:"dialect"`
+	Target       string        `json:"target"`
+	Tier         int           `json:"tier"`
+	Checks       []CheckResult `json:"checks"`
+	Counts       Counts        `json:"counts"`
+	Score        int           `json:"score"` // 0–100, 100 = nothing found
+	AnalysedAt   time.Time     `json:"analysed_at"`
+	Unsigned     bool          `json:"unsigned_packs"` // true when any loaded pack was unsigned
+}
+
+// Counts are the honest states shown at the top of every report (AR-12).
+type Counts struct {
+	Checked  int            `json:"checked"`
+	Passed   int            `json:"passed"`
+	Failed   int            `json:"failed"`
+	Skipped  int            `json:"skipped"`
+	Findings int            `json:"findings"`
+	BySev    map[string]int `json:"by_severity"`
+	BySkip   map[string]int `json:"by_skip_reason"`
+}
+
+var celEnv *cel.Env
+
+func init() {
+	env, err := cel.NewEnv(
+		cel.Variable("obj", cel.MapType(cel.StringType, cel.DynType)),
+		// attr(obj, "name") -> first value or "" (case-insensitive)
+		cel.Function("attr",
+			cel.Overload("attr_map_string", []*cel.Type{cel.MapType(cel.StringType, cel.DynType), cel.StringType}, cel.StringType,
+				cel.BinaryBinding(func(o, name ref.Val) ref.Val {
+					return types.String(firstAttr(o, string(name.(types.String))))
+				}))),
+		// attrs(obj, "name") -> list of values
+		cel.Function("attrs",
+			cel.Overload("attrs_map_string", []*cel.Type{cel.MapType(cel.StringType, cel.DynType), cel.StringType}, cel.ListType(cel.StringType),
+				cel.BinaryBinding(func(o, name ref.Val) ref.Val {
+					vals := allAttr(o, string(name.(types.String)))
+					out := make([]ref.Val, len(vals))
+					for i, v := range vals {
+						out[i] = types.String(v)
+					}
+					return types.NewRefValList(types.DefaultTypeAdapter, out)
+				}))),
+		// intattr(obj, "name") -> first value parsed as int (0 when absent/invalid)
+		cel.Function("intattr",
+			cel.Overload("intattr_map_string", []*cel.Type{cel.MapType(cel.StringType, cel.DynType), cel.StringType}, cel.IntType,
+				cel.BinaryBinding(func(o, name ref.Val) ref.Val {
+					n, _ := strconv.ParseInt(firstAttr(o, string(name.(types.String))), 10, 64)
+					return types.Int(n)
+				}))),
+		// hasattr(obj, "name")
+		cel.Function("hasattr",
+			cel.Overload("hasattr_map_string", []*cel.Type{cel.MapType(cel.StringType, cel.DynType), cel.StringType}, cel.BoolType,
+				cel.BinaryBinding(func(o, name ref.Val) ref.Val {
+					return types.Bool(len(allAttr(o, string(name.(types.String)))) > 0)
+				}))),
+	)
+	if err != nil {
+		panic("check: cel env: " + err.Error())
+	}
+	celEnv = env
+}
+
+// CompileCondition type-checks a CEL condition; the result must be bool.
+func CompileCondition(expr string) (cel.Program, error) {
+	ast, iss := celEnv.Compile(expr)
+	if iss != nil && iss.Err() != nil {
+		return nil, iss.Err()
+	}
+	if ast.OutputType() != cel.BoolType {
+		return nil, fmt.Errorf("condition must evaluate to bool, got %s", ast.OutputType())
+	}
+	return celEnv.Program(ast, cel.EvalOptions(cel.OptOptimize))
+}
+
+func objectToCEL(o snapshot.Object) map[string]any {
+	attrs := make(map[string]any, len(o.Attrs))
+	for k, v := range o.Attrs {
+		vals := make([]any, len(v))
+		for i, s := range v {
+			vals[i] = s
+		}
+		attrs[strings.ToLower(k)] = vals
+	}
+	cls := make([]any, len(o.Class))
+	for i, c := range o.Class {
+		cls[i] = c
+	}
+	return map[string]any{"dn": o.DN, "class": cls, "attrs": attrs}
+}
+
+func firstAttr(o ref.Val, name string) string {
+	vals := allAttr(o, name)
+	if len(vals) == 0 {
+		return ""
+	}
+	return vals[0]
+}
+
+func allAttr(o ref.Val, name string) []string {
+	m, ok := o.Value().(map[string]any)
+	if !ok {
+		return nil
+	}
+	attrs, ok := m["attrs"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	raw, ok := attrs[strings.ToLower(name)].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, r := range raw {
+		if s, ok := r.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// Evaluate runs every pack against the snapshot and returns the Result.
+// Packs for another provider or a higher tier than the snapshot are skipped
+// with a reason — never silently dropped.
+func Evaluate(snap *snapshot.Snapshot, packs []Pack) (*Result, error) {
+	hash, err := snapshot.Hash(snap)
+	if err != nil {
+		return nil, err
+	}
+	res := &Result{
+		SnapshotHash: hash, Provider: snap.Meta.Provider, Dialect: snap.Meta.Dialect,
+		Target: snap.Meta.Target, Tier: snap.Meta.Tier, AnalysedAt: time.Now().UTC(),
+		Counts: Counts{BySev: map[string]int{}, BySkip: map[string]int{}},
+	}
+	dialect := snap.Meta.Dialect
+	if dialect == "" {
+		dialect = snap.Meta.Provider
+	}
+	for _, p := range packs {
+		start := time.Now()
+		cr := CheckResult{ID: p.ID, Title: p.Title, Domain: p.Domain, Tier: p.Tier, Severity: p.Severity, Signed: p.Signed}
+		if !p.Signed {
+			res.Unsigned = true
+		}
+		switch {
+		case !contains(p.Provider, dialect) && !contains(p.Provider, snap.Meta.Provider):
+			cr.Status, cr.Skip = "skipped", "provider"
+		case p.Tier > snap.Meta.Tier:
+			cr.Status, cr.Skip = "skipped", "tier"
+		default:
+			if err := runPack(snap, &p, &cr); err != nil {
+				cr.Status, cr.Skip = "skipped", "error"
+				cr.Findings = nil
+				cr.Evidence(err)
+			}
+		}
+		cr.Duration = time.Since(start).Round(time.Microsecond).String()
+		res.Checks = append(res.Checks, cr)
+		tally(res, cr)
+	}
+	res.Score = score(res)
+	return res, nil
+}
+
+// Evidence attaches an evaluation error as a pseudo-finding so it is visible.
+func (cr *CheckResult) Evidence(err error) {
+	cr.Findings = append(cr.Findings, Finding{CheckID: cr.ID, Severity: "info", DN: "", Evidence: map[string]string{"error": err.Error()}})
+}
+
+func runPack(snap *snapshot.Snapshot, p *Pack, cr *CheckResult) error {
+	filter, err := ParseFilter(p.Query.Filter)
+	if err != nil {
+		return err
+	}
+	prog, err := CompileCondition(p.Condition)
+	if err != nil {
+		return err
+	}
+	for _, o := range snap.Objects {
+		if !filter.Match(o) {
+			continue
+		}
+		cr.Matched++
+		out, _, err := prog.Eval(map[string]any{"obj": objectToCEL(o)})
+		if err != nil {
+			return fmt.Errorf("evaluating %s on %s: %w", p.ID, o.DN, err)
+		}
+		if b, ok := out.Value().(bool); ok && b {
+			f := Finding{CheckID: p.ID, Severity: p.Severity, DN: o.DN, Evidence: map[string]string{}}
+			for _, a := range p.Evidence {
+				f.Evidence[a] = strings.Join(values(o, a), "; ")
+			}
+			cr.Findings = append(cr.Findings, f)
+		}
+	}
+	if len(cr.Findings) > 0 {
+		cr.Status = "fail"
+	} else {
+		cr.Status = "pass"
+	}
+	return nil
+}
+
+func tally(res *Result, cr CheckResult) {
+	switch cr.Status {
+	case "pass":
+		res.Counts.Checked++
+		res.Counts.Passed++
+	case "fail":
+		res.Counts.Checked++
+		res.Counts.Failed++
+		res.Counts.Findings += len(cr.Findings)
+		res.Counts.BySev[cr.Severity] += len(cr.Findings)
+	case "skipped":
+		res.Counts.Skipped++
+		res.Counts.BySkip[cr.Skip]++
+	}
+}
+
+// score is a placeholder model: start at 100, subtract per failed check by
+// severity, floor at 0. The real model is designed before v1.0 (approach §8)
+// and documented in docs/scoring.md; this one exists so the report has a number.
+func score(res *Result) int {
+	weights := map[string]int{"critical": 20, "high": 10, "medium": 5, "low": 2, "info": 0}
+	s := 100
+	for _, c := range res.Checks {
+		if c.Status == "fail" {
+			s -= weights[c.Severity]
+		}
+	}
+	if s < 0 {
+		s = 0
+	}
+	return s
+}
+
+func contains(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
+// SortedSeverities returns severities present in counts, most severe first.
+func SortedSeverities(c Counts) []string {
+	order := []string{"critical", "high", "medium", "low", "info"}
+	var out []string
+	for _, s := range order {
+		if c.BySev[s] > 0 {
+			out = append(out, s)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return false })
+	return out
+}

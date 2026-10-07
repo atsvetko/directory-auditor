@@ -1,0 +1,23 @@
+# Engine format fixture — NOT a security check. Real checks arrive with the
+# catalogue (milestone K1) and never before it (docs/clean-room.md).
+id: TEST-0001
+title: { en: "Fixture: user object carries a description", ru: "Фикстура: у учётной записи есть описание" }
+provider: [ad, samba]
+domain: test
+tier: 0
+severity: info
+quick: true
+query:
+  base: default
+  scope: subtree
+  filter: "(&(objectClass=user)(description=*))"
+  attributes: [sAMAccountName, description]
+condition: 'size(attrs(obj, "description")) > 0 && attr(obj, "sAMAccountName") != ""'
+evidence: [sAMAccountName, description]
+attack: []
+bdu: []
+remediation:
+  en: { why: "Format fixture only.", abuse: "None.", fix: "None.", verify: "None." }
+  ru: { why: "Только фикстура формата.", abuse: "Нет.", fix: "Нет.", verify: "Нет." }
+references:
+  - { title: "Engine test fixture", url: "https://example.invalid/fixture" }

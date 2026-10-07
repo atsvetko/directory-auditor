@@ -1,0 +1,8 @@
+/dist/
+/out/
+/dirauditor-out/
+/dirauditor
+/dirauditor.exe
+*.sig.tmp
+sbom.cdx.json
+.DS_Store
