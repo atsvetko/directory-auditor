@@ -1,0 +1,66 @@
+id: DSA-0005
+title:
+  en: "Constrained delegation with protocol transition, or to sensitive services"
+  ru: "Ограниченное делегирование с переходом протокола или к чувствительным службам"
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ""
+verified_on: ""
+
+object: "Computer and user accounts with msDS-AllowedToDelegateTo populated"
+attributes: [msDS-AllowedToDelegateTo, userAccountControl, sAMAccountName, primaryGroupID]
+
+condition: >
+  msDS-AllowedToDelegateTo is non-empty and either (a) userAccountControl has
+  TRUSTED_TO_AUTH_FOR_DELEGATION (0x1000000, decimal 16777216) set — delegation with
+  protocol transition — or (b) any listed SPN targets a domain controller (host name
+  matches a DC computer object) or a Tier-0 service. Case (a)+(b) together is
+  critical; (a) or (b) alone is high. Domain controllers themselves are excluded.
+threshold: "any occurrence"
+
+rationale: >
+  An account configured for constrained delegation may obtain service tickets on
+  behalf of users for the services it lists. With protocol transition enabled it can
+  do so for any user, without that user ever signing in, so control of the
+  delegating account amounts to control of the listed services as any user. When
+  those services run on domain controllers, that is control of the domain.
+
+remediation:
+  en: >
+    Prefer Kerberos-only constrained delegation (no protocol transition) and remove
+    any target SPN on domain controllers or other Tier-0 hosts. Restrict the list to
+    the specific services the application needs. Protect the delegating account and
+    its host at the same tier as its targets, and mark Tier-0 accounts as sensitive
+    and not delegable (DSA-0007).
+  ru: >
+    Используйте ограниченное делегирование только по Kerberos (без перехода
+    протокола) и удалите целевые SPN на контроллерах домена и других узлах нулевого
+    уровня. Ограничьте список конкретными службами, нужными приложению. Защищайте
+    делегирующую учётную запись и её узел на том же уровне, что и цели, и пометьте
+    учётные записи нулевого уровня как важные и не делегируемые (DSA-0007).
+
+attack:
+  - { id: T1550.003, name: "Use Alternate Authentication Material: Pass the Ticket" }
+  - { id: T1558, name: "Steal or Forge Kerberos Tickets" }
+
+engine: "complex:dc_hosts"
+query_sketch:
+  base: default
+  scope: subtree
+  filter: "(&(msDS-AllowedToDelegateTo=*)(!(primaryGroupID=516)))"
+  attributes: [sAMAccountName, msDS-AllowedToDelegateTo, userAccountControl]
+
+references:
+  - title: "Microsoft Learn — msDS-AllowedToDelegateTo attribute"
+    url: "https://learn.microsoft.com/en-us/windows/win32/adschema/a-msds-allowedtodelegateto"
+  - title: "Microsoft Learn — Kerberos constrained delegation overview (protocol transition, Trusted-to-Authenticate-for-Delegation)"
+    url: "https://learn.microsoft.com/en-us/windows-server/security/kerberos/kerberos-constrained-delegation-overview"
+  - title: "Microsoft Learn — Use the UserAccountControl flags (TRUSTED_TO_AUTH_FOR_DELEGATION 0x1000000)"
+    url: "https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties"
+  - title: "MITRE ATT&CK — T1550.003 Pass the Ticket"
+    url: "https://attack.mitre.org/techniques/T1550/003/"
+
+notes: "Resolving SPN host names to DC objects is the shared engine function complex:dc_hosts."
