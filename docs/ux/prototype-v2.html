@@ -231,6 +231,13 @@
   .wrap{max-width:1180px}
   .win{border-radius:8px}
   .prod::after{content:"DEMO";margin-left:6px;font-size:10px;font-weight:700;color:var(--accent);background:var(--soft);border-radius:4px;padding:1px 6px}
+
+  /* two-row header: product name on top, step tabs on their own row */
+  .apphdr{height:auto;flex-wrap:wrap;padding:0 16px;gap:0 16px}
+  .prod{height:48px}
+  .hright{margin-left:auto;height:48px}
+  .pivot{order:3;flex:0 0 100%;justify-content:flex-start;height:44px;border-top:1px solid var(--line);margin:0 -16px;padding:0 6px}
+  @media(max-width:700px){.ptab span:not(.num){display:inline}}
 </style>
 </head>
 <body>
