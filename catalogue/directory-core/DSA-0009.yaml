@@ -1,0 +1,66 @@
+id: DSA-0009
+title:
+  en: "Tier-0 accounts with old or non-expiring passwords"
+  ru: "Учётные записи нулевого уровня со старыми или бессрочными паролями"
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ""
+verified_on: ""
+
+object: "Enabled Tier-0 user accounts (see catalogue/TIER0.md)"
+attributes: [pwdLastSet, userAccountControl, adminCount, sAMAccountName, lastLogonTimestamp, whenCreated]
+
+condition: >
+  An enabled Tier-0 user account (krbtgt excluded — DSA-0008) meets at least one of:
+  (a) DONT_EXPIRE_PASSWORD (0x10000, decimal 65536) is set; (b) pwdLastSet is older
+  than the threshold; (c) pwdLastSet is 0 (must change at next logon) and the account
+  is older than 30 days. The built-in Administrator (RID 500) is evaluated the same
+  way and labelled.
+threshold: "pwdLastSet older than 365 days (project recommendation)"
+
+rationale: >
+  Administrator passwords that never change keep any past leak useful indefinitely
+  — from an old backup, a reused personal password, a phishing kit or a former
+  employee. The longer a privileged password lives, the larger the window in which
+  an exposed copy still works.
+
+remediation:
+  en: >
+    Rotate the passwords, remove "Password never expires" from human administrator
+    accounts, and set a rotation period for Tier-0 accounts through a fine-grained
+    password policy. Move services off administrator accounts to gMSAs. For the
+    strongest result, require smart cards or another phishing-resistant method for
+    Tier-0 sign-in.
+  ru: >
+    Смените пароли, снимите флаг «Срок действия пароля не ограничен» с учётных записей
+    администраторов и задайте период смены пароля для нулевого уровня через
+    детальную политику паролей. Переведите службы с административных учётных записей
+    на gMSA. Для наилучшего результата требуйте для входа на нулевом уровне смарт-карту
+    или другой устойчивый к фишингу способ.
+
+attack:
+  - { id: T1078.002, name: "Valid Accounts: Domain Accounts" }
+
+engine: "complex:tier0_membership"
+query_sketch:
+  base: default
+  scope: subtree
+  filter: "(&(objectCategory=person)(objectClass=user)(adminCount=1)(!(userAccountControl:1.2.840.113556.1.4.803:=2))(!(sAMAccountName=krbtgt)))"
+  attributes: [sAMAccountName, pwdLastSet, userAccountControl, lastLogonTimestamp, whenCreated, objectSid]
+
+references:
+  - title: "Microsoft Learn — Use the UserAccountControl flags (DONT_EXPIRE_PASSWORD 0x10000)"
+    url: "https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties"
+  - title: "Microsoft Learn — Appendix C: Protected accounts and groups in Active Directory"
+    url: "https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory"
+  - title: "Microsoft Learn — Enterprise access model (privileged access)"
+    url: "https://learn.microsoft.com/en-us/security/privileged-access-workstations/privileged-access-access-model"
+  - title: "MITRE ATT&CK — T1078.002 Valid Accounts: Domain Accounts"
+    url: "https://attack.mitre.org/techniques/T1078/002/"
+
+notes: >
+  adminCount = 1 is only a pre-filter; final Tier-0 status comes from the resolver,
+  because adminCount stays set after an account leaves a protected group (DSA-0019).
