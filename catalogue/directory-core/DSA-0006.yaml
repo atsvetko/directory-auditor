@@ -1,0 +1,70 @@
+id: DSA-0006
+title:
+  en: "Resource-based constrained delegation configured on Tier-0 computers"
+  ru: "Делегирование на основе ресурса настроено на компьютерах нулевого уровня"
+domain: directory-core
+tier: 0
+severity: critical
+quick: true
+status: draft
+verified_by: ""
+verified_on: ""
+
+object: "Computer accounts of domain controllers and other Tier-0 hosts; krbtgt"
+attributes: [msDS-AllowedToActOnBehalfOfOtherIdentity, sAMAccountName, primaryGroupID]
+
+condition: >
+  msDS-AllowedToActOnBehalfOfOtherIdentity is populated on a domain controller
+  (primaryGroupID 516 or 521), on another Tier-0 host, or on the krbtgt account. The
+  attribute holds a security descriptor; every trustee it allows is listed as
+  evidence. Also reported (severity high): the attribute on any computer where an
+  allowed trustee is a computer account created through the machine-account quota
+  (ms-DS-CreatorSID set to a regular user; see DSA-0013).
+threshold: "any occurrence"
+
+rationale: >
+  This attribute names the accounts that may obtain service tickets to the host on
+  behalf of any user — and protocol transition is always permitted for this kind of
+  delegation. On a domain controller that means the listed accounts can act as an
+  administrator against the DC itself. Because the attribute is set on the target,
+  anyone with write access to a DC's computer object can add it without touching the
+  delegating account.
+
+remediation:
+  en: >
+    Clear msDS-AllowedToActOnBehalfOfOtherIdentity on domain controllers, other
+    Tier-0 hosts and krbtgt — there is no legitimate need for it there. Review who
+    can write to Tier-0 computer objects (DSA-0015) and set the machine-account quota
+    to 0 (DSA-0013). Audit changes to this attribute.
+  ru: >
+    Очистите msDS-AllowedToActOnBehalfOfOtherIdentity на контроллерах домена, других
+    узлах нулевого уровня и у krbtgt — законной необходимости в нём там нет.
+    Проверьте, кто может изменять объекты-компьютеры нулевого уровня (DSA-0015), и
+    установите квоту учётных записей компьютеров в 0 (DSA-0013). Включите аудит
+    изменений этого атрибута.
+
+attack:
+  - { id: T1550.003, name: "Use Alternate Authentication Material: Pass the Ticket" }
+  - { id: T1098, name: "Account Manipulation" }
+
+engine: "complex:sd_trustees"
+query_sketch:
+  base: default
+  scope: subtree
+  filter: "(msDS-AllowedToActOnBehalfOfOtherIdentity=*)"
+  attributes: [sAMAccountName, msDS-AllowedToActOnBehalfOfOtherIdentity, primaryGroupID, ms-DS-CreatorSID]
+
+references:
+  - title: "Microsoft Learn — msDS-AllowedToActOnBehalfOfOtherIdentity attribute"
+    url: "https://learn.microsoft.com/en-us/windows/win32/adschema/a-msds-allowedtoactonbehalfofotheridentity"
+  - title: "Microsoft Learn — Kerberos constrained delegation overview (resource-based delegation; KDC always allows protocol transition)"
+    url: "https://learn.microsoft.com/en-us/windows-server/security/kerberos/kerberos-constrained-delegation-overview"
+  - title: "Elad Shamir — Wagging the Dog: Abusing Resource-Based Constrained Delegation"
+    url: "https://shenaniganslabs.io/2019/01/28/Wagging-the-Dog.html"
+  - title: "MITRE ATT&CK — T1550.003 Pass the Ticket"
+    url: "https://attack.mitre.org/techniques/T1550/003/"
+
+notes: >
+  Microsoft's overview documents the PrincipalsAllowedToDelegateToAccount cmdlet
+  parameter; the schema page documents the attribute. Confirm in the lab that the
+  parameter writes this attribute before implementing.
