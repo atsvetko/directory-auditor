@@ -14,9 +14,11 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
+	ber "github.com/go-asn1-ber/asn1-ber"
 	"github.com/go-ldap/ldap/v3"
 )
 
@@ -35,9 +37,11 @@ type Options struct {
 
 // Conn is a read-only LDAP session.
 type Conn struct {
-	c       *ldap.Conn
-	queries int
-	opts    Options
+	c        *ldap.Conn
+	queries  int // logical searches
+	requests int // wire requests (pages, range chunks)
+	last     time.Time
+	opts     Options
 }
 
 // Dial opens a connection according to opts. It never binds; call BindSimple
@@ -131,32 +135,177 @@ func (c *Conn) RootDSE(ctx context.Context) (map[string]string, error) {
 	return out, nil
 }
 
-// Entry is a minimal, library-independent search result.
+// Entry is a minimal, library-independent search result. Attributes named in
+// SearchOptions.Binary are returned raw in Bin (and omitted from Attrs) because
+// their values are not text: SIDs, GUIDs, security descriptors.
 type Entry struct {
 	DN    string
 	Attrs map[string][]string
+	Bin   map[string][][]byte
 }
+
+// SearchOptions refines a search. The zero value is a plain paged search.
+type SearchOptions struct {
+	// Binary lists attributes to return as raw bytes (case-insensitive).
+	Binary []string
+	// SDFlags, when non-zero, attaches LDAP_SERVER_SD_FLAGS_OID so the server
+	// returns only the named parts of nTSecurityDescriptor. Use SDFlagsDACL for
+	// non-administrators: without the control AD also asks for the SACL and
+	// omits the whole attribute when the caller may not read it.
+	SDFlags uint32
+}
+
+// Parts of a security descriptor selectable with SDFlags ([MS-ADTS] 3.1.1.3.4.1.11).
+const (
+	SDFlagsOwner uint32 = 0x1
+	SDFlagsGroup uint32 = 0x2
+	SDFlagsDACL  uint32 = 0x4
+	SDFlagsSACL  uint32 = 0x8
+)
+
+// OIDSDFlags is LDAP_SERVER_SD_FLAGS_OID.
+const OIDSDFlags = "1.2.840.113556.1.4.801"
 
 // Search runs a paged search and returns all entries. Page size 500 keeps
 // per-request load modest on domain controllers.
 func (c *Conn) Search(ctx context.Context, baseDN string, scope Scope, filter string, attrs []string) ([]Entry, error) {
-	res, err := c.search(ctx, baseDN, int(scope), filter, attrs, 500)
+	return c.SearchWith(ctx, baseDN, scope, filter, attrs, SearchOptions{})
+}
+
+// SearchWith is Search with options. Multi-valued attributes that the server
+// returns in ranges (member;range=0-1499) are completed with follow-up base
+// searches so callers always see the full value list under the plain name.
+func (c *Conn) SearchWith(ctx context.Context, baseDN string, scope Scope, filter string, attrs []string, o SearchOptions) ([]Entry, error) {
+	var controls []ldap.Control
+	if o.SDFlags != 0 {
+		controls = append(controls, sdFlagsControl(o.SDFlags))
+	}
+	res, err := c.pagedSearch(ctx, baseDN, int(scope), filter, attrs, controls, 500)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]Entry, 0, len(res.Entries))
-	for _, e := range res.Entries {
-		m := make(map[string][]string, len(e.Attributes))
+	binary := map[string]bool{}
+	for _, b := range o.Binary {
+		binary[strings.ToLower(b)] = true
+	}
+	out := make([]Entry, 0, len(res))
+	for _, e := range res {
+		en := Entry{DN: e.DN, Attrs: make(map[string][]string, len(e.Attributes))}
 		for _, a := range e.Attributes {
-			m[a.Name] = a.Values
+			name, lo, hi, ranged := parseRange(a.Name)
+			if ranged {
+				vals, err := c.completeRange(ctx, e.DN, name, a.ByteValues, lo, hi, controls)
+				if err != nil {
+					return nil, fmt.Errorf("ldapx: range retrieval of %s on %s: %w", name, e.DN, err)
+				}
+				a = &ldap.EntryAttribute{Name: name, ByteValues: vals}
+			}
+			if binary[strings.ToLower(a.Name)] {
+				if en.Bin == nil {
+					en.Bin = map[string][][]byte{}
+				}
+				en.Bin[a.Name] = a.ByteValues
+				continue
+			}
+			vals := make([]string, len(a.ByteValues))
+			for i, v := range a.ByteValues {
+				vals[i] = string(v)
+			}
+			en.Attrs[a.Name] = vals
 		}
-		out = append(out, Entry{DN: e.DN, Attrs: m})
+		out = append(out, en)
 	}
 	return out, nil
 }
 
+// parseRange splits "member;range=0-1499" into ("member", 0, 1499, true);
+// hi = -1 means "*" (last chunk).
+func parseRange(attr string) (name string, lo, hi int, ok bool) {
+	i := strings.Index(strings.ToLower(attr), ";range=")
+	if i < 0 {
+		return attr, 0, 0, false
+	}
+	name = attr[:i]
+	r := attr[i+len(";range="):]
+	dash := strings.IndexByte(r, '-')
+	if dash < 0 {
+		return attr, 0, 0, false
+	}
+	var err error
+	if lo, err = strconv.Atoi(r[:dash]); err != nil {
+		return attr, 0, 0, false
+	}
+	if r[dash+1:] == "*" {
+		return name, lo, -1, true
+	}
+	if hi, err = strconv.Atoi(r[dash+1:]); err != nil {
+		return attr, 0, 0, false
+	}
+	return name, lo, hi, true
+}
+
+func (c *Conn) completeRange(ctx context.Context, dn, name string, vals [][]byte, lo, hi int, controls []ldap.Control) ([][]byte, error) {
+	for guard := 0; hi >= 0; guard++ {
+		if guard > 10000 {
+			return nil, errors.New("too many range chunks")
+		}
+		next := fmt.Sprintf("%s;range=%d-*", name, hi+1)
+		res, err := c.pagedSearch(ctx, dn, ldap.ScopeBaseObject, "(objectClass=*)", []string{next}, controls, 0)
+		if err != nil {
+			return nil, err
+		}
+		if len(res) == 0 {
+			break
+		}
+		found := false
+		for _, a := range res[0].Attributes {
+			n, l, h, ok := parseRange(a.Name)
+			if !ok || !strings.EqualFold(n, name) {
+				continue
+			}
+			if l != hi+1 {
+				return nil, fmt.Errorf("server returned range starting at %d, expected %d", l, hi+1)
+			}
+			vals = append(vals, a.ByteValues...)
+			hi, found = h, true
+		}
+		if !found {
+			break
+		}
+	}
+	_ = lo
+	return vals, nil
+}
+
+// sdFlagsControl encodes LDAP_SERVER_SD_FLAGS_OID: controlValue is the BER
+// encoding of SEQUENCE { Flags INTEGER }. Non-critical, so a server without
+// the control still answers (with its default parts).
+type sdFlags uint32
+
+func sdFlagsControl(f uint32) ldap.Control { return sdFlags(f) }
+
+func (sdFlags) GetControlType() string { return OIDSDFlags }
+
+func (f sdFlags) Encode() *ber.Packet {
+	p := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagSequence, nil, "Control")
+	p.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, OIDSDFlags, "Control Type (SD flags)"))
+	val := ber.Encode(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, nil, "Control Value (SD flags)")
+	seq := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagSequence, nil, "SDFlagsRequestValue")
+	seq.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagInteger, int64(f), "Flags"))
+	val.AppendChild(seq)
+	p.AppendChild(val)
+	return p
+}
+
+func (f sdFlags) String() string {
+	return fmt.Sprintf("Control Type: SD flags (%q) Flags: %#x", OIDSDFlags, uint32(f))
+}
+
 // Queries reports how many LDAP searches this session has issued (for the run log).
 func (c *Conn) Queries() int { return c.queries }
+
+// Requests reports wire-level requests (each page and range chunk counts).
+func (c *Conn) Requests() int { return c.requests }
 
 // Close ends the session.
 func (c *Conn) Close() { c.c.Close() }
@@ -171,15 +320,67 @@ const (
 )
 
 func (c *Conn) search(ctx context.Context, base string, scope int, filter string, attrs []string, page uint32) (*ldap.SearchResult, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
+	entries, err := c.pagedSearch(ctx, base, scope, filter, attrs, nil, page)
+	if err != nil {
+		return nil, err
 	}
+	return &ldap.SearchResult{Entries: entries}, nil
+}
+
+// pagedSearch issues one search, paging with the simple paged-results control
+// when page > 0. Every page is one request and passes through the throttle,
+// so --max-qps limits real load on the DC rather than logical searches.
+func (c *Conn) pagedSearch(ctx context.Context, base string, scope int, filter string, attrs []string, controls []ldap.Control, page uint32) ([]*ldap.Entry, error) {
 	c.queries++
-	req := ldap.NewSearchRequest(base, scope, ldap.NeverDerefAliases, 0, 0, false, filter, attrs, nil)
-	if page == 0 {
-		return c.c.Search(req)
+	var paging *ldap.ControlPaging
+	ctrls := append([]ldap.Control(nil), controls...)
+	if page > 0 {
+		paging = ldap.NewControlPaging(page)
+		ctrls = append(ctrls, paging)
 	}
-	return c.c.SearchWithPaging(req, page)
+	req := ldap.NewSearchRequest(base, scope, ldap.NeverDerefAliases, 0, 0, false, filter, attrs, ctrls)
+	var out []*ldap.Entry
+	for {
+		if err := c.wait(ctx); err != nil {
+			return out, err
+		}
+		c.requests++
+		res, err := c.c.Search(req)
+		if res != nil {
+			out = append(out, res.Entries...)
+		}
+		if err != nil {
+			return out, err
+		}
+		if paging == nil {
+			return out, nil
+		}
+		pr, ok := ldap.FindControl(res.Controls, ldap.ControlTypePaging).(*ldap.ControlPaging)
+		if !ok || len(pr.Cookie) == 0 {
+			return out, nil
+		}
+		paging.SetCookie(pr.Cookie)
+	}
+}
+
+// wait enforces MaxQPS between requests and honours cancellation.
+func (c *Conn) wait(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if c.opts.MaxQPS <= 0 {
+		return nil
+	}
+	gap := time.Second / time.Duration(c.opts.MaxQPS)
+	if d := time.Until(c.last.Add(gap)); d > 0 {
+		t := time.NewTimer(d)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return ctx.Err()
+		case <-t.C:
+		}
+	}
+	c.last = time.Now()
+	return nil
 }

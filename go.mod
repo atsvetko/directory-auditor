@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	cel.dev/cel-go v0.32.0
+	github.com/go-asn1-ber/asn1-ber v1.5.8
 	github.com/go-ldap/ldap/v3 v3.4.14
 	github.com/klauspost/compress v1.20.1
 	golang.org/x/term v0.46.0
@@ -14,7 +15,6 @@ require (
 	cel.dev/expr v0.25.1 // indirect
 	github.com/Azure/go-ntlmssp v0.1.1 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
-	github.com/go-asn1-ber/asn1-ber v1.5.8 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
