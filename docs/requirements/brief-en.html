@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Directory Auditor — one-page brief</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: "Inter", "DejaVu Sans", sans-serif;
+    color: #1b1f24;
+    font-size: 8.5pt;
+    line-height: 1.3;
+    width: 210mm; height: 297mm;
+    padding: 9mm 12mm 12mm 12mm; overflow: hidden; position: relative;
+    background: #fff;
+  }
+  .head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f4c81; padding-bottom: 3mm; margin-bottom: 3mm; }
+  .head > div:first-child { max-width: 78%; }
+  .head h1 { font-family: "Inter Display", "Inter", sans-serif; font-weight: 800; font-size: 21pt; margin: 0 0 1.2mm 0; letter-spacing: -0.3px; color: #0f4c81; }
+  .head .tag { font-size: 10pt; font-weight: 500; color: #1b1f24; margin: 0; }
+  .head .meta { text-align: right; font-size: 8pt; color: #5a6270; line-height: 1.4; }
+  .meta b { color: #1b1f24; }
+  .pill { display: inline-block; border: 1px solid #0f4c81; color: #0f4c81; border-radius: 10px; padding: 0.5mm 2.2mm; font-size: 7.6pt; font-weight: 600; margin-top: 1mm; }
+
+  .strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; margin-bottom: 3mm; }
+  .strip .k { background: #eef4fa; border-left: 3px solid #0f4c81; padding: 1.3mm 2.2mm; }
+  .strip .k .n { font-family: "Inter Display", "Inter", sans-serif; font-weight: 800; font-size: 13.5pt; color: #0f4c81; line-height: 1; }
+  .strip .k .l { font-size: 7.4pt; color: #3b4450; margin-top: 1mm; }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 5.5mm; }
+  h2 { font-family: "Inter Display", "Inter", sans-serif; font-size: 9.2pt; font-weight: 700; color: #0f4c81; margin: 0 0 1.4mm 0; text-transform: uppercase; letter-spacing: 0.4px; }
+  section { margin-bottom: 3mm; }
+  p { margin: 0 0 1.4mm 0; }
+  ul { margin: 0; padding-left: 3.6mm; }
+  li { margin: 0 0 0.7mm 0; }
+  li::marker { color: #0f4c81; }
+  .tiers { width: 100%; border-collapse: collapse; font-size: 8pt; }
+  .tiers th, .tiers td { text-align: left; padding: 0.8mm 1.4mm; border-bottom: 1px solid #dfe5ec; vertical-align: top; }
+  .tiers th { color: #5a6270; font-weight: 600; font-size: 7.6pt; text-transform: uppercase; letter-spacing: 0.3px; }
+  .tiers td:first-child { font-weight: 700; color: #0f4c81; white-space: nowrap; }
+  .flow { display: flex; align-items: center; gap: 2mm; margin: 1mm 0 2mm 0; }
+  .flow .s { background: #0f4c81; color: #fff; font-weight: 700; padding: 1.6mm 2.6mm; border-radius: 3px; font-size: 8.6pt; }
+  .flow .a { color: #0f4c81; font-weight: 700; }
+  .cmp { width: 100%; border-collapse: collapse; font-size: 7.9pt; }
+  .cmp th, .cmp td { text-align: left; padding: 0.7mm 1.3mm; border-bottom: 1px solid #dfe5ec; vertical-align: top; }
+  .cmp th { color: #5a6270; font-weight: 600; font-size: 7.4pt; text-transform: uppercase; letter-spacing: 0.3px; }
+  .cmp td:first-child { font-weight: 600; }
+  .ok { color: #1f7a3f; font-weight: 700; }
+  .no { color: #a33; font-weight: 700; }
+  .road { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2mm; }
+  .road .r { border: 1px solid #dfe5ec; border-top: 3px solid #0f4c81; padding: 1.4mm 1.8mm; font-size: 7.8pt; }
+  .road .r b { display: block; color: #0f4c81; margin-bottom: 0.6mm; }
+  .foot { position: absolute; left: 12mm; right: 12mm; bottom: 6mm; border-top: 1px solid #dfe5ec; padding-top: 2mm; font-size: 7.4pt; color: #5a6270; display: flex; justify-content: space-between; }
+  code { font-family: "DejaVu Sans Mono", monospace; font-size: 8pt; background: #f1f4f8; padding: 0 1mm; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div>
+    <h1>Directory Auditor</h1>
+    <p class="tag">What an attacker would find in your directory — one file, read-only, five minutes.</p>
+    <span class="pill">Open source · Apache 2.0</span>
+    <span class="pill">Windows · Linux · macOS</span>
+    <span class="pill">AD · Samba AD DC · FreeIPA · OpenLDAP · Entra ID</span>
+  </div>
+  <div class="meta">
+    <b>Concept brief</b><br>October 2026<br>CLI: <code>dirauditor</code>
+  </div>
+</div>
+
+<div class="strip">
+  <div class="k"><div class="n">1 file</div><div class="l">No install, no runtime, no account, no licence key</div></div>
+  <div class="k"><div class="n">≤ 5 min</div><div class="l">From download to a report on screen, zero configuration</div></div>
+  <div class="k"><div class="n">~80 %</div><div class="l">Of findings need only a normal user's read access</div></div>
+  <div class="k"><div class="n">0 bytes</div><div class="l">Leave the machine — no telemetry, no cloud, no auto-update</div></div>
+</div>
+
+<div class="cols">
+<div>
+
+<section>
+  <h2>What it is</h2>
+  <p>A free security auditor for directory services and everything around them. It reads the directory the way an attacker would and reports misconfigurations and known-exploitable conditions in the <b>directory core</b> (ACLs, delegation, privileged groups, trusts), <b>DNS</b> (zone rights, insecure dynamic updates, wildcard records), <b>Group Policy</b> (GPO and SYSVOL rights, GPP passwords, scripts), <b>PKI</b> (AD CS templates and CAs, ESC1–13), <b>Kerberos</b>, <b>credential management</b> (LAPS, gMSA, Protected Users) and <b>integrated applications</b> (Exchange, SCCM, Entra Connect).</p>
+  <p>One engine, several directories: Active Directory and Samba AD DC first (which also covers РЕД АДМ and Альт Домен), then FreeIPA / ALD Pro and OpenLDAP, then Entra ID.</p>
+</section>
+
+<section>
+  <h2>How it runs</h2>
+  <div class="flow"><span class="s">Download</span><span class="a">→</span><span class="s">Run</span><span class="a">→</span><span class="s">Read</span></div>
+  <ul>
+    <li>Double-click on Windows or <code>./dirauditor</code> on Linux: a local web wizard detects the domain and your identity and offers <b>Scan now</b>.</li>
+    <li>Runs as your current logon over Kerberos; works against hardened DCs (LDAP signing, channel binding, LDAPS).</li>
+    <li>Console mode for jump hosts; flags for scheduled runs and CI; <code>--demo</code> shows a full report without any domain. Quick scan first, full scan one click later.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>What you get</h2>
+  <ul>
+    <li>A <b>0–100 score</b> overall and per area; <b>top 5 paths to Tier 0</b>; <b>quick wins</b> fixable in ten minutes.</li>
+    <li>Every finding with why it matters, how it is abused, the exact fix command (PowerShell, <code>ldapmodify</code>, <code>samba-tool</code>, <code>ipa</code>) and how to verify; <code>fix --plan</code> writes a dry-run script for the findings you select.</li>
+    <li>Self-contained HTML report in English or Russian, plus JSON and CSV; <b>diff</b> between runs; <b>redaction</b> for sharing outside the team; what was checked, passed and skipped, and why.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Privilege tiers</h2>
+  <table class="tiers">
+    <tr><th>Tier</th><th>Identity</th><th>Access</th><th>Share of value</th></tr>
+    <tr><td>0</td><td>Any domain user</td><td>LDAP read only</td><td>~80 %</td></tr>
+    <tr><td>1</td><td>Any domain user</td><td>+ SYSVOL, DNS, LDAP/SMB probes</td><td>~15 %</td></tr>
+    <tr><td>2</td><td>Admin, opt-in</td><td>+ DC registry and services</td><td>~5 %</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>Status and open decisions</h2>
+  <p>Concept stage. Open: engine language (Go vs .NET Native AOT), governance, Russian software-registry route, Astra Linux signing in v1. Wanted: pilot domains, contributors, reviewers.</p>
+</section>
+
+
+</div>
+<div>
+
+<section>
+  <h2>Why it is safe to run on production</h2>
+  <ul>
+    <li><b>Read-only, provably.</b> No write paths are compiled in; every release ships a test showing the binary contains no LDAP modify, SMB write or DNS update code — any reviewer can reproduce it.</li>
+    <li><b>No exploit code.</b> Vulnerabilities are inferred from versions, flags and ACLs; nothing is attempted, relayed or sprayed; no account can be locked out.</li>
+    <li><b>Signed and reproducible.</b> Authenticode with immediate SmartScreen reputation, cosign/minisign for Linux and macOS, Astra Linux ЗПС signature; reproducible builds, SBOM, SLSA provenance.</li>
+    <li><b>Transparent.</b> Checks are readable, signed YAML packs; <code>--dry-run</code> prints which DCs and queries a run will touch — paste it into the change ticket.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>How it differs from existing tools</h2>
+  <table class="cmp">
+    <tr><th></th><th>Existing free auditors</th><th>Directory Auditor</th></tr>
+    <tr><td>Runs on</td><td>Windows only</td><td class="ok">Windows, Linux, macOS</td></tr>
+    <tr><td>Directories</td><td>Active Directory (and Entra ID)</td><td class="ok">AD, Samba AD DC, FreeIPA, OpenLDAP, Entra ID</td></tr>
+    <tr><td>Russian stack</td><td class="no">Not covered</td><td class="ok">РЕД АДМ, Альт Домен, ALD Pro, Astra Linux</td></tr>
+    <tr><td>Licence</td><td>Proprietary or restricted free edition</td><td class="ok">Apache 2.0, no expiry</td></tr>
+    <tr><td>Dependencies</td><td>.NET runtime</td><td class="ok">None — one static file</td></tr>
+    <tr><td>Checks</td><td>Compiled in</td><td class="ok">Readable, signed packs; community can add checks</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>Built for enterprise approval</h2>
+  <p>Every release ships a CI-generated <b>security review pack</b>: threat model, network-interactions sheet, full query manifest, SBOM, provenance, scan results, SOC runbook with expected EDR alerts, personal-data inventory, read-only proof. Plus MSI / .deb / .rpm packages, a least-privilege audit-account script, and per-check mappings to CIS, NIST SP 800-53, ISO 27001, PCI DSS 4.0, DORA, ГОСТ Р 57580, ФСТЭК, БДУ.</p>
+</section>
+
+<section>
+  <h2>Roadmap</h2>
+  <div class="road">
+    <div class="r"><b>v1 — alpha</b>AD + Samba AD DC; core, DNS, GPO, PKI, Kerberos; web wizard; review pack</div>
+    <div class="r"><b>v2</b>FreeIPA / ALD Pro, OpenLDAP; fix plans; diff and scheduled runs; community packs</div>
+    <div class="r"><b>v3</b>Entra ID; tier-2 collectors; consultant mode; independent audit</div>
+  </div>
+</section>
+
+</div>
+</div>
+
+<div class="foot">
+  <span>Directory Auditor — concept brief v1 · October 2026</span>
+  <span>Repository and downloads: to be published after name clearance</span>
+</div>
+
+</body>
+</html>

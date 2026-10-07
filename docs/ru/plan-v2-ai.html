@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Directory Auditor — план реализации с использованием ИИ</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: "Inter", "DejaVu Sans", sans-serif; color: #1b1f24; font-size: 7.7pt; line-height: 1.27;
+         width: 210mm; height: 297mm; padding: 8mm 11mm 11mm 11mm; overflow: hidden; position: relative; background: #fff; }
+  .head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f4c81; padding-bottom: 2.4mm; margin-bottom: 2.6mm; }
+  .head > div:first-child { max-width: 80%; }
+  .head h1 { font-family: "Inter Display", "Inter", sans-serif; font-weight: 800; font-size: 17.5pt; margin: 0 0 1mm 0; letter-spacing: -0.3px; color: #0f4c81; }
+  .head .tag { font-size: 9.2pt; font-weight: 500; margin: 0; }
+  .head .meta { text-align: right; font-size: 7.6pt; color: #5a6270; line-height: 1.4; }
+  .meta b { color: #1b1f24; }
+  .strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; margin-bottom: 2.6mm; }
+  .strip .k { background: #eef4fa; border-left: 3px solid #0f4c81; padding: 1.1mm 2mm; }
+  .strip .k .n { font-family: "Inter Display", "Inter", sans-serif; font-weight: 800; font-size: 11.5pt; color: #0f4c81; line-height: 1; }
+  .strip .k .l { font-size: 7.1pt; color: #3b4450; margin-top: 0.9mm; }
+  h2 { font-family: "Inter Display", "Inter", sans-serif; font-size: 8.6pt; font-weight: 700; color: #0f4c81; margin: 0 0 1.2mm 0; text-transform: uppercase; letter-spacing: 0.4px; }
+  table.plan { width: 100%; border-collapse: collapse; font-size: 7pt; margin-bottom: 2.2mm; }
+  .plan th, .plan td { text-align: left; padding: 0.75mm 1.2mm; border-bottom: 1px solid #dfe5ec; vertical-align: top; }
+  .plan th { color: #5a6270; font-weight: 600; font-size: 6.9pt; text-transform: uppercase; letter-spacing: 0.3px; background: #f6f8fb; }
+  .plan td.n { font-weight: 800; color: #0f4c81; white-space: nowrap; }
+  .plan td.w { white-space: nowrap; color: #3b4450; }
+  .plan td.ai { background: #f7fbf7; }
+  .must { display: inline-block; background: #0f4c81; color: #fff; font-weight: 700; font-size: 6.5pt; padding: 0.25mm 1.4mm; border-radius: 2px; white-space: nowrap; }
+  .later { display: inline-block; border: 1px solid #8a94a3; color: #4a5361; font-weight: 600; font-size: 6.5pt; padding: 0.2mm 1.4mm; border-radius: 2px; white-space: nowrap; }
+  .gate { color: #1f7a3f; font-weight: 600; }
+  .cols { display: grid; grid-template-columns: 1.2fr 0.95fr 1fr; gap: 3.4mm; }
+  section { margin-bottom: 2mm; }
+  p { margin: 0 0 1mm 0; }
+  ul { margin: 0; padding-left: 3.2mm; }
+  li { margin: 0 0 0.6mm 0; }
+  li::marker { color: #0f4c81; }
+  .foot { position: absolute; left: 11mm; right: 11mm; bottom: 5mm; border-top: 1px solid #dfe5ec; padding-top: 1.6mm; font-size: 7pt; color: #5a6270; display: flex; justify-content: space-between; }
+  code { font-family: "DejaVu Sans Mono", monospace; font-size: 7pt; background: #f1f4f8; padding: 0 0.7mm; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div>
+    <h1>Directory Auditor — план реализации v2, с ИИ</h1>
+    <p class="tag">ИИ-агент пишет, человек решает и отвечает. ИИ — в разработке, не в продукте.</p>
+  </div>
+  <div class="meta"><b>План v2</b><br>октябрь 2026</div>
+</div>
+
+<div class="strip">
+  <div class="k"><div class="n">10</div><div class="l">обязательных шагов; новый — правила работы с ИИ</div></div>
+  <div class="k"><div class="n">≈ 150 ч</div><div class="l">часов человека до альфы (было 290); до выпуска 0.1 — ≈ 200 ч</div></div>
+  <div class="k"><div class="n">2,5–5 мес.</div><div class="l">до альфы при 20 или 10 ч/нед.; предел — проверка, не написание</div></div>
+  <div class="k"><div class="n">≈ $1–2 тыс.</div><div class="l">сертификат, домен, подписка на ИИ-агента</div></div>
+</div>
+
+<table class="plan">
+  <tr><th>#</th><th>Этап</th><th>Нед.*</th><th>Ч.ч.</th><th>ИИ-агент делает</th><th>Человек делает (не делегируется)</th><th>Контрольная точка</th></tr>
+  <tr><td class="n">0</td><td><b>Право и решения</b><br><span class="must">обязательно</span></td><td class="w">0–2</td><td class="w">10</td>
+      <td class="ai">Черновик соглашения (готов); проверка названия; сравнение Go и .NET; черновик правил работы с ИИ</td>
+      <td>Подписать соглашение; выбрать язык; решить управление проектом и реестр РФ; заказать сертификат в первый день</td>
+      <td class="gate">К0: письмо подписано, имя чисто, сертификат заказан, правила ИИ приняты. До К0 — ни одного публичного коммита.</td></tr>
+  <tr><td class="n">1</td><td><b>Каталог проверок v1</b><br><span class="must">обязательно</span></td><td class="w">1–3</td><td class="w">25</td>
+      <td class="ai">≈ 50 проверок из первичных источников со ссылками; валидатор имён атрибутов и флагов по схеме Microsoft; тексты «почему / как эксплуатируется / как исправить» EN/RU</td>
+      <td>Подтвердить каждую проверку по источнику (20–30 мин); отбраковать выдуманные атрибуты; не допускать код PingCastle и Purple Knight в контекст агента</td>
+      <td class="gate">К1: каталог в репозитории раньше кода; у каждой проверки — источник, подтверждённый человеком.</td></tr>
+  <tr><td class="n">2</td><td><b>Репозиторий и конвейер</b><br><span class="must">обязательно</span></td><td class="w">1–3</td><td class="w">15</td>
+      <td class="ai">Скелет репозитория; CONTRIBUTING с чистой комнатой и раскрытием ИИ-вклада; CI: сборка на трёх ОС, подпись, SBOM, provenance, тест «только чтение», лаборатория Samba, сканер сходства</td>
+      <td>Создать организацию и зеркало; ключи и секреты (агент их не видит); проверить, что конвейер блокирует выпуск при любом сбое</td>
+      <td class="gate">К2: пустой подписанный бинарник проходит все ворота на трёх ОС; сканер сходства включён.</td></tr>
+  <tr><td class="n">3</td><td><b>Движок и провайдер AD</b><br><span class="must">обязательно</span></td><td class="w">3–7</td><td class="w">50</td>
+      <td class="ai">LDAP и Kerberos, снимки, 25 проверок уровня 0 с тестами на синтетике, отчёт, <code>doctor</code>, консоль; второй агент рецензирует код первого</td>
+      <td>Утвердить архитектуру; построчно читать точки доверия (аутентификация, подпись пакетов, «только чтение»); отладить на живом AD — Kerberos и подпись LDAP агент без домена не отладит</td>
+      <td class="gate">К3: быстрый скан лабораторного домена ≤ 5 мин без настроек, в том числе на «ужесточённом» контроллере.</td></tr>
+  <tr><td class="n">4</td><td><b>Веб-мастер и экспресс-путь</b><br><span class="must">обязательно</span></td><td class="w">6–9</td><td class="w">20</td>
+      <td class="ai">Семь экранов, «Сканировать», живой ход, <code>--demo</code>, обезличивание, честные состояния; тесты на XSS враждебными значениями</td>
+      <td>Пройти путь глазами администратора на Windows и Linux; решить спорное в интерфейсе; подтвердить замеры</td>
+      <td class="gate">К4: три действия и ≤ 5 мин до отчёта измеряются в CI на каждом выпуске.</td></tr>
+  <tr><td class="n">5</td><td><b>Пакет для согласования, упаковка</b><br><span class="must">до выпуска</span></td><td class="w">8–10</td><td class="w">15</td>
+      <td class="ai">Генераторы пакета в CI (модель угроз, сетевые взаимодействия, манифест запросов, инструкция для SOC, персональные данные); MSI, .deb, .rpm; скрипт учётной записи аудита; тексты заявок в белые списки</td>
+      <td>Дать пакет на прочтение знакомому специалисту по ИБ; исправить; подать заявки в белые списки от своего имени</td>
+      <td class="gate">К5: выпуск блокируется, если в пакете не хватает хотя бы одного артефакта.</td></tr>
+  <tr><td class="n">6</td><td><b>Закрытая альфа</b><br><span class="must">обязательно</span></td><td class="w">10–13</td><td class="w">30</td>
+      <td class="ai">Разбор обезличенных снимков и журналов, воспроизведение на синтетике, исправления с тестами, черновики ответов пилотам</td>
+      <td>Найти 5–10 пилотных доменов и вести общение; решать спорные срабатывания; подключить второго сопровождающего; данные пилотов — только обезличенными</td>
+      <td class="gate">К6: ноль инцидентов на боевых доменах, ≥ 3 развёрнутых отзыва, ложные срабатывания закрыты.</td></tr>
+  <tr><td class="n">7</td><td><b>Публичный выпуск 0.1</b><br><span class="must">обязательно</span></td><td class="w">13–15</td><td class="w">15</td>
+      <td class="ai">Документация EN/RU, образец отчёта, README «почему бесплатно», черновики статьи на Хабр и англоязычной публикации, манифесты winget и Homebrew</td>
+      <td>Переписать публикации своим голосом; выпустить сборки; отвечать первым пользователям</td>
+      <td class="gate">К7: подписанные сборки на трёх ОС, пакет для согласования опубликован.</td></tr>
+  <tr><td class="n">8</td><td><b>После выпуска</b><br><span class="later">по ситуации</span></td><td class="w">15+</td><td class="w">—</td>
+      <td class="ai">Сортировка обращений, исправления, новые проверки, FreeIPA / ALD Pro, Entra ID, <code>fix --plan</code>, расписание и сравнение запусков</td>
+      <td>Приоритеты; приём вкладов с раскрытием ИИ-участия; независимый аудит; решения о платной поддержке</td>
+      <td class="gate">Отдельная точка на каждый пункт.</td></tr>
+</table>
+
+<div class="cols">
+<div>
+  <section>
+    <h2>Правила работы с ИИ</h2>
+    <ul>
+      <li><b>Чистая комната для агента.</b> Код PingCastle, Purple Knight и других проектов с ограничивающими лицензиями в контекст не попадает; агент работает по каталогу и первичным источникам; весь код — через сканер сходства.</li>
+      <li><b>Данные.</b> В облачный ИИ — только синтетика и лаборатория; реальные снимки — обезличенными или в локальную модель; секреты агент не видит.</li>
+      <li><b>Судья — CI.</b> Критерии и ворота меняет только человек; «тесты прошли» подтверждает конвейер, а не агент.</li>
+      <li><b>Бюджет на чтение.</b> Движок маленький; точки доверия человек читает построчно, остальное — агент-рецензент. ИИ-вклад помечен в коммитах.</li>
+    </ul>
+  </section>
+</div>
+<div>
+  <section>
+    <h2>Десять обязательных шагов</h2>
+    <p>1. Согласие работодателя о границе ИС. 2. Чистое название. 3. Сертификат с немедленной репутацией. <b>4. Правила работы с ИИ и сканер сходства кода.</b> 5. Каталог раньше кода, каждая проверка подтверждена человеком. 6. Конвейер: сборка, подпись, SBOM, ворота. 7. Движок AD, отлаженный на живом домене. 8. Веб-мастер, экспресс-путь ≤ 5 мин. 9. Пакет для согласования из CI. 10. Закрытая альфа на чужих доменах.</p>
+    <p><b>Что ИИ не ускоряет:</b> подписи и решения, ожидание сертификата, отладку на живых доменах, пилотов и их SOC, доверие сообщества — поэтому срок сжимается вдвое, а не впятеро.</p>
+  </section>
+</div>
+<div>
+  <section>
+    <h2>Риски ИИ и ответы</h2>
+    <ul>
+      <li><b>Чужой код в выдаче модели</b> → сканер сходства, чистая комната, чтение точек доверия человеком.</li>
+      <li><b>Выдуманные атрибуты и флаги</b> → валидатор по схеме Microsoft, тесты на лаборатории, источник у каждой проверки.</li>
+      <li><b>Код пишется быстрее, чем читается</b> → бюджет размера движка, декларативные пакеты, агент-рецензент.</li>
+      <li><b>Утечка данных пилотов</b> → обезличивание по умолчанию, локальная модель, запрет в правилах.</li>
+      <li><b>Ложная уверенность «всё работает»</b> → решают CI и живой домен.</li>
+      
+    </ul>
+  </section>
+</div>
+</div>
+
+<div class="foot">
+  <span>Directory Auditor — план реализации v2 (с ИИ) · октябрь 2026</span>
+  <span>* недели и часы — время человека при 20 ч/нед.; при 10 ч/нед. недели умножить на два</span>
+</div>
+
+</body>
+</html>

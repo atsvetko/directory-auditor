@@ -1,0 +1,67 @@
+# Directory Auditor
+
+**Find what an attacker would find in your directory — one file, read-only, five minutes.**
+
+Directory Auditor is a free, open-source security auditor for directory services and the
+services around them: Active Directory, Samba AD DC (and therefore РЕД АДМ and Альт Домен),
+FreeIPA / ALD Pro, OpenLDAP and Microsoft Entra ID — plus DNS, Group Policy, PKI, Kerberos,
+credential management and integrated applications.
+
+> **Status: engine skeleton (pre-alpha).** Nothing here audits anything yet. The catalogue of
+> checks is written *before* any check code, on purpose — see [docs/clean-room.md](docs/clean-room.md).
+> The requirements, plan and design decisions are complete and live in `docs/`.
+
+## Why is it free?
+
+Because the trust problem is the product. A tool that reads your whole directory with your
+credentials has to be reviewable, reproducible and silent — no account, no licence key, no
+telemetry, no cloud. The core is Apache 2.0 and will stay that way. If the project earns
+adoption, paid support and enterprise features (continuous monitoring, multi-forest consoles)
+may follow as an *addition*, never as a gate on the first run. There is no hidden agenda; this
+paragraph is here because unexplained free security tools read as telemetry traps, and they
+should.
+
+## What it will do (v1 scope)
+
+| | |
+|---|---|
+| **One file** | Static binary for Windows, Linux and macOS. No installer, no runtime, no dependencies. |
+| **Read-only, provably** | No LDAP modify/add/delete code is linked into the binary. [`scripts/readonly-check.sh`](scripts/readonly-check.sh) proves it on every release and any reviewer can reproduce it. |
+| **Runs as you** | Kerberos with your current logon; ~80 % of findings need only a normal user's read access. Admin credentials are opt-in for the few checks that need them. |
+| **Express path** | Launch → detected domain and identity → **Scan now** → report in under five minutes. |
+| **Snapshot architecture** | Collect once into a versioned snapshot, analyse as often as you like — re-run new checks without touching a domain controller again. |
+| **Readable checks** | Every check is a signed YAML pack with a CEL condition, primary references, and remediation in English and Russian. |
+| **Honest report** | Score 0–100, what was checked, what passed, what was skipped and why. |
+
+## Try the skeleton
+
+```sh
+go build ./cmd/dirauditor
+./dirauditor analyse --snapshot testdata/synthetic-lab.json.zst --packs testdata/packs --allow-unsigned --out out
+./dirauditor doctor --domain lab.example           # DNS SRV, TCP, LDAPS certificate diagnostics
+./dirauditor manifest                               # every behaviour of this binary
+```
+
+The only pack today is a format fixture (`TEST-0001`). Real checks arrive with the catalogue.
+
+## Documents
+
+- [Requirements and approach](docs/requirements/approach.md) — goal, first-run contract, hard
+  constraints, adoption requirements AR-1…AR-14, negative requirements N-1…N-10, architecture,
+  trust chain, enterprise review pack, open questions.
+- [One-page brief](docs/requirements/brief-en.pdf) (EN) · [Implementation plan](docs/ru/plan-v1.pdf) and
+  [plan with AI-assisted development](docs/ru/plan-v2-ai.pdf) (RU).
+- [Clean-room protocol](docs/clean-room.md) · [AI usage policy](docs/ai-policy.md) ·
+  [Architecture decisions](docs/adr/) · [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md).
+
+## Safety contract
+
+- Strictly read-only. No writes to the directory, SYSVOL, DNS or any registry — ever.
+- No exploit code: vulnerabilities are inferred from versions, flags and ACLs, never demonstrated.
+- No checks that can lock an account.
+- Nothing leaves the machine: no telemetry, no update checks by default, no cloud.
+- Credentials are prompted on the terminal, used once and never written anywhere.
+
+## Licence
+
+Apache License 2.0 — see [LICENSE](LICENSE). Check packs are data and carry the same licence.

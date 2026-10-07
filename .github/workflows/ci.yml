@@ -1,0 +1,99 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CGO_ENABLED: "0"
+  GOFLAGS: -trimpath
+
+jobs:
+  verify:
+    name: fmt · vet · test · vulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: false
+      - name: gofmt
+        run: |
+          out="$(gofmt -l .)"; if [ -n "$out" ]; then echo "unformatted:"; echo "$out"; exit 1; fi
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test -race -count=1 ./...
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: go mod tidy is clean
+        run: go mod tidy && git diff --exit-code go.mod go.sum
+
+  build:
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux,   goarch: amd64 }
+          - { goos: linux,   goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+          - { goos: darwin,  goarch: arm64 }
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: build (reproducible flags)
+        run: |
+          ext=""; [ "$GOOS" = windows ] && ext=".exe"
+          mkdir -p dist
+          go build -trimpath \
+            -ldflags "-buildid= -X github.com/atsvetko/directory-auditor/internal/buildinfo.Version=${GITHUB_REF_NAME} -X github.com/atsvetko/directory-auditor/internal/buildinfo.Commit=${GITHUB_SHA::12} -X github.com/atsvetko/directory-auditor/internal/buildinfo.Date=$(date -u +%Y-%m-%d)" \
+            -o "dist/dirauditor-${GOOS}-${GOARCH}${ext}" ./cmd/dirauditor
+          sha256sum dist/* | tee dist/SHA256SUMS
+      - name: read-only symbol gate (review-pack artefact 11)
+        run: |
+          ext=""; [ "$GOOS" = windows ] && ext=".exe"
+          scripts/readonly-check.sh "dist/dirauditor-${GOOS}-${GOARCH}${ext}"
+      - name: smoke test (native target only)
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: |
+          ./dist/dirauditor-linux-amd64 version
+          ./dist/dirauditor-linux-amd64 manifest
+          ./dist/dirauditor-linux-amd64 analyse --snapshot testdata/synthetic-lab.json.zst --packs testdata/packs --allow-unsigned --out out
+          test -s out/report.html && test -s out/report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dirauditor-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+          retention-days: 14
+
+  sbom:
+    name: SBOM (CycloneDX)
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: cyclonedx-gomod
+        run: |
+          go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+          cyclonedx-gomod app -main cmd/dirauditor -licenses -json -output sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cdx.json
+          retention-days: 14
