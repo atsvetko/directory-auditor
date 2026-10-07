@@ -1,0 +1,64 @@
+id: DSA-0003
+title:
+  en: "Service accounts with an SPN that have old passwords or weak Kerberos encryption"
+  ru: "Служебные учётные записи с SPN, у которых старый пароль или слабое шифрование Kerberos"
+domain: directory-core
+tier: 0
+severity: medium
+quick: false
+status: draft
+verified_by: ""
+verified_on: ""
+
+object: "Enabled user accounts (not computers, not krbtgt) with at least one servicePrincipalName"
+attributes: [servicePrincipalName, pwdLastSet, msDS-SupportedEncryptionTypes, userAccountControl, sAMAccountName]
+
+condition: >
+  The account is enabled, has an SPN, is not Tier 0 (Tier-0 accounts are DSA-0002),
+  and at least one of: (a) pwdLastSet is older than the threshold; (b)
+  msDS-SupportedEncryptionTypes is set and contains RC4-HMAC (0x4) or a DES type
+  (0x1, 0x2) but neither AES type (0x8, 0x10). An unset attribute is reported as
+  "info: depends on the domain controllers' default encryption types", not as a finding.
+threshold: "password older than 365 days (project recommendation)"
+
+rationale: >
+  Any domain user can request a service ticket for an SPN and test password guesses
+  against it offline. Old passwords have had years of exposure, and tickets issued
+  with RC4 are far cheaper to attack than AES tickets. Microsoft's Kerberos
+  specification states that setting RC4 or DES only is weak and not recommended.
+
+remediation:
+  en: >
+    Move the service to a group Managed Service Account where possible. Otherwise set
+    a long random password, rotate it on a schedule, and set
+    msDS-SupportedEncryptionTypes to AES only (0x18 = AES128 + AES256), then reset the
+    password once so AES keys exist. Remove SPNs that are no longer used.
+  ru: >
+    По возможности переведите службу на групповую управляемую учётную запись службы
+    (gMSA). Иначе задайте длинный случайный пароль, меняйте его по графику и установите
+    msDS-SupportedEncryptionTypes только на AES (0x18 = AES128 + AES256), после чего
+    один раз смените пароль, чтобы появились ключи AES. Удалите неиспользуемые SPN.
+
+attack:
+  - { id: T1558.003, name: "Steal or Forge Kerberos Tickets: Kerberoasting" }
+
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: "(&(objectCategory=person)(objectClass=user)(servicePrincipalName=*)(!(sAMAccountName=krbtgt))(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
+  attributes: [sAMAccountName, servicePrincipalName, pwdLastSet, msDS-SupportedEncryptionTypes, adminCount]
+
+references:
+  - title: "MS-KILE 2.2.7 Supported Encryption Types Bit Flags (RC4/DES only is weak and not recommended)"
+    url: "https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-kile/6cfc7b50-11ed-4b4d-846d-6f08f0812919"
+  - title: "Microsoft — Windows configurations for Kerberos supported encryption type (bit values 0x1–0x10)"
+    url: "https://learn.microsoft.com/en-us/archive/blogs/openspecification/windows-configurations-for-kerberos-supported-encryption-type"
+  - title: "Microsoft Learn — msDS-SupportedEncryptionTypes attribute"
+    url: "https://learn.microsoft.com/en-us/windows/win32/adschema/a-msds-supportedencryptiontypes"
+  - title: "MITRE ATT&CK — T1558.003 Kerberoasting"
+    url: "https://attack.mitre.org/techniques/T1558/003/"
+
+notes: >
+  Domain-controller default encryption types (registry) are a tier-2 fact; once
+  tier-2 collection exists, an unset attribute can be resolved to a definite answer.
