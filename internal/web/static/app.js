@@ -107,7 +107,7 @@ function showErr(prefix, msg, fix) {
   if ($(prefix + "_fix")) $(prefix + "_fix").textContent = fix || "";
 }
 function renderConn() {
-  const k = conn.kind === "samba" ? "Samba AD DC" : conn.kind === "demo" ? "demo" : "Active Directory";
+  const k = {samba: "Samba AD DC", demo: "demo", freeipa: "FreeIPA / IdM", "389ds": "389 Directory Server"}[conn.kind] || "Active Directory";
   $("connok").textContent = "✓ " + t("connok", {s: conn.server, i: conn.identity, k: k});
   $("scantarget").textContent = conn.domain + " · " + conn.identity;
 }
@@ -175,7 +175,8 @@ function renderResult() {
   $("score").textContent = r.score;
   $("r_target").textContent = inv.domain || r.target;
   const when = (inv.collected_at || r.analysed_at || "").replace("T", " ").slice(0, 16) + " UTC";
-  $("r_sub").textContent = [r.dialect === "samba" ? "Samba AD DC" : "Active Directory", (lang === "ru" ? "уровень " : "tier ") + r.tier, when, (inv.identity || "")].filter(Boolean).join(" · ");
+  const kind = {samba: "Samba AD DC", freeipa: "FreeIPA / IdM", "389ds": "389 Directory Server"}[r.dialect] || "Active Directory";
+  $("r_sub").textContent = [kind, (lang === "ru" ? "уровень " : "tier ") + r.tier, when, (inv.identity || "")].filter(Boolean).join(" · ");
   $("pc_meta").innerHTML = esc(inv.domain || r.target) + "<br>" + esc(when) + "<br>" + esc(inv.identity || "");
   $("unsigned").classList.toggle("hidden", !r.unsigned_packs);
   $("nopacks").classList.toggle("hidden", (r.checks || []).length > 0);

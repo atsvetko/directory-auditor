@@ -56,16 +56,17 @@ type Options struct {
 
 // Server is one wizard session.
 type Server struct {
-	opts   Options
-	token  string
-	addr   string
-	stop   context.CancelFunc
-	mu     sync.Mutex
-	target *provider.Target // set by a successful connect; holds the password until the scan ends
-	demo   bool
-	conn   connectResp
-	job    *job
-	last   time.Time
+	opts         Options
+	token        string
+	addr         string
+	stop         context.CancelFunc
+	mu           sync.Mutex
+	target       *provider.Target // set by a successful connect; holds the password until the scan ends
+	demo         bool
+	conn         connectResp
+	providerName string
+	job          *job
+	last         time.Time
 }
 
 type job struct {
@@ -249,7 +250,8 @@ type connectResp struct {
 	Domain   string `json:"domain,omitempty"`
 	Server   string `json:"server,omitempty"`
 	Identity string `json:"identity,omitempty"`
-	Kind     string `json:"kind,omitempty"` // ad, samba, demo
+	Kind     string `json:"kind,omitempty"` // ad, samba, freeipa, demo
+	Provider string `json:"provider,omitempty"`
 	Error    string `json:"error,omitempty"`
 	Hint     string `json:"hint,omitempty"`
 }
@@ -304,16 +306,20 @@ func (s *Server) connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, _ := provider.Get("ad")
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	defer cancel()
+	p, _, err := provider.Pick(ctx, "auto", t)
+	if err != nil {
+		writeJSON(w, 200, connectResp{Error: err.Error(), Hint: diagnose(ctx, t)})
+		return
+	}
 	res, err := p.Check(ctx, t)
 	if err != nil {
 		hint := diagnose(ctx, t)
 		writeJSON(w, 200, connectResp{Error: err.Error(), Hint: hint})
 		return
 	}
-	resp := connectResp{OK: true, Domain: firstNonEmpty(t.Domain, res.Domain), Server: t.Server, Identity: res.Identity, Kind: res.Dialect}
+	resp := connectResp{OK: true, Domain: firstNonEmpty(t.Domain, res.Domain), Server: t.Server, Identity: res.Identity, Kind: res.Dialect, Provider: p.Name()}
 	s.setTarget(&t, false, resp)
 	writeJSON(w, 200, resp)
 }
@@ -325,6 +331,7 @@ func (s *Server) setTarget(t *provider.Target, demo bool, c connectResp) {
 		s.target.BindPassword = ""
 	}
 	s.target, s.demo, s.conn = t, demo, c
+	s.providerName = c.Provider
 }
 
 func (s *Server) clearSecret() {
@@ -368,9 +375,9 @@ func (s *Server) scan(w http.ResponseWriter, r *http.Request) {
 	if s.target != nil {
 		t = *s.target
 	}
-	demo := s.demo
+	demo, pname := s.demo, s.providerName
 	s.mu.Unlock()
-	go s.runJob(ctx, j, t, demo, q.Quick)
+	go s.runJob(ctx, j, t, demo, q.Quick, pname)
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
@@ -378,7 +385,7 @@ func (s *Server) scan(w http.ResponseWriter, r *http.Request) {
 // it only drives the progress bar.
 const planSteps = 11
 
-func (s *Server) runJob(ctx context.Context, j *job, t provider.Target, demo, quick bool) {
+func (s *Server) runJob(ctx context.Context, j *job, t provider.Target, demo, quick bool, pname string) {
 	defer j.cancel()
 	defer s.clearSecret() // the password is not needed after collection
 	progress := func(msg string) {
@@ -404,7 +411,10 @@ func (s *Server) runJob(ctx context.Context, j *job, t provider.Target, demo, qu
 		progress("reading demo snapshot")
 		snap, err = snapshot.Read(bytes.NewReader(s.opts.Demo))
 	} else {
-		p, _ := provider.Get("ad")
+		p, ok := provider.Get(pname)
+		if !ok {
+			p, _ = provider.Get("ad")
+		}
 		snap, err = p.Collect(ctx, t, progress)
 	}
 	if err != nil {

@@ -17,8 +17,13 @@ import (
 )
 
 func main() {
-	out := flag.String("out", "testdata/synthetic-lab.json.zst", "output path")
+	out := flag.String("out", "testdata/synthetic-lab.json.zst", "output path (AD lab)")
+	ipaOut := flag.String("freeipa-out", "testdata/synthetic-freeipa.json.zst", "output path (FreeIPA lab)")
 	flag.Parse()
+	if err := writeFreeIPA(*ipaOut); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 
 	base := "DC=lab,DC=example"
 	dom := "S-1-5-21-1111111111-2222222222-3333333333"

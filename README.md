@@ -54,7 +54,9 @@ Build from source: `go build ./cmd/dirauditor` (Go 1.25+, no CGO).
 
 Checks are written only from catalogue entries a human has verified, so today the only pack is a
 format fixture (`TEST-0001`); the Tier-0 inventory ("who controls the domain, and why") is
-already complete.
+already complete. The engine detects Active Directory, Samba AD DC and FreeIPA / Red Hat IdM
+(`--provider auto`); the FreeIPA catalogue (`catalogue/freeipa`, 23 entries) ships with its
+conditions implemented and tested against a synthetic lab.
 
 ## Documents
 

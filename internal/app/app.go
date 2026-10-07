@@ -23,6 +23,7 @@ import (
 	"github.com/atsvetko/directory-auditor/internal/ldapx"
 	"github.com/atsvetko/directory-auditor/internal/provider"
 	"github.com/atsvetko/directory-auditor/internal/provider/ad" // registers the AD / Samba provider
+	"github.com/atsvetko/directory-auditor/internal/provider/freeipa"
 	"github.com/atsvetko/directory-auditor/internal/report"
 	"github.com/atsvetko/directory-auditor/internal/snapshot"
 	"github.com/atsvetko/directory-auditor/internal/web"
@@ -33,9 +34,10 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	var t provider.Target
-	var packsDir, outDir, lang string
+	var packsDir, outDir, lang, providerName string
 	var allowUnsigned, quick bool
 	fs.BoolVar(&quick, "quick", false, "quick scan: run only checks marked quick")
+	fs.StringVar(&providerName, "provider", "auto", "directory type: auto, "+strings.Join(provider.Names(), ", "))
 	fs.StringVar(&t.Server, "server", "", "domain controller host[:port]")
 	fs.StringVar(&t.Domain, "domain", "", "DNS domain name")
 	fs.StringVar(&t.BindUser, "user", "", "bind identity (DN or UPN); empty = current logon via Kerberos (no password)")
@@ -67,10 +69,14 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 		}
 		t.BindPassword = pw
 	}
-	p, ok := provider.Get("ad")
-	if !ok {
-		fmt.Fprintln(errw, "error: AD provider not registered")
+	p, dialect, err := provider.Pick(ctx, providerName, t)
+	if err != nil {
+		fmt.Fprintln(errw, "error:", err)
+		fmt.Fprintln(errw, "hint: run `dirauditor doctor --domain <domain> --server <dc>` to see why")
 		return 1
+	}
+	if dialect != "" {
+		fmt.Fprintf(errw, "detected: %s (%s)\n", p.Name(), dialect)
 	}
 	fmt.Fprintf(errw, "collecting from %s (tier %d, read-only)…\n", t.Server, t.Tier)
 	snap, err := p.Collect(ctx, t, func(msg string) { fmt.Fprintln(errw, "  ·", msg) })
@@ -238,6 +244,20 @@ func Manifest(args []string, w io.Writer) int {
 // catalogue entries it serves — for approvers (review pack, approach §6.1).
 func PrintQueries(w io.Writer) {
 	scopes := map[ldapx.Scope]string{ldapx.ScopeBase: "base", ldapx.ScopeOneLevel: "one", ldapx.ScopeSubtree: "subtree"}
+	fmt.Fprintln(w, "\nLDAP searches (FreeIPA provider, authenticated user; containers that need a privilege are marked):")
+	for _, q := range freeipa.Plan {
+		b := q.Base
+		if b != "" {
+			b += ","
+		}
+		priv := ""
+		if q.Privilege != "" {
+			priv = " [needs privilege: " + q.Privilege + "]"
+		}
+		fmt.Fprintf(w, "  %-14s base=%s<default> scope=%s filter=%s%s\n                 attrs=%s\n                 why: %s\n",
+			q.Name, b, scopes[q.Scope], q.Filter, priv, strings.Join(q.Attrs, ","), q.Purpose)
+	}
+	fmt.Fprintln(w, "  tier-1 probe   base=cn=users,cn=accounts,<default> scope=one filter=(uid=*) size-limit=3, before binding (DSA-0123)")
 	fmt.Fprintln(w, "\nLDAP searches (AD / Samba provider, tier 0 — ordinary user):")
 	for _, q := range append(ad.Plan, ad.SDBaseQuery) {
 		b := q.Base
