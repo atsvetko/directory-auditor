@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Directory Auditor — UX prototype</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --panel:#ffffff; --ink:#1b1f24; --muted:#5a6270; --line:#e2e7ee;
+    --accent:#0f4c81; --accent-ink:#ffffff; --soft:#eef4fa;
+    --crit:#b4232c; --high:#d9822b; --med:#b8860b; --low:#2f7d4f; --info:#5a6270;
+    --ok:#1f7a3f; --shadow:0 1px 2px rgba(16,32,55,.06),0 8px 24px rgba(16,32,55,.08);
+    --radius:12px;
+  }
+  :root:not([data-theme="light"]) @media (prefers-color-scheme: dark){}
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0d1117; --panel:#161b22; --ink:#e6edf3; --muted:#9198a1; --line:#2a313c;
+      --accent:#4f9be0; --accent-ink:#06121f; --soft:#152232;
+      --crit:#ff6b6b; --high:#f0a35e; --med:#e0c063; --low:#56c585; --info:#9198a1;
+      --ok:#56c585; --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+      --bg:#0d1117; --panel:#161b22; --ink:#e6edf3; --muted:#9198a1; --line:#2a313c;
+      --accent:#4f9be0; --accent-ink:#06121f; --soft:#152232;
+      --crit:#ff6b6b; --high:#f0a35e; --med:#e0c063; --low:#56c585; --info:#9198a1;
+      --ok:#56c585; --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);line-height:1.45;-webkit-font-smoothing:antialiased}
+  code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.92em}
+
+  /* review chrome */
+  .review{position:sticky;top:0;z-index:50;background:var(--panel);border-bottom:1px solid var(--line);padding:7px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .review .lbl{font-size:11px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .tabs{display:flex;gap:4px;flex-wrap:wrap}
+  .tab{border:1px solid var(--line);background:transparent;color:var(--muted);padding:5px 12px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer}
+  .tab[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .review .spacer{flex:1}
+  .toggle{border:1px solid var(--line);background:transparent;color:var(--ink);padding:5px 10px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
+
+  /* app window */
+  .wrap{max-width:1040px;margin:18px auto;padding:0 16px}
+  .win{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+  .winbar{display:flex;align-items:center;gap:10px;padding:9px 14px;background:linear-gradient(var(--soft),var(--panel));border-bottom:1px solid var(--line)}
+  .dots{display:flex;gap:6px}.dots i{width:11px;height:11px;border-radius:50%;background:var(--line);display:block}
+  .url{flex:1;background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:5px 10px;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px;min-width:0}
+  .url .lock{color:var(--ok);font-weight:700}
+  .url .u{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--soft);color:var(--accent);border:1px solid var(--line);white-space:nowrap}
+  .screen{padding:26px}
+  @media(max-width:620px){.screen{padding:18px 14px}}
+
+  .brand{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+  .brand h1{font-size:22px;margin:0;color:var(--accent);letter-spacing:-.3px}
+  .tagline{color:var(--muted);margin:2px 0 18px;font-size:14px}
+  .trust{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 22px}
+  .trust > span{font-size:12.5px;color:var(--muted);background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
+  .trust > span b{color:var(--ok)}
+
+  .detect{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:20px}
+  .detect .row{display:flex;gap:14px;padding:13px 16px;border-bottom:1px solid var(--line);align-items:flex-start}
+  .detect .row:last-child{border-bottom:0}
+  .detect .k{width:120px;flex:none;color:var(--muted);font-size:13px;padding-top:1px}
+  .detect .v{font-size:14px}
+  .detect .v .sub{color:var(--muted);font-size:12.5px;margin-top:1px}
+  .chk{color:var(--ok);font-weight:700}
+  .tierpills{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+  .tierpill{font-size:11.5px;border:1px solid var(--line);border-radius:6px;padding:2px 7px;color:var(--muted)}
+  .tierpill.on{background:var(--soft);color:var(--accent);border-color:var(--accent);font-weight:700}
+
+  .cta{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .btn{border:0;border-radius:10px;padding:12px 22px;font-size:15px;font-weight:700;cursor:pointer;background:var(--accent);color:var(--accent-ink)}
+  .btn.lg{padding:14px 30px;font-size:16px}
+  .btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+  .btn.sm{padding:7px 14px;font-size:13px;border-radius:8px}
+  .hint{color:var(--muted);font-size:12.5px;margin-top:14px}
+
+  /* wizard stepper */
+  .steps{display:flex;gap:0;margin:0 0 22px;flex-wrap:wrap}
+  .step{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);padding:6px 0}
+  .step .n{width:22px;height:22px;border-radius:50%;border:1px solid var(--line);display:grid;place-items:center;font-size:12px;font-weight:700;flex:none}
+  .step.done .n{background:var(--ok);border-color:var(--ok);color:#fff}
+  .step.cur .n{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .step.cur{color:var(--ink);font-weight:700}
+  .step .arr{color:var(--line);margin:0 10px}
+  .field{margin-bottom:16px}
+  .field label{display:block;font-size:13px;font-weight:600;margin-bottom:5px}
+  .field .ctl{display:flex;gap:8px;align-items:center}
+  .inp{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:14px;color:var(--ink)}
+  .radio{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+  .radio .r{border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:13.5px;cursor:pointer;flex:1;min-width:150px}
+  .radio .r.sel{border-color:var(--accent);background:var(--soft)}
+  .radio .r .t{font-weight:700}.radio .r .d{color:var(--muted);font-size:12px;margin-top:2px}
+  .domaingrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:4px}
+  .dchk{border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:13px;display:flex;gap:8px;align-items:center;cursor:pointer}
+  .dchk.on{border-color:var(--accent);background:var(--soft)}
+  .dchk .box{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--accent);display:grid;place-items:center;color:var(--accent);font-size:11px;font-weight:800;flex:none}
+  .wnav{display:flex;justify-content:space-between;margin-top:8px}
+  .tested{color:var(--ok);font-size:13px;margin-top:8px;display:flex;gap:7px;align-items:flex-start}
+
+  /* scanning */
+  .scanhead{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+  .scanhead h2{margin:0;font-size:18px}
+  .bar{height:10px;background:var(--soft);border-radius:999px;overflow:hidden;margin:10px 0 6px}
+  .bar > i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s}
+  .scanmeta{display:flex;justify-content:space-between;color:var(--muted);font-size:12.5px}
+  .scangrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:18px 0}
+  .scancard{border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+  .scancard .d{font-size:13px;font-weight:700}
+  .scancard .c{color:var(--muted);font-size:12px;margin-top:3px}
+  .scancard .mini{height:5px;background:var(--soft);border-radius:999px;margin-top:8px;overflow:hidden}
+  .scancard .mini > i{display:block;height:100%;width:0;background:var(--ok);transition:width .3s}
+  .log{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;height:120px;overflow:hidden}
+  .log div{opacity:.85}
+
+  /* report */
+  .rtop{display:flex;gap:22px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+  .gauge{--v:54;width:120px;height:120px;border-radius:50%;flex:none;display:grid;place-items:center;
+    background:conic-gradient(var(--sevcol,var(--high)) calc(var(--v)*1%), var(--soft) 0)}
+  .gauge .in{width:92px;height:92px;border-radius:50%;background:var(--panel);display:grid;place-items:center;text-align:center}
+  .gauge .in b{font-size:30px;line-height:1;color:var(--ink)}
+  .gauge .in span{font-size:11px;color:var(--muted)}
+  .rmeta{flex:1;min-width:220px}
+  .rmeta .t{font-size:13px;color:var(--muted)}
+  .rmeta h2{margin:2px 0 6px;font-size:20px}
+  .rmeta .sub{color:var(--muted);font-size:12.5px}
+  .counts{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:18px 0}
+  @media(max-width:620px){.counts{grid-template-columns:repeat(2,1fr)}}
+  .cnt{background:var(--soft);border-left:3px solid var(--accent);border-radius:8px;padding:9px 12px}
+  .cnt b{display:block;font-size:22px;line-height:1}.cnt span{font-size:12px;color:var(--muted)}
+  .cnt.crit{border-color:var(--crit)} .cnt.ok{border-color:var(--ok)}
+  .dl{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 20px}
+
+  .sec{margin:24px 0 8px;font-size:13px;letter-spacing:.4px;text-transform:uppercase;color:var(--accent);font-weight:800}
+  .quick{border:1px solid var(--line);border-radius:12px;padding:4px 0;margin-bottom:8px}
+  .quick .q{display:flex;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line);align-items:flex-start}
+  .quick .q:last-child{border-bottom:0}
+  .quick .q .ix{color:var(--ok);font-weight:800;flex:none}
+  .quick .q .tx{font-size:13.5px}.quick .q .tx .sub{color:var(--muted);font-size:12px}
+
+  .paths{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+  .path{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-size:13px}
+  .node{background:var(--soft);border:1px solid var(--line);border-radius:7px;padding:3px 9px;font-weight:700}
+  .node.t0{background:var(--crit);color:#fff;border-color:var(--crit)}
+  .edge{color:var(--muted);font-size:12px;font-style:italic}
+  .arrw{color:var(--accent);font-weight:800}
+
+  .finding{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden}
+  .finding > summary{list-style:none;cursor:pointer;display:flex;gap:12px;align-items:center;padding:13px 16px}
+  .finding > summary::-webkit-details-marker{display:none}
+  .sev{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#fff;padding:3px 8px;border-radius:6px;flex:none}
+  .sev.critical{background:var(--crit)}.sev.high{background:var(--high)}.sev.medium{background:var(--med)}.sev.low{background:var(--low)}.sev.info{background:var(--info)}
+  .finding .fid{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--muted);flex:none}
+  .finding .ftitle{font-weight:650;font-size:14px;flex:1;min-width:0}
+  .finding .fcount{font-size:12px;color:var(--muted);flex:none}
+  .finding .chev{color:var(--muted);transition:transform .2s;flex:none}
+  .finding[open] .chev{transform:rotate(90deg)}
+  .fbody{padding:0 16px 16px;border-top:1px solid var(--line);margin-top:2px;padding-top:14px}
+  .fbody h4{margin:14px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+  .fbody h4:first-child{margin-top:0}
+  .fbody p{margin:0;font-size:13.5px}
+  .affected{margin:6px 0 0;padding:0;list-style:none}
+  .affected li{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;padding:4px 8px;background:var(--bg);border:1px solid var(--line);border-radius:6px;margin-bottom:4px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .affected li .ev{color:var(--muted)}
+  pre.fix{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow:auto;font-size:12.5px;margin:4px 0 0}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+  .chip{font-size:11.5px;text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:3px 9px;color:var(--accent);background:var(--soft)}
+  .chip.plain{color:var(--muted)}
+  .refs{margin:4px 0 0;padding-left:18px;font-size:12.5px}
+  .refs a{color:var(--accent)}
+  .skip{border:1px dashed var(--line);border-radius:10px;padding:12px 16px;font-size:13px;color:var(--muted)}
+  .skip b{color:var(--ink)}
+  .foot{color:var(--muted);font-size:12px;margin-top:22px;border-top:1px solid var(--line);padding-top:12px}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+<div class="review">
+  <span class="lbl">Prototype</span>
+  <div class="tabs" id="tabs">
+    <button class="tab" data-go="welcome" aria-selected="true">1 · Launch</button>
+    <button class="tab" data-go="wizard">2 · Connect</button>
+    <button class="tab" data-go="scan">3 · Scanning</button>
+    <button class="tab" data-go="report">4 · Report</button>
+  </div>
+  <span class="spacer"></span>
+  <button class="toggle" id="lang">RU</button>
+  <button class="toggle" id="theme">Theme</button>
+</div>
+
+<div class="wrap">
+ <div class="win">
+  <div class="winbar">
+    <span class="dots"><i></i><i></i><i></i></span>
+    <span class="url"><span class="lock">🔒</span><span class="u mono">127.0.0.1:7845/?t=a1f3…9c</span></span>
+    <span class="badge" data-t="demo">DEMO · synthetic data</span>
+  </div>
+
+  <!-- ============ 1 · LAUNCH / EXPRESS PATH ============ -->
+  <section class="screen view" id="welcome">
+    <div class="brand"><h1>Directory Auditor</h1></div>
+    <p class="tagline" data-t="tagline">What an attacker would find in your directory — read-only, in five minutes.</p>
+    <div class="trust">
+      <span><b>✓</b> <span data-t="tr1">Read-only</span></span>
+      <span><b>✓</b> <span data-t="tr2">Nothing leaves this machine</span></span>
+      <span><b>✓</b> <span data-t="tr3">Signed</span></span>
+      <span><b>✓</b> <span data-t="tr4">Source public</span></span>
+    </div>
+
+    <div class="detect">
+      <div class="row"><div class="k" data-t="d_dir">Directory</div><div class="v"><span class="chk">●</span> Active Directory <span class="sub mono">lab.example — detected via DNS SRV + rootDSE</span></div></div>
+      <div class="row"><div class="k" data-t="d_dc">Domain controller</div><div class="v"><span class="chk">●</span> <span class="mono">dc01.lab.example</span> <span class="sub" data-t="d_dc_sub">LDAPS · certificate trusted</span></div></div>
+      <div class="row"><div class="k" data-t="d_id">Identity</div><div class="v"><span class="chk">●</span> <span class="mono">audit@lab.example</span> <span class="sub" data-t="d_id_sub">your current logon · Kerberos (no password needed)</span>
+        <div class="tierpills"><span class="tierpill on" data-t="tp0">Tier 0 available</span><span class="tierpill" data-t="tp1">Tier 1 — add network probes</span><span class="tierpill" data-t="tp2">Tier 2 — add admin account</span></div></div></div>
+    </div>
+
+    <div class="cta">
+      <button class="btn lg" data-go="scan" id="scannow" data-t="scannow">Scan now</button>
+      <button class="btn ghost" data-go="wizard" data-t="change">Change settings</button>
+    </div>
+    <p class="hint" data-t="qhint">Quick scan: the ~40 highest-value Tier-0 checks, no configuration. The full scan is one click more.</p>
+  </section>
+
+  <!-- ============ 2 · CONNECT WIZARD ============ -->
+  <section class="screen view hidden" id="wizard">
+    <div class="steps">
+      <div class="step done"><span class="n">✓</span><span data-t="w1">Directory</span></div><span class="arr">›</span>
+      <div class="step done"><span class="n">✓</span><span data-t="w2">Target</span></div><span class="arr">›</span>
+      <div class="step cur"><span class="n">3</span><span data-t="w3">Identity</span></div><span class="arr">›</span>
+      <div class="step"><span class="n">4</span><span data-t="w4">Scope</span></div><span class="arr">›</span>
+      <div class="step"><span class="n">5</span><span data-t="w5">Run</span></div>
+    </div>
+
+    <div class="field">
+      <label data-t="f_id">Connect as</label>
+      <div class="radio">
+        <div class="r sel"><div class="t" data-t="f_id1">Use my current logon</div><div class="d">Kerberos · audit@lab.example</div></div>
+        <div class="r"><div class="t" data-t="f_id2">Other account</div><div class="d" data-t="f_id2d">DN or UPN + password (prompted)</div></div>
+        <div class="r"><div class="t" data-t="f_id3">+ Admin account (Tier 2)</div><div class="d" data-t="f_id3d">optional, for DC-side checks</div></div>
+      </div>
+      <button class="btn sm" style="margin-top:12px" id="testconn" data-t="test">Test connection</button>
+      <div class="tested" id="testresult"><span>✓</span><span data-t="testok">Connected as <b>audit@lab.example</b> — member of Domain Users. Tier 0 available (212 checks). Tier 2 needs an admin account.</span></div>
+    </div>
+
+    <div class="field">
+      <label data-t="f_scope">Check domains to run</label>
+      <div class="domaingrid">
+        <div class="dchk on"><span class="box">✓</span><span data-t="dm1">Directory core</span></div>
+        <div class="dchk on"><span class="box">✓</span>DNS</div>
+        <div class="dchk on"><span class="box">✓</span><span data-t="dm3">Group Policy</span></div>
+        <div class="dchk on"><span class="box">✓</span>PKI (AD CS)</div>
+        <div class="dchk on"><span class="box">✓</span>Kerberos</div>
+        <div class="dchk on"><span class="box">✓</span><span data-t="dm6">Credentials</span></div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label data-t="f_out">Output folder</label>
+      <input class="inp mono" value="~/Documents/dirauditor-out" readonly>
+    </div>
+
+    <div class="wnav">
+      <button class="btn ghost" data-go="welcome" data-t="back">Back</button>
+      <button class="btn" data-go="scan" data-t="runfull">Run full scan</button>
+    </div>
+  </section>
+
+  <!-- ============ 3 · SCANNING ============ -->
+  <section class="screen view hidden" id="scan">
+    <div class="scanhead">
+      <h2 data-t="scanning">Scanning lab.example…</h2>
+      <button class="btn ghost sm" data-go="welcome" data-t="cancel">Cancel</button>
+    </div>
+    <div class="bar"><i id="pbar"></i></div>
+    <div class="scanmeta"><span id="pcount">0 / 212 checks</span><span id="peta" data-t="eta">~4s remaining · read-only</span></div>
+
+    <div class="scangrid" id="scangrid"></div>
+    <div class="log" id="scanlog"></div>
+    <div style="margin-top:16px" class="hidden" id="donebtn"><button class="btn" data-go="report" data-t="viewreport">View report</button></div>
+  </section>
+
+  <!-- ============ 4 · REPORT ============ -->
+  <section class="screen view hidden" id="report">
+    <div class="rtop">
+      <div class="gauge" style="--v:54;--sevcol:var(--high)"><div class="in"><b>54</b><span data-t="of100">/ 100</span></div></div>
+      <div class="rmeta">
+        <div class="t" data-t="r_target">Target</div>
+        <h2 class="mono">lab.example</h2>
+        <div class="sub" data-t="r_sub">Active Directory · tier 0 · 2026-10-07 18:46 UTC · snapshot <span class="mono">d03c5d0b…</span></div>
+      </div>
+    </div>
+
+    <div class="counts">
+      <div class="cnt"><b>212</b><span data-t="c_checked">checked</span></div>
+      <div class="cnt ok"><b>188</b><span data-t="c_passed">passed</span></div>
+      <div class="cnt crit"><b>12</b><span data-t="c_find">with findings</span></div>
+      <div class="cnt"><b>21</b><span data-t="c_findings">findings</span></div>
+      <div class="cnt"><b>12</b><span data-t="c_skip">skipped</span></div>
+    </div>
+
+    <div class="dl">
+      <button class="btn sm" data-t="dl_html">Download HTML</button>
+      <button class="btn sm ghost" data-t="dl_json">JSON</button>
+      <button class="btn sm ghost" data-t="dl_csv">CSV</button>
+      <button class="btn sm ghost" data-t="dl_redact">Redacted copy…</button>
+      <button class="btn sm ghost" data-t="dl_diff">Compare with previous…</button>
+    </div>
+
+    <div class="sec" data-t="s_quick">Quick wins — under 10 minutes each</div>
+    <div class="quick">
+      <div class="q"><span class="ix">1</span><span class="tx"><b data-t="qa">Set the machine-account quota to 0.</b> <span class="sub mono">Set-ADDomain -Identity lab.example -Replace @{"ms-DS-MachineAccountQuota"="0"}</span></span></div>
+      <div class="q"><span class="ix">2</span><span class="tx"><b data-t="qb">Remove GenericAll for “Helpdesk” on the Domain Admins group.</b> <span class="sub" data-t="qbs">One ACE removal closes a direct path to Tier 0.</span></span></div>
+      <div class="q"><span class="ix">3</span><span class="tx"><b data-t="qc">Clear the reversible-encryption flag on svc_legacy and reset its password.</b></span></div>
+    </div>
+
+    <div class="sec" data-t="s_paths">Top 5 paths to Tier 0</div>
+    <div class="paths">
+      <div class="path"><span class="node">Helpdesk</span><span class="arrw">→</span><span class="edge">GenericAll</span><span class="arrw">→</span><span class="node t0">Domain Admins</span></div>
+      <div class="path"><span class="node">svc_backup</span><span class="arrw">→</span><span class="edge" data-t="e_dcsync">replication rights (DCSync)</span><span class="arrw">→</span><span class="node t0" data-t="n_domain">Domain secrets</span></div>
+      <div class="path"><span class="node">svc_sql</span><span class="arrw">→</span><span class="edge" data-t="e_kerb">kerberoastable + privileged</span><span class="arrw">→</span><span class="node t0">Domain Admins</span></div>
+      <div class="path"><span class="node">APP01$</span><span class="arrw">→</span><span class="edge" data-t="e_unconstr">unconstrained delegation + DC coercion</span><span class="arrw">→</span><span class="node t0">dc01</span></div>
+      <div class="path"><span class="node" data-t="n_authusers">Authenticated Users</span><span class="arrw">→</span><span class="edge" data-t="e_adidns">create DNS record (ADIDNS)</span><span class="arrw">→</span><span class="node" data-t="n_relay">credential relay</span></div>
+    </div>
+
+    <div class="sec" data-t="s_findings">Findings</div>
+    <div id="findings"></div>
+
+    <div class="sec" data-t="s_skipped">Skipped — and why</div>
+    <div class="skip">
+      <b>12 checks</b> <span data-t="sk1">not run because they need Tier 2 (an admin account):</span>
+      NTLM level, SMBv1, Print Spooler on DCs, applied audit policy, local administrators on DCs, LAPS state…
+      <div style="margin-top:6px"><button class="btn sm ghost" data-t="sk_add">Add an admin account and re-scan</button></div>
+    </div>
+
+    <div class="foot" data-t="foot">Generated read-only; nothing left this machine. 212 checks run as audit@lab.example over Kerberos. Report hash e7b0c2…</div>
+  </section>
+
+ </div>
+</div>
+
+<script>
+/* ---------- findings data: every rule has remediation + MITRE ---------- */
+const MITRE = id => "https://attack.mitre.org/techniques/"+id.replace('.', '/')+"/";
+const F = [
+ {id:"DSA-0015",sev:"critical",dom:"Directory core",tier:0,
+  en:"Shadow admin — dangerous rights on a privileged object",
+  ru:"Теневой администратор — опасные права на привилегированном объекте",
+  n:1,
+  affected:[{dn:"Group “Helpdesk” → CN=Domain Admins,CN=Users,DC=lab,DC=example",ev:"GenericAll"}],
+  why_en:"An account outside the admin groups holds an ACL permission (GenericAll) over the Domain Admins group. Such accounts are easy to miss because they are not group members, yet they can grant themselves full control.",
+  why_ru:"Учётная запись вне административных групп имеет право (GenericAll) над группой Domain Admins. Такие субъекты легко пропустить при аудите членства, хотя они могут сами выдать себе полный доступ.",
+  fix_en:"Remove the GenericAll ACE unless it is a documented delegation; audit who may change ACLs on Tier-0 objects; place Tier-0 objects under a monitored, least-privilege delegation model.",
+  fix_ru:"Удалите ACE GenericAll, если это не задокументированное делегирование; проверьте, кто может менять ACL на объектах нулевого уровня; переведите объекты нулевого уровня на контролируемую модель делегирования по минимуму прав.",
+  mitre:[["T1098","Account Manipulation"],["T1222.001","File/Directory Permissions Modification: Windows"]],
+  refs:[["CyberArk — Shadow Admins","https://www.cyberark.com/resources/threat-research/shadow-admins-the-stealthy-accounts-that-you-should-fear-the-most"],["SpecterOps — An ACE Up the Sleeve","https://specterops.io/assets/resources/an_ace_up_the_sleeve.pdf"]]},
+
+ {id:"DSA-0014",sev:"critical",dom:"Directory core",tier:0,n:1,
+  en:"Replication (DCSync) rights held by a non-Tier-0 account",
+  ru:"Права репликации (DCSync) у учётной записи вне нулевого уровня",
+  affected:[{dn:"CN=svc_backup,CN=Users,DC=lab,DC=example",ev:"DS-Replication-Get-Changes-All on domain head"}],
+  why_en:"The account has the directory-replication extended rights on the domain, which allow pulling password material for every account over the network — equivalent to Domain Admin for credential theft.",
+  why_ru:"У учётной записи есть расширенные права репликации каталога на домене, позволяющие получить парольные данные всех учётных записей по сети — по сути это Domain Admin для кражи учётных данных.",
+  fix_en:"Remove the replication ACEs from any principal that is not a domain controller or a documented Tier-0 service; review the domain-head DACL; alert on new grants.",
+  fix_ru:"Удалите ACE репликации у всех субъектов, кроме контроллеров домена и задокументированных служб нулевого уровня; проверьте DACL корня домена; настройте оповещение на новые выдачи прав.",
+  mitre:[["T1003.006","OS Credential Dumping: DCSync"]],
+  refs:[["ADSecurity — Mimikatz DCSync","https://adsecurity.org/?p=1729"],["MS-ADTS","https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/"]]},
+
+ {id:"DSA-0002",sev:"critical",dom:"Directory core",tier:0,n:1,
+  en:"Privileged account exposed to Kerberoasting (has an SPN)",
+  ru:"Привилегированная учётная запись подвержена Kerberoasting (есть SPN)",
+  affected:[{dn:"CN=svc_sql,CN=Users,DC=lab,DC=example",ev:"member of Domain Admins · SPN MSSQLSvc/db01"}],
+  why_en:"A member of a Tier-0 group has a service principal name, so any domain user can request a service ticket encrypted with this account's key and attack it offline. For a privileged account that key is a domain-takeover secret.",
+  why_ru:"Член группы нулевого уровня имеет имя участника-службы, поэтому любой пользователь домена может запросить билет службы, зашифрованный ключом этой учётной записи, и атаковать его офлайн. Для привилегированной учётной записи этот ключ — секрет захвата домена.",
+  fix_en:"Remove the SPN from the privileged account; run the service under a group-managed service account; enforce AES-only keys and a 25+ character random password where an SPN must remain.",
+  fix_ru:"Удалите SPN с привилегированной учётной записи; запускайте службу под групповой управляемой учётной записью (gMSA); где SPN необходим — только AES-ключи и случайный пароль от 25 символов.",
+  mitre:[["T1558.003","Steal or Forge Kerberos Tickets: Kerberoasting"]],
+  refs:[["ADSecurity — Kerberoast","https://adsecurity.org/?p=2293"],["ATT&CK T1558.003","https://attack.mitre.org/techniques/T1558/003/"]]},
+
+ {id:"DSA-0060",sev:"critical",dom:"Group Policy",tier:1,n:1,
+  en:"Group Policy Preferences password (cpassword) in SYSVOL",
+  ru:"Пароль в настройках групповых политик (cpassword) в SYSVOL",
+  affected:[{dn:"\\\\lab.example\\SYSVOL\\…\\Groups.xml",ev:"cpassword attribute present"}],
+  why_en:"A Group Policy Preferences item stores a password encrypted with a key Microsoft published in MS-GPPREF, so anyone who can read SYSVOL (every domain user) can decrypt it. Microsoft removed the feature in MS14-025.",
+  why_ru:"Элемент настроек групповых политик хранит пароль, зашифрованный ключом, опубликованным Microsoft в MS-GPPREF, поэтому любой, кто читает SYSVOL (а это каждый пользователь домена), может его расшифровать. Microsoft убрала эту возможность в MS14-025.",
+  fix_en:"Remove the cpassword from the GPP XML in SYSVOL; change the exposed account's password; apply MS14-025; prefer LAPS for local admin passwords.",
+  fix_ru:"Удалите cpassword из XML настроек групповых политик в SYSVOL; смените пароль раскрытой учётной записи; примените MS14-025; для паролей локальных администраторов используйте LAPS.",
+  mitre:[["T1552.006","Unsecured Credentials: Group Policy Preferences"]],
+  refs:[["MS14-025","https://learn.microsoft.com/en-us/security-updates/securitybulletins/2014/ms14-025"],["MS-GPPREF 2.2.1.1.4","https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-gppref/2c15cbf0-f086-4c74-8b70-1f2fa45dd4be"]]},
+
+ {id:"DSA-0004",sev:"high",dom:"Directory core",tier:0,n:1,
+  en:"Unconstrained Kerberos delegation on a non-DC host",
+  ru:"Неограниченное делегирование Kerberos на узле, не являющемся контроллером домена",
+  affected:[{dn:"CN=APP01,OU=Servers,DC=lab,DC=example",ev:"TRUSTED_FOR_DELEGATION (0x80000)"}],
+  why_en:"A host with unconstrained delegation caches the Kerberos TGT of every user that authenticates to it, including privileged ones. Control of that host can lead to reuse of those tickets.",
+  why_ru:"Узел с неограниченным делегированием кэширует TGT Kerberos каждого аутентифицирующегося пользователя, в том числе привилегированного. Контроль над этим узлом может привести к повторному использованию этих билетов.",
+  fix_en:"Replace with resource-based or classic constrained delegation; mark Tier-0 accounts 'sensitive, cannot be delegated' and add them to Protected Users.",
+  fix_ru:"Замените ограниченным делегированием (RBCD или классическим); пометьте учётные записи нулевого уровня «важная, делегирование запрещено» и добавьте их в группу Protected Users.",
+  mitre:[["T1550.003","Use Alternate Authentication Material: Pass the Ticket"],["T1187","Forced Authentication"]],
+  refs:[["Microsoft — Kerberos constrained delegation","https://learn.microsoft.com/en-us/windows-server/security/kerberos/kerberos-constrained-delegation-overview"],["Microsoft — UserAccountControl flags","https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties"]]},
+
+ {id:"DSA-0001",sev:"high",dom:"Directory core",tier:0,n:2,
+  en:"Accounts that do not require Kerberos pre-authentication (AS-REP roastable)",
+  ru:"Учётные записи без обязательной предварительной аутентификации Kerberos (AS-REP roasting)",
+  affected:[{dn:"CN=j.legacy,CN=Users,DC=lab,DC=example",ev:"DONT_REQ_PREAUTH"},{dn:"CN=kiosk,CN=Users,DC=lab,DC=example",ev:"DONT_REQ_PREAUTH"}],
+  why_en:"With pre-authentication disabled the KDC returns, to anyone who asks, a response whose encrypted part is derived from the account's password — allowing an offline password attack.",
+  why_ru:"При отключённой предварительной аутентификации KDC по запросу любого отдаёт ответ, зашифрованная часть которого выводится из пароля учётной записи, что позволяет атаковать пароль офлайн.",
+  fix_en:"Clear the 'do not require Kerberos pre-authentication' flag unless a documented legacy client needs it; set a long random password meanwhile.",
+  fix_ru:"Снимите флаг «не требовать предварительную аутентификацию Kerberos», если его не требует задокументированный устаревший клиент; до тех пор задайте длинный случайный пароль.",
+  mitre:[["T1558.004","Steal or Forge Kerberos Tickets: AS-REP Roasting"]],
+  refs:[["Microsoft — UserAccountControl flags","https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties"],["ATT&CK T1558.004","https://attack.mitre.org/techniques/T1558/004/"]]},
+
+ {id:"DSA-0011",sev:"high",dom:"Credentials",tier:0,n:1,
+  en:"Password stored with reversible encryption",
+  ru:"Пароль хранится с обратимым шифрованием",
+  affected:[{dn:"CN=svc_legacy,CN=Users,DC=lab,DC=example",ev:"ENCRYPTED_TEXT_PWD_ALLOWED"}],
+  why_en:"Reversible encryption is cleartext storage with an extra step: anyone who can read the directory database recovers the actual password.",
+  why_ru:"Обратимое шифрование — это хранение открытым текстом с лишним шагом: любой, кто читает базу каталога, восстанавливает реальный пароль.",
+  fix_en:"Disable 'store password using reversible encryption' at the account and domain level; force a password change for affected accounts.",
+  fix_ru:"Отключите «хранить пароль с обратимым шифрованием» на уровне учётной записи и домена; принудительно смените пароли затронутых учётных записей.",
+  mitre:[["T1003.006","OS Credential Dumping: DCSync"]],
+  refs:[["Microsoft — Store passwords using reversible encryption","https://learn.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/store-passwords-using-reversible-encryption"]]},
+
+ {id:"DSA-0041",sev:"high",dom:"DNS",tier:0,n:1,
+  en:"Authenticated Users can create records in an AD-integrated DNS zone",
+  ru:"Аутентифицированные пользователи могут создавать записи в DNS-зоне, интегрированной в AD",
+  affected:[{dn:"DC=lab.example,CN=MicrosoftDNS,DC=DomainDnsZones,DC=lab,DC=example",ev:"Create-Child for Authenticated Users"}],
+  why_en:"The default ADIDNS zone ACL lets any authenticated user add DNS records. Combined with name-resolution behaviour this enables credential-relay positioning without any elevated right.",
+  why_ru:"ACL зоны ADIDNS по умолчанию позволяет любому аутентифицированному пользователю добавлять DNS-записи. В сочетании с механизмом разрешения имён это даёт позицию для перехвата и ретрансляции учётных данных без каких-либо повышенных прав.",
+  fix_en:"Tighten the zone DACL so only authorised principals create records; add WPAD/ISATAP to the DNS global query block list; monitor for new records.",
+  fix_ru:"Ужесточите DACL зоны, чтобы записи создавали только уполномоченные субъекты; добавьте WPAD/ISATAP в глобальный список блокировки запросов DNS; отслеживайте появление новых записей.",
+  mitre:[["T1557","Adversary-in-the-Middle"]],
+  refs:[["Kevin Robertson — Exploiting ADIDNS","https://www.netspi.com/blog/technical-blog/network-pentesting/exploiting-adidns/"],["MS-DNSP","https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dnsp/"]]},
+
+ {id:"DSA-0040",sev:"high",dom:"DNS",tier:0,n:1,
+  en:"DNS zone allows insecure dynamic updates",
+  ru:"DNS-зона разрешает незащищённые динамические обновления",
+  affected:[{dn:"zone lab.example",ev:"fAllowUpdate = ZONE_UPDATE_UNSECURE (1)"}],
+  why_en:"The zone accepts updates without authentication (MS-DNSP DNS_ZONE_UPDATE value 1), so any host on the network can create or overwrite records, including those used for name resolution of critical services.",
+  why_ru:"Зона принимает обновления без аутентификации (значение DNS_ZONE_UPDATE = 1 в MS-DNSP), поэтому любой узел сети может создавать или перезаписывать записи, в том числе используемые для разрешения имён критичных служб.",
+  fix_en:"Set the zone to secure dynamic updates only (ZONE_UPDATE_SECURE); for AD-integrated zones this is the default and recommended setting.",
+  fix_ru:"Переведите зону только на защищённые динамические обновления (ZONE_UPDATE_SECURE); для зон, интегрированных в AD, это значение по умолчанию и рекомендуемое.",
+  mitre:[["T1557","Adversary-in-the-Middle"]],
+  refs:[["MS-DNSP 2.2.6.1.1 DNS_ZONE_UPDATE","https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dnsp/d4b84209-f00c-478f-80d7-8dd0f1633d9e"],["Microsoft — Securing DNS zones","https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2003/cc780538(v=ws.10)"]]},
+
+ {id:"DSA-0065",sev:"high",dom:"Group Policy",tier:1,n:1,
+  en:"GPO grants a sensitive user right to a broad group",
+  ru:"GPO выдаёт чувствительное право широкой группе",
+  affected:[{dn:"GPO “Workstation Baseline” → GptTmpl.inf",ev:"SeDebugPrivilege = Authenticated Users"}],
+  why_en:"A policy assigns a powerful privilege (here, Debug programs) to a broad group. On every machine the GPO applies to, members of that group gain an ability normally reserved for administrators.",
+  why_ru:"Политика назначает мощную привилегию (здесь — отладка программ) широкой группе. На каждой машине, куда применяется GPO, члены этой группы получают возможность, обычно доступную только администраторам.",
+  fix_en:"Remove the privilege assignment from broad groups; grant sensitive user rights only to the minimum required principals; review the GPO's link scope.",
+  fix_ru:"Уберите назначение привилегии широким группам; выдавайте чувствительные права только минимально необходимым субъектам; проверьте область связывания GPO.",
+  mitre:[["T1484.001","Domain Policy Modification: Group Policy Modification"]],
+  refs:[["MS-GPSB — Security Protocol Extension","https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-gpsb/"],["ATT&CK T1484.001","https://attack.mitre.org/techniques/T1484/001/"]]},
+
+ {id:"DSA-0008",sev:"medium",dom:"Kerberos",tier:0,n:1,
+  en:"krbtgt password has not been rotated",
+  ru:"Пароль учётной записи krbtgt давно не менялся",
+  affected:[{dn:"CN=krbtgt,CN=Users,DC=lab,DC=example",ev:"pwdLastSet = 712 days ago"}],
+  why_en:"The krbtgt key signs every Kerberos ticket-granting ticket. If it was ever exposed, forged tickets stay valid until the key is changed twice. Microsoft's recovery guidance resets it twice, 10 hours apart.",
+  why_ru:"Ключ krbtgt подписывает каждый билет TGT Kerberos. Если он когда-либо был раскрыт, поддельные билеты действуют, пока ключ не сменят дважды. Руководство Microsoft по восстановлению меняет его дважды с интервалом 10 часов.",
+  fix_en:"Reset the krbtgt password twice with at least 10 hours (the maximum ticket lifetime) between resets, and schedule the rotation periodically.",
+  fix_ru:"Смените пароль krbtgt дважды с интервалом не менее 10 часов (максимальное время жизни билета) между сменами и запланируйте периодическую ротацию.",
+  mitre:[["T1558.001","Steal or Forge Kerberos Tickets: Golden Ticket"]],
+  refs:[["Microsoft — Reset the krbtgt password","https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/ad-forest-recovery-resetting-the-krbtgt-password"],["ATT&CK T1558.001","https://attack.mitre.org/techniques/T1558/001/"]]},
+
+ {id:"DSA-0013",sev:"medium",dom:"Directory core",tier:0,n:1,
+  en:"Any user may add computers to the domain (machine-account quota)",
+  ru:"Любой пользователь может добавлять компьютеры в домен (квота учётных записей компьютеров)",
+  affected:[{dn:"DC=lab,DC=example",ev:"ms-DS-MachineAccountQuota = 10"}],
+  why_en:"Every authenticated user can create up to ten computer accounts and control their attributes. This is the starting point for several delegation- and relay-based privilege escalations.",
+  why_ru:"Каждый аутентифицированный пользователь может создать до десяти учётных записей компьютеров и управлять их атрибутами. Это отправная точка нескольких повышений привилегий через делегирование и ретрансляцию.",
+  fix_en:"Set ms-DS-MachineAccountQuota to 0 and delegate computer joining to a dedicated group or an OU-scoped permission.",
+  fix_ru:"Задайте ms-DS-MachineAccountQuota равным 0 и делегируйте присоединение компьютеров отдельной группе или праву в пределах подразделения (OU).",
+  mitre:[["T1136.002","Create Account: Domain Account"]],
+  refs:[["Microsoft — ms-DS-MachineAccountQuota","https://learn.microsoft.com/en-us/windows/win32/adschema/a-ms-ds-machineaccountquota"],["Microsoft — default workstation join limit","https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/default-workstation-numbers-join-domain"]]},
+];
+
+/* ---------- render findings ---------- */
+const sevOrder={critical:0,high:1,medium:2,low:3,info:4};
+let lang="en";
+function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+function renderFindings(){
+  const host=document.getElementById('findings');host.innerHTML='';
+  F.slice().sort((a,b)=>sevOrder[a.sev]-sevOrder[b.sev]).forEach(f=>{
+    const title=lang==='ru'?f.ru:f.en, why=lang==='ru'?f.why_ru:f.why_en, fix=lang==='ru'?f.fix_ru:f.fix_en;
+    const L={aff:lang==='ru'?'Затронуто':'Affected',why:lang==='ru'?'Почему это важно':'Why it matters',
+      fix:lang==='ru'?'Как исправить':'Remediation',mitre:'MITRE ATT&CK',ref:lang==='ru'?'Источники':'References',
+      objs:lang==='ru'?'объект(ов)':'object(s)'};
+    const d=document.createElement('details');d.className='finding';
+    d.innerHTML=`<summary>
+        <span class="sev ${f.sev}">${f.sev}</span>
+        <span class="fid">${f.id}</span>
+        <span class="ftitle">${esc(title)}</span>
+        <span class="fcount">${f.affected.length} ${L.objs} · ${esc(f.dom)}</span>
+        <span class="chev">▸</span>
+      </summary>
+      <div class="fbody">
+        <h4>${L.aff}</h4>
+        <ul class="affected">${f.affected.map(a=>`<li><span>${esc(a.dn)}</span><span class="ev">${esc(a.ev)}</span></li>`).join('')}</ul>
+        <h4>${L.why}</h4><p>${esc(why)}</p>
+        <h4>${L.fix}</h4><p>${esc(fix)}</p>
+        <h4>${L.mitre}</h4><div class="chips">${f.mitre.map(m=>`<a class="chip" target="_blank" rel="noopener" href="${MITRE(m[0])}">${m[0]} · ${esc(m[1])}</a>`).join('')}</div>
+        <h4>${L.ref}</h4><ul class="refs">${f.refs.map(r=>`<li><a target="_blank" rel="noopener" href="${r[1]}">${esc(r[0])}</a></li>`).join('')}</ul>
+      </div>`;
+    host.appendChild(d);
+  });
+}
+
+/* ---------- view switching ---------- */
+const views=['welcome','wizard','scan','report'];
+function show(v){
+  views.forEach(x=>document.getElementById(x).classList.toggle('hidden',x!==v));
+  document.querySelectorAll('#tabs .tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.go===v));
+  window.scrollTo({top:0,behavior:'smooth'});
+  if(v==='scan') runScan();
+}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-go]');if(b){show(b.dataset.go);}});
+
+/* ---------- scan simulation ---------- */
+const domains=[["Directory core",46],["DNS",22],["Group Policy",28],["PKI (AD CS)",34],["Kerberos",24],["Credentials",18],["Replication",14],["Integrated apps",26]];
+let scanRan=false;
+function runScan(){
+  if(scanRan){return;} scanRan=true;
+  const grid=document.getElementById('scangrid');grid.innerHTML='';
+  const cards=domains.map(([d,n])=>{const c=document.createElement('div');c.className='scancard';
+    c.innerHTML=`<div class="d">${d}</div><div class="c"><span class="done">0</span> / ${n}</div><div class="mini"><i></i></div>`;grid.appendChild(c);return {c,n,done:0};});
+  const total=domains.reduce((s,[,n])=>s+n,0);let done=0;
+  const log=document.getElementById('scanlog');
+  const msgs=["reading rootDSE","enumerating privileged groups","reading domain object","checking delegation flags","reading ACLs on Tier-0 objects","reading DNS zones","reading GPO links","reading AD CS templates","checking Kerberos encryption types","resolving nested group membership"];
+  const timer=setInterval(()=>{
+    const k=Math.floor(Math.random()*cards.length);const card=cards[k];
+    if(card.done<card.n){const step=Math.min(card.n-card.done,Math.ceil(Math.random()*6));card.done+=step;done+=step;
+      card.c.querySelector('.done').textContent=card.done;
+      card.c.querySelector('.mini > i').style.width=(100*card.done/card.n)+'%';}
+    const pct=Math.round(100*done/total);
+    document.getElementById('pbar').style.width=pct+'%';
+    document.getElementById('pcount').textContent=done+' / '+total+' checks';
+    document.getElementById('peta').textContent=(lang==='ru'?'осталось ~':'~')+Math.max(0,Math.ceil((total-done)/60))+'s · '+(lang==='ru'?'только чтение':'read-only');
+    if(Math.random()<.5){const line=document.createElement('div');line.textContent='· '+msgs[Math.floor(Math.random()*msgs.length)];log.prepend(line);while(log.childNodes.length>7)log.removeChild(log.lastChild);}
+    if(done>=total){clearInterval(timer);document.getElementById('peta').textContent=lang==='ru'?'готово':'done';document.getElementById('donebtn').classList.remove('hidden');
+      const l=document.createElement('div');l.textContent=lang==='ru'?'· анализ завершён — 21 находка':'· analysis complete — 21 findings';log.prepend(l);}
+  },90);
+}
+document.querySelector('[data-go="scan"]').addEventListener('click',()=>{scanRan=false;});
+
+/* ---------- test connection ---------- */
+document.getElementById('testconn').addEventListener('click',()=>{document.getElementById('testresult').style.display='flex';});
+
+/* ---------- language + theme ---------- */
+const T={
+ tagline:["What an attacker would find in your directory — read-only, in five minutes.","Что найдёт в вашем каталоге злоумышленник — только чтение, за пять минут."],
+ tr1:["Read-only","Только чтение"],tr2:["Nothing leaves this machine","Ничего не покидает машину"],tr3:["Signed","Подписано"],tr4:["Source public","Открытый код"],
+ d_dir:["Directory","Каталог"],d_dc:["Domain controller","Контроллер домена"],d_dc_sub:["LDAPS · certificate trusted","LDAPS · сертификат доверенный"],
+ d_id:["Identity","Учётная запись"],d_id_sub:["your current logon · Kerberos (no password needed)","ваш текущий вход · Kerberos (пароль не нужен)"],
+ tp0:["Tier 0 available","Уровень 0 доступен"],tp1:["Tier 1 — add network probes","Уровень 1 — сетевые проверки"],tp2:["Tier 2 — add admin account","Уровень 2 — учётная запись администратора"],
+ scannow:["Scan now","Сканировать"],change:["Change settings","Изменить настройки"],
+ qhint:["Quick scan: the ~40 highest-value Tier-0 checks, no configuration. The full scan is one click more.","Быстрое сканирование: ~40 самых ценных проверок уровня 0 без настройки. Полное — на один клик дальше."],
+ w1:["Directory","Каталог"],w2:["Target","Цель"],w3:["Identity","Учётная запись"],w4:["Scope","Объём"],w5:["Run","Запуск"],
+ f_id:["Connect as","Подключиться как"],f_id1:["Use my current logon","Использовать текущий вход"],f_id2:["Other account","Другая учётная запись"],f_id2d:["DN or UPN + password (prompted)","DN или UPN + пароль (запрос)"],f_id3:["+ Admin account (Tier 2)","+ Учётная запись администратора (уровень 2)"],f_id3d:["optional, for DC-side checks","необязательно, для проверок на контроллере"],
+ test:["Test connection","Проверить подключение"],testok:["Connected as <b>audit@lab.example</b> — member of Domain Users. Tier 0 available (212 checks). Tier 2 needs an admin account.","Подключено как <b>audit@lab.example</b> — член Domain Users. Уровень 0 доступен (212 проверок). Уровень 2 требует учётную запись администратора."],
+ f_scope:["Check domains to run","Области проверок"],dm1:["Directory core","Ядро каталога"],dm3:["Group Policy","Групповые политики"],dm6:["Credentials","Учётные данные"],
+ f_out:["Output folder","Папка вывода"],back:["Back","Назад"],runfull:["Run full scan","Полное сканирование"],
+ scanning:["Scanning lab.example…","Сканирование lab.example…"],cancel:["Cancel","Отмена"],eta:["~4s remaining · read-only","осталось ~4с · только чтение"],viewreport:["View report","Открыть отчёт"],
+ r_target:["Target","Цель"],of100:["/ 100","/ 100"],r_sub:["Active Directory · tier 0 · 2026-10-07 18:46 UTC · snapshot <span class='mono'>d03c5d0b…</span>","Active Directory · уровень 0 · 2026-10-07 18:46 UTC · снимок <span class='mono'>d03c5d0b…</span>"],
+ c_checked:["checked","проверено"],c_passed:["passed","пройдено"],c_find:["with findings","с находками"],c_findings:["findings","находок"],c_skip:["skipped","пропущено"],
+ dl_html:["Download HTML","Скачать HTML"],dl_json:["JSON","JSON"],dl_csv:["CSV","CSV"],dl_redact:["Redacted copy…","Обезличенная копия…"],dl_diff:["Compare with previous…","Сравнить с прошлым…"],
+ s_quick:["Quick wins — under 10 minutes each","Быстрые победы — по 10 минут каждая"],
+ qa:["Set the machine-account quota to 0.","Установите квоту учётных записей компьютеров в 0."],
+ qb:["Remove GenericAll for “Helpdesk” on the Domain Admins group.","Удалите GenericAll у «Helpdesk» на группе Domain Admins."],qbs:["One ACE removal closes a direct path to Tier 0.","Удаление одного ACE закрывает прямой путь к уровню 0."],
+ qc:["Clear the reversible-encryption flag on svc_legacy and reset its password.","Снимите флаг обратимого шифрования у svc_legacy и смените пароль."],
+ s_paths:["Top 5 paths to Tier 0","5 главных путей к уровню 0"],e_dcsync:["replication rights (DCSync)","права репликации (DCSync)"],n_domain:["Domain secrets","Секреты домена"],e_kerb:["kerberoastable + privileged","kerberoastable + привилегия"],e_unconstr:["unconstrained delegation + DC coercion","неогр. делегирование + принуждение КД"],n_authusers:["Authenticated Users","Аутентиф. пользователи"],e_adidns:["create DNS record (ADIDNS)","создание DNS-записи (ADIDNS)"],n_relay:["credential relay","ретрансляция уч. данных"],
+ s_findings:["Findings","Находки"],s_skipped:["Skipped — and why","Пропущено — и почему"],
+ sk1:["not run because they need Tier 2 (an admin account):","не выполнены, так как требуют уровень 2 (учётную запись администратора):"],sk_add:["Add an admin account and re-scan","Добавить администратора и пересканировать"],
+ viewreport2:["",""],foot:["Generated read-only; nothing left this machine. 212 checks run as audit@lab.example over Kerberos. Report hash e7b0c2…","Создано в режиме только чтения; ничего не покинуло машину. 212 проверок от имени audit@lab.example по Kerberos. Хеш отчёта e7b0c2…"],
+ demo:["DEMO · synthetic data","ДЕМО · синтетические данные"]
+};
+function applyLang(){
+  document.querySelectorAll('[data-t]').forEach(el=>{const k=el.dataset.t;if(T[k])el.innerHTML=T[k][lang==='ru'?1:0];});
+  document.getElementById('lang').textContent=lang==='ru'?'EN':'RU';
+  document.documentElement.lang=lang;
+  renderFindings();
+}
+document.getElementById('lang').addEventListener('click',()=>{lang=lang==='ru'?'en':'ru';applyLang();});
+
+const root=document.documentElement;
+function initTheme(){try{const s=localStorage.getItem('da-theme');if(s)root.setAttribute('data-theme',s);}catch(e){}}
+document.getElementById('theme').addEventListener('click',()=>{
+  const cur=root.getAttribute('data-theme');const next=cur==='dark'?'light':(cur==='light'?'dark':'dark');
+  root.setAttribute('data-theme',next);try{localStorage.setItem('da-theme',next);}catch(e){}
+});
+initTheme();applyLang();renderFindings();
+</script>
+</body>
+</html>
