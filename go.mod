@@ -2,6 +2,8 @@ module github.com/atsvetko/directory-auditor
 
 go 1.26.0
 
+toolchain go1.26.6
+
 require (
 	cel.dev/cel-go v0.32.0
 	github.com/go-asn1-ber/asn1-ber v1.5.8
