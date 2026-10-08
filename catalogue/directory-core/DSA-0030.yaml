@@ -1,0 +1,65 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0030
+title:
+  en: 'Domain controller accounts in an inconsistent state'
+  ru: 'Учётные записи контроллеров домена в несогласованном состоянии'
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'Computer accounts: userAccountControl versus primaryGroupID'
+attributes:
+- userAccountControl
+- primaryGroupID
+- sAMAccountName
+- operatingSystem
+condition: >-
+  A computer account's role flags and its primary group disagree. A writable domain controller carries
+  SERVER_TRUST_ACCOUNT (0x2000) and the Domain Controllers primary group (RID 516); a read-only domain
+  controller carries PARTIAL_SECRETS_ACCOUNT (0x4000000) and the Read-only Domain Controllers primary
+  group (RID 521). The entry fires when either flag is present without its primary group, or the primary
+  group is present without its flag.
+threshold: any occurrence
+rationale: >-
+  The two values are set together when a server is promoted. When they disagree, an account is being
+  treated as a domain controller by one mechanism and not by another — the residue of an incomplete
+  demotion, a failed promotion, or a deliberate manipulation such as registering a rogue domain
+  controller. Such an account can hold the trust and replication standing of a DC without being managed
+  as one.
+remediation:
+  en: >-
+    Investigate every listed account. If the server is a genuine domain controller, repair its flags and
+    primary group through a supported demotion and promotion; if it is not, remove the DC primary group
+    and flags and clean up its server objects. Treat an unexplained account as a possible compromise.
+  ru: >-
+    Проверьте каждую найденную учётную запись. Если сервер действительно контроллер домена, восстановите
+    флаги и основную группу через штатное понижение и повышение роли; если нет — уберите основную группу и
+    флаги контроллера домена и удалите его серверные объекты. Необъяснимую учётную запись рассматривайте
+    как возможную компрометацию.
+attack:
+- id: T1207
+  name: 'Rogue Domain Controller'
+anssi:
+- vuln_dc_inconsistent_uac
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: '(sAMAccountType=805306369)'
+references:
+- title: 'Microsoft Learn — UserAccountControl property flags'
+  url: https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties
+- title: 'Microsoft Learn — Active Directory security groups'
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups
+- title: 'MITRE ATT&CK — T1207 Rogue Domain Controller'
+  url: https://attack.mitre.org/techniques/T1207/
+notes: >-
+  Covers both writable (0x2000 / 516) and read-only (0x4000000 / 521) domain controllers. Location in
+  OU=Domain Controllers is not used, because moving a DC object is legitimate.
+condition_cel: 'flags(obj, "userAccountControl", 8192) != (intattr(obj, "primaryGroupID") == 516) || flags(obj, "userAccountControl", 67108864) != (intattr(obj, "primaryGroupID") == 521)'
+expect:
+- CN=BADDC,OU=Domain Controllers,DC=lab,DC=example

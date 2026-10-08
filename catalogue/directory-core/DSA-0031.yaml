@@ -1,0 +1,62 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0031
+title:
+  en: 'Domain controllers running an operating system out of vendor support'
+  ru: 'Контроллеры домена под управлением ОС без поддержки производителя'
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'Domain controller computer accounts: operatingSystem'
+attributes:
+- operatingSystem
+- operatingSystemVersion
+- userAccountControl
+condition: >-
+  A writable or read-only domain controller reports an operatingSystem whose extended support has ended:
+  Windows 2000 Server, Windows Server 2003, 2008, 2008 R2, 2012 and 2012 R2, and Windows Server 2016
+  once its extended support ends on 13 January 2027. The comparison uses the scan's collection date, so
+  the result is correct whenever the scan was taken.
+threshold: any occurrence
+rationale: >-
+  An operating system past its extended support receives no security fixes, so every vulnerability
+  disclosed after that date stays open on the most sensitive servers in the domain. Windows Server 2012
+  R2 left extended support on 10 October 2023; paid Extended Security Updates for it end on 14 October
+  2026.
+remediation:
+  en: >-
+    Plan and complete the replacement of every listed domain controller with a supported Windows Server
+    release, then demote and remove the old one. Until then, isolate it from untrusted networks and
+    prioritise it in monitoring.
+  ru: >-
+    Спланируйте и выполните замену каждого найденного контроллера домена на поддерживаемую версию Windows
+    Server, затем понизьте роль и удалите старый. До замены изолируйте его от недоверенных сетей и
+    отслеживайте в первую очередь.
+attack:
+- id: T1210
+  name: 'Exploitation of Remote Services'
+anssi:
+- vuln_dc_obsolete
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: '(sAMAccountType=805306369)'
+references:
+- title: 'Microsoft Learn — Windows Server 2012 R2 lifecycle'
+  url: https://learn.microsoft.com/en-us/lifecycle/products/windows-server-2012-r2
+- title: 'Microsoft Learn — Windows Server 2016 lifecycle'
+  url: https://learn.microsoft.com/en-us/lifecycle/products/windows-server-2016
+- title: 'MITRE ATT&CK — T1210 Exploitation of Remote Services'
+  url: https://attack.mitre.org/techniques/T1210/
+notes: >-
+  Dates from Microsoft Lifecycle (verified 2026-10-08): 2012 R2 extended end 2023-10-10, ESU end
+  2026-10-14; 2016 extended end 2027-01-13 06:59:59 PT (Unix 1799852399). Samba DCs report
+  operatingSystem 'Samba' and are out of scope here.
+condition_cel: '(flags(obj, "userAccountControl", 8192) || flags(obj, "userAccountControl", 67108864)) && (attr(obj, "operatingSystem").lowerAscii().contains("2000") || attr(obj, "operatingSystem").lowerAscii().contains("2003") || attr(obj, "operatingSystem").lowerAscii().contains("2008") || attr(obj, "operatingSystem").lowerAscii().contains("2012") || (attr(obj, "operatingSystem").lowerAscii().contains("2016") && obj.now > 1799852399))'
+expect:
+- CN=OLDDC,OU=Domain Controllers,DC=lab,DC=example

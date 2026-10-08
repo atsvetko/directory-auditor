@@ -1,0 +1,51 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0042
+title:
+  en: 'The built-in Guest account is enabled'
+  ru: 'Встроенная учётная запись Guest включена'
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'The built-in Guest account (RID 501): userAccountControl'
+attributes:
+- userAccountControl
+- sAMAccountName
+- objectSid
+condition: >-
+  The domain's built-in Guest account (relative identifier 501) is not disabled.
+threshold: any occurrence
+rationale: >-
+  Guest is designed for unauthenticated, anonymous-style access and usually has no password. When it is
+  enabled, anyone can obtain a session in the domain and reach whatever Guest or Everyone can read.
+remediation:
+  en: >-
+    Disable the Guest account. It is disabled by default and is not needed in a managed domain.
+  ru: >-
+    Отключите учётную запись Guest. Она отключена по умолчанию и не нужна в управляемом домене.
+attack:
+- id: T1078.001
+  name: 'Valid Accounts: Default Accounts'
+anssi:
+- vuln_guest
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: '(sAMAccountType=805306368)'
+references:
+- title: 'Microsoft Learn — Well-known security identifiers'
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-identifiers
+- title: 'Microsoft Learn — UserAccountControl property flags'
+  url: https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties
+- title: 'MITRE ATT&CK — T1078.001 Valid Accounts: Default Accounts'
+  url: https://attack.mitre.org/techniques/T1078/001/
+notes: >-
+  Matched by RID 501, so a renamed Guest account is still found.
+condition_cel: 'sid_rid(attr(obj, "objectSid")) == 501 && !flags(obj, "userAccountControl", 2)'
+expect:
+- CN=Guest,CN=Users,DC=lab,DC=example

@@ -1,0 +1,56 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0032
+title:
+  en: 'Domain controller machine password unchanged for more than 45 days'
+  ru: 'Пароль машинной учётной записи контроллера домена не менялся более 45 дней'
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'Domain controller computer accounts: pwdLastSet'
+attributes:
+- pwdLastSet
+- userAccountControl
+- sAMAccountName
+condition: >-
+  A domain controller's machine account password (pwdLastSet) is older than 45 days. Domain members
+  change it every 30 days by default, so 45 days leaves room for a missed cycle.
+threshold: any occurrence
+rationale: >-
+  A domain controller rotates its own machine password on a fixed cycle. A password that stopped
+  changing means rotation is broken, the DC is offline, or it was restored from an old backup — and the
+  secret that signs the DC's Kerberos service tickets stays valid far longer than intended, which widens
+  the window for forged service tickets.
+remediation:
+  en: >-
+    Find out why rotation stopped on each listed DC: check that it is online, replicating and able to
+    reach another DC. Repair replication, or reset the machine account password with the supported
+    tooling. Remove DCs that are no longer in service.
+  ru: >-
+    Выясните, почему на каждом найденном контроллере домена остановилась смена пароля: проверьте, что он
+    доступен, реплицируется и видит другой контроллер домена. Восстановите репликацию или сбросьте пароль
+    машинной учётной записи штатными средствами. Удалите контроллеры домена, выведенные из эксплуатации.
+attack:
+- id: T1558.002
+  name: 'Steal or Forge Kerberos Tickets: Silver Ticket'
+anssi:
+- vuln_password_change_dc_no_change
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: '(sAMAccountType=805306369)'
+references:
+- title: 'Microsoft Learn — Domain member: Maximum machine account password age'
+  url: https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/security-policy-settings/domain-member-maximum-machine-account-password-age
+- title: 'MITRE ATT&CK — T1558.002 Silver Ticket'
+  url: https://attack.mitre.org/techniques/T1558/002/
+notes: >-
+  Threshold 45 days: the default machine password age is 30 days.
+condition_cel: '(flags(obj, "userAccountControl", 8192) || flags(obj, "userAccountControl", 67108864)) && age_days(obj, "pwdLastSet") > 45'
+expect:
+- CN=STALEDC,OU=Domain Controllers,DC=lab,DC=example

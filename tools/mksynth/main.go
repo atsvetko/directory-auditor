@@ -16,6 +16,16 @@ import (
 	"github.com/atsvetko/directory-auditor/internal/snapshot"
 )
 
+// oversized returns 11 placeholder member DNs: enough to exceed the DSA-0035
+// threshold without turning real lab accounts into Tier-0 principals.
+func oversized(base string) []string {
+	out := make([]string, 11)
+	for i := range out {
+		out[i] = fmt.Sprintf("CN=bo-%02d,OU=Operators,%s", i+1, base)
+	}
+	return out
+}
+
 func main() {
 	out := flag.String("out", "testdata/synthetic-lab.json.zst", "output path (AD lab)")
 	ipaOut := flag.String("freeipa-out", "testdata/synthetic-freeipa.json.zst", "output path (FreeIPA lab)")
@@ -84,10 +94,15 @@ func main() {
 		{"mig.user", "", "512", "1114", 60, map[string][]string{"sIDHistory": {"S-1-5-21-9-8-7-1055"}}}, // DSA-0017
 		{"des.user", "", "2097664", "1115", 60, nil},                                                    // DSA-0012 USE_DES_KEY_ONLY
 		{"t.contractor", "temp account, password=Welcome1!", "512", "1116", 30, nil},                    // DSA-0028 cleartext secret in description
+		// ANSSI wave 1 (DSA-0030…0044). Flags chosen so each object trips only its target checks.
+		{"hidden.da", "", "1049088", "1117", 10, map[string][]string{"primaryGroupID": {"512"}}},      // DSA-0034/0044: primary group = Domain Admins (NOT_DELEGATED keeps DSA-0007 quiet)
+		{"dormant.user", "", "512", "1118", 30, map[string][]string{"lastLogonTimestamp": {ft(400)}}}, // DSA-0036: no logon for 400 days
+		{"Guest", "", "512", "501", 30, map[string][]string{"primaryGroupID": {"514"}}},               // DSA-0042: built-in Guest enabled
 	}
 	for _, u := range users {
 		attrs := map[string][]string{"sAMAccountName": {u.name}, "userAccountControl": {u.uac}, "pwdLastSet": {ft(u.pwdAge)},
-			"objectSid": {dom + "-" + u.rid}, "primaryGroupID": {"513"}, "whenCreated": {"20200115100000.0Z"}, "sAMAccountType": {"805306368"}}
+			"objectSid": {dom + "-" + u.rid}, "primaryGroupID": {"513"}, "whenCreated": {"20200115100000.0Z"}, "sAMAccountType": {"805306368"},
+			"lastLogonTimestamp": {ft(5)}}
 		if u.desc != "" {
 			attrs["description"] = []string{u.desc}
 		}
@@ -108,8 +123,9 @@ func main() {
 		{"Tier0 Ops", dom + "-1200", []string{"CN=svc_backup,CN=Users," + base}, ""},
 		{"Helpdesk", dom + "-1201", []string{"CN=j.doe,CN=Users," + base}, ""},
 		{"Domain Controllers", dom + "-516", nil, ""},
-		{"Backup Operators", "S-1-5-32-551", nil, ""},
-		{"DnsAdmins", dom + "-1101", []string{"CN=j.doe,CN=Users," + base}, ""}, // DSA-0027: DLL-load to SYSTEM on the DC
+		{"Backup Operators", "S-1-5-32-551", oversized(base), ""}, // DSA-0035: 11 direct members (members are placeholders, not collected)
+		{"Pre-Windows 2000 Compatible Access", "S-1-5-32-554", []string{"CN=S-1-5-7,CN=ForeignSecurityPrincipals," + base, "CN=S-1-5-11,CN=ForeignSecurityPrincipals," + base}, ""}, // DSA-0038/0039: Anonymous added
+		{"DnsAdmins", dom + "-1101", []string{"CN=j.doe,CN=Users," + base}, ""},                                                                                                     // DSA-0027: DLL-load to SYSTEM on the DC
 	}
 	for _, g := range groups {
 		attrs := map[string][]string{"sAMAccountName": {g.name}, "objectSid": {g.sid}, "description": {g.name + " (synthetic)"}}
@@ -138,6 +154,20 @@ func main() {
 	add("CN=APP01,OU=Servers,"+base, computer, // DSA-0004 unconstrained delegation
 		map[string][]string{"sAMAccountName": {"APP01$"}, "objectSid": {dom + "-1001"}, "primaryGroupID": {"515"}, "sAMAccountType": {"805306369"},
 			"dNSHostName": {"app01.lab.example"}, "operatingSystem": {"Windows Server 2019"}, "userAccountControl": {"528384"}, "pwdLastSet": {ft(12)}})
+	for _, c := range []struct {
+		name, ou, rid, pg, os, uac string
+		pwd, logon                 int
+	}{
+		{"OLDDC", "OU=Domain Controllers", "1003", "516", "Windows Server 2012 R2 Standard", "532480", 5, 3},      // DSA-0031 obsolete OS
+		{"STALEDC", "OU=Domain Controllers", "1004", "516", "Windows Server 2022 Datacenter", "532480", 200, 200}, // DSA-0032 password 200 d, DSA-0033 no logon 200 d
+		{"BADDC", "OU=Domain Controllers", "1005", "516", "Windows Server 2022 Datacenter", "4096", 5, 3},         // DSA-0030 primary group 516 without SERVER_TRUST_ACCOUNT
+		{"FS01", "OU=Servers", "1006", "515", "Windows Server 2022 Standard", "4096", 200, 3},                     // DSA-0043 server password 200 d
+	} {
+		add(fmt.Sprintf("CN=%s,%s,%s", c.name, c.ou, base), computer, map[string][]string{
+			"sAMAccountName": {c.name + "$"}, "objectSid": {dom + "-" + c.rid}, "primaryGroupID": {c.pg}, "sAMAccountType": {"805306369"},
+			"dNSHostName": {strings.ToLower(c.name) + ".lab.example"}, "operatingSystem": {c.os}, "userAccountControl": {c.uac},
+			"pwdLastSet": {ft(c.pwd)}, "lastLogonTimestamp": {ft(c.logon)}})
+	}
 	add("CN=WS01,CN=Computers,"+base, computer,
 		map[string][]string{"sAMAccountName": {"WS01$"}, "objectSid": {dom + "-1002"}, "primaryGroupID": {"515"}, "sAMAccountType": {"805306369"},
 			"userAccountControl": {"4096"}, "pwdLastSet": {ft(5)}, "ms-DS-CreatorSID": {dom + "-1105"}})

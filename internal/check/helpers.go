@@ -137,6 +137,14 @@ func helperOptions() []cel.EnvOption {
 					}
 					return types.NewRefValList(types.DefaultTypeAdapter, out)
 				}))),
+		// sidexists(sid): an object with this objectSid was collected. Lets a
+		// check look for a well-known account or group by RID instead of by a
+		// DN that an administrator can rename or move.
+		cel.Function("sidexists",
+			cel.Overload("sidexists_string", []*cel.Type{cel.StringType}, cel.BoolType,
+				cel.UnaryBinding(func(s ref.Val) ref.Val {
+					return types.Bool(currentSIDs[strings.ToUpper(string(s.(types.String)))])
+				}))),
 		cel.Function("objexists",
 			cel.Overload("objexists_string", []*cel.Type{cel.StringType}, cel.BoolType,
 				cel.UnaryBinding(func(dn ref.Val) ref.Val {
@@ -270,14 +278,20 @@ func aceVals(o ref.Val, attr string) ref.Val {
 // under evalMu like currentTier0.
 var (
 	currentIndex map[string]*snapshot.Object
+	currentSIDs  map[string]bool
 	currentBase  string
 )
 
 func indexSnapshot(snap *snapshot.Snapshot) map[string]*snapshot.Object {
 	idx := make(map[string]*snapshot.Object, len(snap.Objects))
+	sids := make(map[string]bool, len(snap.Objects))
 	for i := range snap.Objects {
 		idx[strings.ToLower(snap.Objects[i].DN)] = &snap.Objects[i]
+		if sid := snap.Objects[i].Attr("objectSid"); sid != "" {
+			sids[strings.ToUpper(sid)] = true
+		}
 	}
+	currentSIDs = sids
 	return idx
 }
 

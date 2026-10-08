@@ -12,13 +12,13 @@ sources; this page only maps identifiers. A point is **covered** when an entry d
 
 | ANSSI level | Points | Covered | Partial | Covered + partial |
 |---|---:|---:|---:|---:|
-| 1 | 37 | 14 | 3 | 46% |
-| 2 | 18 | 4 | 0 | 22% |
-| 3 | 17 | 3 | 2 | 29% |
+| 1 | 37 | 22 | 3 | 68% |
+| 2 | 18 | 9 | 0 | 50% |
+| 3 | 17 | 5 | 2 | 41% |
 | 4 | 4 | 1 | 0 | 25% |
-| **All** | **76** | **22** | **5** | **36%** |
+| **All** | **76** | **37** | **5** | **55%** |
 
-Remaining points by wave: wave 1 (level-1/2 on current collection) 15 · wave 2 (level-1/2 needing a targeted read) 16 · wave 3 (level-3/4) 15 · wave 4 (AD CS) 6 · wave 5 (DNS) 2.
+Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 16 · wave 3 (level-3/4) 15 · wave 4 (AD CS) 6 · wave 5 (DNS) 2.
 
 ## Control points
 
@@ -28,9 +28,9 @@ Remaining points by wave: wave 1 (level-1/2 on current collection) 15 · wave 2 
 | 1 | `vuln_adcs_template_auth_enroll_with_name` | Dangerous enrollment permission on authentication certificate templates | ⬜ planned | wave 4 — needs certificate template flags, EKUs and enrolment rights |
 | 1,2 | `vuln_adcs_template_control` | Dangerous ACLs expose certificate template objects (attack path) | ⬜ planned | wave 4 — needs certificate template objects and their DACLs |
 | 1,2,3 | `vuln_certificates_vuln` | Weak or vulnerable certificates | ⬜ planned | wave 4 — needs certificate parsing (CA and NTAuth certificates: key size, signature algorithm) |
-| 1 | `vuln_critical_objects` | Critical objects unavailable | ⬜ planned | wave 1 — krbtgt, AdminSDHolder or Domain Admins missing from the read |
-| 1 | `vuln_dc_inconsistent_uac` | Domain controllers in inconsistent state | ⬜ planned | wave 1 — DC computer accounts whose UAC, primaryGroupID or location disagree |
-| 1 | `vuln_dc_obsolete` | DC/RODC with an obsolete operating system | ⬜ planned | wave 1 — DC operatingSystem out of vendor support |
+| 1 | `vuln_critical_objects` | Critical objects unavailable | ✅ covered | DSA-0037 |
+| 1 | `vuln_dc_inconsistent_uac` | Domain controllers in inconsistent state | ✅ covered | DSA-0030 |
+| 1 | `vuln_dc_obsolete` | DC/RODC with an obsolete operating system | ✅ covered | DSA-0031 |
 | 1 | `vuln_delegation_a2d2` | Constrained authentication delegation to privileged service | ✅ covered | DSA-0005 |
 | 1 | `vuln_delegation_sourcedeleg` | Resource-based constrained delegation on privileged services | ✅ covered | DSA-0006 |
 | 1 | `vuln_delegation_t2a4d` | Constrained delegation with protocol transition to a privileged service | ✅ covered | DSA-0005 |
@@ -42,8 +42,8 @@ Remaining points by wave: wave 1 (level-1/2 on current collection) 15 · wave 2 
 | 1,2,3 | `vuln_dsheuristics_bad` | Dangerous dsHeuristics settings | 🟡 partial | DSA-0025 — wave 2: DSA-0025 covers anonymous operations; other dangerous dSHeuristics flags to add (MS-ADTS) |
 | 1,3,4 | `vuln_functional_level` | Insufficient forest and domains functional levels | 🟡 partial | DSA-0024 — wave 2: DSA-0024 covers the domain level; forest level to add from rootDSE |
 | 1 | `vuln_kerberos_properties_preauth_priv` | Kerberos preauthentication disabled for privileged accounts | ✅ covered | DSA-0001 |
-| 1 | `vuln_password_change_dc_no_change` | Domain controllers with passwords unchanged for more than 45 days | ⬜ planned | wave 1 — DC machine password older than 45 days |
-| 1 | `vuln_password_change_inactive_dc` | Inactive domain controllers | ⬜ planned | wave 1 — DC without a recent logon (lastLogonTimestamp) |
+| 1 | `vuln_password_change_dc_no_change` | Domain controllers with passwords unchanged for more than 45 days | ✅ covered | DSA-0032 |
+| 1 | `vuln_password_change_inactive_dc` | Inactive domain controllers | ✅ covered | DSA-0033 |
 | 1 | `vuln_password_change_priv` | Privileged account passwords age too old | ✅ covered | DSA-0009 |
 | 1,2 | `vuln_permissions_adminsdholder` | Dangerous permissions on the adminSDHolder object | ✅ covered | DSA-0016 |
 | 1,2 | `vuln_permissions_dc` | Dangerous ACLs expose domain controller objects (attack path) | ✅ covered | DSA-0015 |
@@ -54,37 +54,37 @@ Remaining points by wave: wave 1 (level-1/2 on current collection) 15 · wave 2 
 | 1 | `vuln_permissions_msdns` | Dangerous ACLs expose MicrosoftDNS server objects (attack path) | ⬜ planned | wave 5 — needs MicrosoftDNS server and zone objects and their DACLs |
 | 1,2 | `vuln_permissions_naming_context` | Dangerous ACLs expose a naming context root (attack path) | ✅ covered | DSA-0014, DSA-0015 |
 | 1,2 | `vuln_permissions_schema` | Dangerous ACLs expose schema objects (attack path) | ⬜ planned | wave 4 — needs schema partition objects and their DACLs |
-| 1 | `vuln_primary_group_id_1000` | Accounts with PrimaryGroupID lower than 1000 | ⬜ planned | wave 1 — primaryGroupID below 1000 hides membership of a built-in privileged group |
-| 1,2 | `vuln_privileged_members` | Large privileged group member count | ⬜ planned | wave 1 — privileged group with an unusually large direct membership |
+| 1 | `vuln_primary_group_id_1000` | Accounts with PrimaryGroupID lower than 1000 | ✅ covered | DSA-0034 |
+| 1,2 | `vuln_privileged_members` | Large privileged group member count | ✅ covered | DSA-0035 |
 | 1,2 | `vuln_privileged_members_perm` | Dangerous ACLs expose members of privileged groups (attack path) | ✅ covered | DSA-0015 |
 | 1 | `vuln_spn_priv` | Privileged accounts with SPN | ✅ covered | DSA-0002 |
 | 1 | `vuln_trusts_domain_notfiltered` | Unfiltered outbound domain trust relationship | ✅ covered | DSA-0018 |
 | 1 | `vuln_trusts_forest_sidhistory` | Outbound forest trust relationships with sID History enabled | ✅ covered | DSA-0018 |
-| 1 | `vuln_user_accounts_dormant` | Dormant accounts | ⬜ planned | wave 1 — enabled accounts with no logon for a long time |
+| 1 | `vuln_user_accounts_dormant` | Dormant accounts | ✅ covered | DSA-0036 |
 | 2 | `vuln_adupdate_bad` | Bad Active Directory versions | ⬜ planned | wave 2 — needs schema and forest/domain preparation versions |
-| 2 | `vuln_compatible_2000_anonymous` | The "Pre-Windows 2000 Compatible Access" group includes "Anonymous" | ⬜ planned | wave 1 — Pre-Windows 2000 Compatible Access contains Anonymous or Everyone |
+| 2 | `vuln_compatible_2000_anonymous` | The "Pre-Windows 2000 Compatible Access" group includes "Anonymous" | ✅ covered | DSA-0038 |
 | 2,3,4 | `vuln_dc_crypto` | DC/RODC supported encryption algorithms | ⬜ planned | wave 2 — msDS-SupportedEncryptionTypes on DC accounts (extends DSA-0012) |
-| 2 | `vuln_dont_expire` | Accounts with never-expiring passwords | ⬜ planned | wave 1 — enabled accounts set never to expire their password |
-| 2 | `vuln_guest` | Guest account enabled | ⬜ planned | wave 1 — built-in Guest account enabled |
+| 2 | `vuln_dont_expire` | Accounts with never-expiring passwords | ✅ covered | DSA-0041 |
+| 2 | `vuln_guest` | Guest account enabled | ✅ covered | DSA-0042 |
 | 2 | `vuln_kerberos_properties_deskey` | Use of Kerberos with weak encryption | ✅ covered | DSA-0012 |
 | 2 | `vuln_kerberos_properties_preauth` | Kerberos preauthentication disabled | ✅ covered | DSA-0001 |
 | 2 | `vuln_krbtgt` | Krbtgt account password unchanged for more than a year | ✅ covered | DSA-0008 |
 | 2 | `vuln_password_change_cluster_no_change_3years` | Windows server cluster accounts with passwords unchanged for more than 3 years | ⬜ planned | wave 2 — cluster name objects identified by their SPNs |
 | 2 | `vuln_password_change_msa_no_change_90` | Managed service accounts with passwords unchanged for more than 90 days | ⬜ planned | wave 2 — needs managed service accounts (msDS-ManagedServiceAccount / msDS-GroupManagedServiceAccount) |
-| 2 | `vuln_password_change_server_no_change_90` | Servers with passwords unchanged for more than 90 days | ⬜ planned | wave 1 — server machine password older than 90 days |
+| 2 | `vuln_password_change_server_no_change_90` | Servers with passwords unchanged for more than 90 days | ✅ covered | DSA-0043 |
 | 2 | `vuln_permissions_gpo_container_priv` | Dangerous ACLs expose privileged object containers (attack path) | ⬜ planned | wave 2 — needs DACLs of OUs and containers holding privileged objects |
-| 2 | `vuln_privileged_members_no_admincount` | Privileged groups members having an adminCount attribute which is null or 0 | ⬜ planned | wave 1 — Tier-0 member without adminCount=1 (AdminSDHolder not applied) |
+| 2 | `vuln_privileged_members_no_admincount` | Privileged groups members having an adminCount attribute which is null or 0 | ✅ covered | DSA-0040, DSA-0221 |
 | 2 | `vuln_privileged_members_password` | Privileged group members with weak password policy | ⬜ planned | wave 2 — needs fine-grained password policies (msDS-PasswordSettings) and their targets |
 | 2 | `vuln_rodc_priv_revealed` | Privileged users revealed on RODC | ⬜ planned | wave 2 — needs RODC revealed lists (msDS-RevealedList) |
 | 2 | `vuln_sidhistory_dangerous` | Accounts or groups with unexpected SID history | ✅ covered | DSA-0017 |
 | 2 | `vuln_sysvol_ntfrs` | SYSVOL replication through NTFRS | ⬜ planned | wave 2 — needs DFSR migration state / NTFRS replica set objects |
 | 2 | `vuln_trusts_accounts` | Trust account passwords unchanged for more than a year | ⬜ planned | wave 2 — interdomain trust accounts (TRUSTDOMAIN$) password age |
-| 3 | `vuln_compatible_2000_not_default` | Use of the "Pre-Windows 2000 Compatible Access" group | ⬜ planned | wave 1 — Pre-Windows 2000 Compatible Access has any member beyond the default |
+| 3 | `vuln_compatible_2000_not_default` | Use of the "Pre-Windows 2000 Compatible Access" group | ✅ covered | DSA-0039 |
 | 3 | `vuln_kerberos_properties_encryption` | Service accounts supported encryption algorithms | 🟡 partial | DSA-0003, DSA-0012 — wave 3: DSA-0003/0012 cover weak types; ANSSI checks service accounts' declared types |
 | 3 | `vuln_owner` | Incorrect object owners | ⬜ planned | wave 3 — needs owner part of security descriptors (SD_FLAGS owner) |
 | 3 | `vuln_password_change_inactive_servers` | Inactive servers | ⬜ planned | wave 3 — server accounts with no recent logon |
 | 3 | `vuln_password_change_server_no_change_45` | Servers with passwords unchanged for more than 45 days | ⬜ planned | wave 3 — server machine password older than 45 days (stricter level-3 threshold) |
-| 3 | `vuln_primary_group_id_nochange` | Accounts with modified PrimaryGroupID | ⬜ planned | wave 1 — primaryGroupID changed from the default for the account type |
+| 3 | `vuln_primary_group_id_nochange` | Accounts with modified PrimaryGroupID | ✅ covered | DSA-0044 |
 | 3 | `vuln_protected_users` | Privileged accounts outside of the Protected Users group | 🟡 partial | DSA-0007 — wave 3: DSA-0007 covers delegation protection; ANSSI checks Protected Users membership itself |
 | 3 | `vuln_reversible_password_priv_namingcontext` | [BETA] Passwords stored in cleartext because of a configuration at the naming context root | ⬜ planned | wave 3 — domain pwdProperties DOMAIN_PASSWORD_STORE_CLEARTEXT |
 | 3 | `vuln_reversible_password_priv_uac` | Privileged accounts with passwords stored using reversible encryption | ✅ covered | DSA-0011 |

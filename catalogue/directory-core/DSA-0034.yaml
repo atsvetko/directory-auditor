@@ -1,0 +1,62 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0034
+title:
+  en: 'Accounts whose primary group is a built-in privileged group'
+  ru: 'Учётные записи, основная группа которых — встроенная привилегированная группа'
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'User and computer accounts: primaryGroupID'
+attributes:
+- primaryGroupID
+- sAMAccountName
+- objectSid
+condition: >-
+  An account's primaryGroupID is a well-known group RID below 1000 other than the expected defaults: 513
+  Domain Users, 514 Domain Guests, 515 Domain Computers, 516 Domain Controllers and 521 Read-only Domain
+  Controllers. A primaryGroupID of 512, for example, makes the account a member of Domain Admins.
+threshold: any occurrence
+rationale: >-
+  Membership through the primary group is not recorded in the group's member attribute, so the account
+  does not appear when someone lists the group's members, and AdminSDHolder does not protect it. Setting
+  an account's primary group to a privileged group is therefore a way to hold that privilege while
+  staying invisible in the usual reviews.
+remediation:
+  en: >-
+    Reset each listed account's primary group to its default (Domain Users for users, Domain Computers for
+    computers). If the account genuinely needs the privilege, grant it through ordinary, visible group
+    membership instead and review whether it needs it at all.
+  ru: >-
+    Верните каждой найденной учётной записи основную группу по умолчанию (Domain Users для пользователей,
+    Domain Computers для компьютеров). Если привилегия действительно нужна, выдайте её через обычное,
+    видимое членство в группе и проверьте, нужна ли она вообще.
+attack:
+- id: T1098
+  name: 'Account Manipulation'
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+anssi:
+- vuln_primary_group_id_1000
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: '(|(sAMAccountType=805306368)(sAMAccountType=805306369))'
+references:
+- title: 'Microsoft Learn — Primary-Group-ID attribute'
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-primarygroupid
+- title: 'Microsoft Learn — Active Directory security groups'
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups
+- title: 'MITRE ATT&CK — T1098 Account Manipulation'
+  url: https://attack.mitre.org/techniques/T1098/
+notes: >-
+  The Tier-0 inventory already resolves primary-group membership; this entry reports the hiding
+  technique itself.
+condition_cel: 'hasattr(obj, "primaryGroupID") && intattr(obj, "primaryGroupID") < 1000 && !(intattr(obj, "primaryGroupID") in [513, 514, 515, 516, 521])'
+expect:
+- CN=hidden.da,CN=Users,DC=lab,DC=example

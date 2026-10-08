@@ -1,0 +1,54 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0044
+title:
+  en: 'Accounts whose primary group was changed from the default'
+  ru: 'Учётные записи с изменённой основной группой'
+domain: directory-core
+tier: 0
+severity: low
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'User and member-computer accounts: primaryGroupID'
+attributes:
+- primaryGroupID
+- sAMAccountName
+- objectSid
+condition: >-
+  A user's primaryGroupID is not Domain Users (513), except Domain Guests (514) for the built-in Guest
+  account; or a computer that is not a domain controller has a primaryGroupID other than Domain
+  Computers (515). Domain controllers are checked by DSA-0030.
+threshold: any occurrence
+rationale: >-
+  The primary group is rarely changed on purpose, and membership through it does not show in the group's
+  member list. Any change hides a membership from ordinary reviews; DSA-0034 reports the case where the
+  hidden group is privileged.
+remediation:
+  en: >-
+    Reset each listed account's primary group to its default and grant any membership it needs through the
+    group's member list.
+  ru: >-
+    Верните каждой найденной учётной записи основную группу по умолчанию, а нужное членство выдайте через
+    список участников группы.
+attack:
+- id: T1098
+  name: 'Account Manipulation'
+anssi:
+- vuln_primary_group_id_nochange
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: '(|(sAMAccountType=805306368)(sAMAccountType=805306369))'
+references:
+- title: 'Microsoft Learn — Primary-Group-ID attribute'
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-primarygroupid
+- title: 'Microsoft Learn — Active Directory security groups'
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups
+notes: >-
+  ANSSI level 3. Computers with 516 or 521 but no DC flags are reported by DSA-0030.
+condition_cel: 'hasattr(obj, "primaryGroupID") && !flags(obj, "userAccountControl", 8192) && !flags(obj, "userAccountControl", 67108864) && ((attr(obj, "sAMAccountType") == "805306368" && intattr(obj, "primaryGroupID") != 513 && !(sid_rid(attr(obj, "objectSid")) == 501 && intattr(obj, "primaryGroupID") == 514)) || (attr(obj, "sAMAccountType") == "805306369" && !(intattr(obj, "primaryGroupID") in [515, 516, 521])))'
+expect:
+- CN=hidden.da,CN=Users,DC=lab,DC=example

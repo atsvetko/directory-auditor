@@ -1,0 +1,56 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0036
+title:
+  en: 'Dormant enabled user accounts'
+  ru: 'Неиспользуемые включённые учётные записи пользователей'
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'Enabled user accounts: lastLogonTimestamp'
+attributes:
+- lastLogonTimestamp
+- whenCreated
+- userAccountControl
+- sAMAccountName
+condition: >-
+  An enabled user account (not krbtgt) has not logged on for more than 180 days, or has never logged on
+  and was created more than 180 days ago.
+threshold: any occurrence
+rationale: >-
+  Accounts nobody uses are not watched: their passwords are not changed, their owners have often left,
+  and a logon with them goes unnoticed. They are a favoured target for password spraying and for
+  persistence after a compromise.
+remediation:
+  en: >-
+    Confirm with the owner whether each listed account is still needed. Disable those that are not, wait
+    for a retention period, then delete them. Put an automated process in place that disables accounts
+    after a defined period of inactivity.
+  ru: >-
+    Уточните у владельца, нужна ли ещё каждая найденная учётная запись. Отключите ненужные, выдержите срок
+    хранения, затем удалите их. Настройте автоматическое отключение учётных записей после установленного
+    срока неактивности.
+attack:
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+anssi:
+- vuln_user_accounts_dormant
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: '(sAMAccountType=805306368)'
+references:
+- title: 'Microsoft Learn — Last-Logon-Timestamp attribute'
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-lastlogontimestamp
+- title: 'MITRE ATT&CK — T1078.002 Valid Accounts: Domain Accounts'
+  url: https://attack.mitre.org/techniques/T1078/002/
+notes: >-
+  Threshold 180 days, to be calibrated; lastLogonTimestamp lags real activity by up to about 14 days.
+condition_cel: '!flags(obj, "userAccountControl", 2) && sid_rid(attr(obj, "objectSid")) != 502 && ((hasattr(obj, "lastLogonTimestamp") && age_days(obj, "lastLogonTimestamp") > 180) || (!hasattr(obj, "lastLogonTimestamp") && age_days(obj, "whenCreated") > 180))'
+expect:
+- CN=dormant.user,CN=Users,DC=lab,DC=example

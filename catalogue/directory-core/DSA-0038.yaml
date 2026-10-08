@@ -1,0 +1,56 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0038
+title:
+  en: 'Anonymous or Everyone in Pre-Windows 2000 Compatible Access'
+  ru: 'Anonymous или Everyone в группе Pre-Windows 2000 Compatible Access'
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'The Pre-Windows 2000 Compatible Access group (S-1-5-32-554): member'
+attributes:
+- member
+- objectSid
+condition: >-
+  The built-in group Pre-Windows 2000 Compatible Access (SID S-1-5-32-554) contains Anonymous Logon
+  (S-1-5-7) or Everyone (S-1-1-0).
+threshold: any occurrence
+rationale: >-
+  The group grants its members read access to user and group information across the domain. With
+  Anonymous or Everyone in it, an unauthenticated client can enumerate accounts, groups and their
+  attributes, which gives an attacker a full map of the domain before holding any credentials.
+remediation:
+  en: >-
+    Remove Anonymous Logon and Everyone from Pre-Windows 2000 Compatible Access. Before doing so, identify
+    any legacy system that relies on anonymous enumeration and give it an authenticated account instead.
+  ru: >-
+    Удалите Anonymous Logon и Everyone из группы Pre-Windows 2000 Compatible Access. Перед этим найдите
+    устаревшие системы, которые полагаются на анонимное перечисление, и выдайте им вместо этого учётную
+    запись с проверкой подлинности.
+attack:
+- id: T1087.002
+  name: 'Account Discovery: Domain Account'
+anssi:
+- vuln_compatible_2000_anonymous
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: '(objectClass=group)'
+references:
+- title: 'Microsoft Learn — Well-known security identifiers'
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-identifiers
+- title: 'Microsoft Learn — Active Directory security groups'
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups
+- title: 'MITRE ATT&CK — T1087.002 Account Discovery: Domain Account'
+  url: https://attack.mitre.org/techniques/T1087/002/
+notes: >-
+  Well-known SIDs appear as foreign security principals (CN=<SID>,CN=ForeignSecurityPrincipals) in the
+  member attribute.
+condition_cel: 'attr(obj, "objectSid") == "S-1-5-32-554" && attrs(obj, "member").exists(m, m.lowerAscii().startsWith("cn=s-1-5-7,") || m.lowerAscii().startsWith("cn=s-1-1-0,"))'
+expect:
+- CN=Pre-Windows 2000 Compatible Access,CN=Builtin,DC=lab,DC=example

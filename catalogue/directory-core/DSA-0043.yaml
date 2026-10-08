@@ -1,0 +1,56 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0043
+title:
+  en: 'Server machine password unchanged for more than 90 days'
+  ru: 'Пароль машинной учётной записи сервера не менялся более 90 дней'
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'Enabled server computer accounts (not domain controllers): pwdLastSet'
+attributes:
+- pwdLastSet
+- operatingSystem
+- userAccountControl
+- sAMAccountName
+condition: >-
+  An enabled computer account that is not a domain controller and reports a Windows Server operating
+  system has a machine password (pwdLastSet) older than 90 days.
+threshold: any occurrence
+rationale: >-
+  Servers rotate their machine password every 30 days by default. One that has stopped is either
+  offline, cut off from a domain controller, or has rotation disabled — and its unchanged secret keeps
+  signing service tickets for the server's services long after it should have been replaced.
+remediation:
+  en: >-
+    For each listed server, check whether it is still in service. Remove stale computer objects; for live
+    servers, restore communication with a domain controller or re-enable machine password changes, then
+    confirm the password rotates.
+  ru: >-
+    Для каждого найденного сервера проверьте, эксплуатируется ли он ещё. Удалите устаревшие объекты
+    компьютеров; для работающих серверов восстановите связь с контроллером домена или снова включите смену
+    машинного пароля и убедитесь, что пароль меняется.
+attack:
+- id: T1558.002
+  name: 'Steal or Forge Kerberos Tickets: Silver Ticket'
+anssi:
+- vuln_password_change_server_no_change_90
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: '(sAMAccountType=805306369)'
+references:
+- title: 'Microsoft Learn — Domain member: Maximum machine account password age'
+  url: https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/security-policy-settings/domain-member-maximum-machine-account-password-age
+- title: 'MITRE ATT&CK — T1558.002 Silver Ticket'
+  url: https://attack.mitre.org/techniques/T1558/002/
+notes: >-
+  ANSSI tightens the threshold to 45 days at level 3 (planned).
+condition_cel: '!flags(obj, "userAccountControl", 8192) && !flags(obj, "userAccountControl", 67108864) && !flags(obj, "userAccountControl", 2) && attr(obj, "operatingSystem").lowerAscii().contains("server") && age_days(obj, "pwdLastSet") > 90'
+expect:
+- CN=FS01,OU=Servers,DC=lab,DC=example

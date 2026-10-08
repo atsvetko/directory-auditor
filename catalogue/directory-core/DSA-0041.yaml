@@ -1,0 +1,61 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0041
+title:
+  en: 'Enabled accounts whose password never expires'
+  ru: 'Включённые учётные записи с бессрочным паролем'
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'Enabled user accounts: userAccountControl'
+attributes:
+- userAccountControl
+- pwdLastSet
+- sAMAccountName
+condition: >-
+  An enabled user account (not krbtgt) has DONT_EXPIRE_PASSWORD (0x10000) set in userAccountControl.
+  Privileged accounts are reported in addition by DSA-0009.
+threshold: any occurrence
+rationale: >-
+  A password that never expires is never forced to change, so a password leaked or cracked once stays
+  valid indefinitely. These accounts are often service accounts with old, guessable passwords and broad
+  access.
+remediation:
+  en: >-
+    Clear DONT_EXPIRE_PASSWORD on each listed account and let the domain password policy apply. For
+    service accounts, use group managed service accounts, which rotate their passwords automatically,
+    instead of a fixed password.
+  ru: >-
+    Снимите флаг DONT_EXPIRE_PASSWORD у каждой найденной учётной записи, чтобы на неё действовала политика
+    паролей домена. Для служебных учётных записей используйте групповые управляемые служебные учётные
+    записи (gMSA) с автоматической сменой пароля вместо постоянного пароля.
+attack:
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+- id: T1110
+  name: 'Brute Force'
+anssi:
+- vuln_dont_expire
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: '(sAMAccountType=805306368)'
+references:
+- title: 'Microsoft Learn — UserAccountControl property flags'
+  url: https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties
+- title: 'MITRE ATT&CK — T1110 Brute Force'
+  url: https://attack.mitre.org/techniques/T1110/
+notes: >-
+  ANSSI level 2 for all accounts; level 1 for privileged accounts (DSA-0009).
+condition_cel: 'flags(obj, "userAccountControl", 65536) && !flags(obj, "userAccountControl", 2) && sid_rid(attr(obj, "objectSid")) != 502'
+expect:
+- CN=Administrator,CN=Users,DC=lab,DC=example
+- CN=svc_backup,CN=Users,DC=lab,DC=example
+- CN=svc_sql,CN=Users,DC=lab,DC=example
+- CN=Administrator,CN=Users,DC=samba,DC=example
+- CN=svc-backup,CN=Users,DC=samba,DC=example

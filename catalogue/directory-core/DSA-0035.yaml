@@ -1,0 +1,58 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0035
+title:
+  en: 'Privileged groups with a large direct membership'
+  ru: 'Привилегированные группы с большим числом прямых участников'
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'Tier-0 groups: member'
+attributes:
+- member
+- sAMAccountName
+condition: >-
+  A Tier-0 group has more than 10 direct members (values of its member attribute).
+threshold: any occurrence
+rationale: >-
+  Every member of a Tier-0 group can take control of the domain, so each one is an account an attacker
+  can target. Large privileged groups usually mean standing administrative rights handed out for
+  convenience rather than need, and they are hard to review. Microsoft's guidance is to keep these
+  groups empty or nearly empty and grant privilege only when it is needed.
+remediation:
+  en: >-
+    Review the membership of each listed group, remove members that do not need permanent Tier-0 rights,
+    and move routine administration to delegated, least-privilege groups. Prefer just-in-time elevation
+    over permanent membership.
+  ru: >-
+    Проверьте состав каждой найденной группы, удалите участников, которым не нужны постоянные права
+    нулевого уровня, и переведите повседневное администрирование в делегированные группы с минимальными
+    правами. Отдавайте предпочтение повышению прав по запросу, а не постоянному членству.
+attack:
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+- id: T1098
+  name: 'Account Manipulation'
+anssi:
+- vuln_privileged_members
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: '(objectClass=group)'
+references:
+- title: 'Microsoft Learn — Implementing Least-Privilege Administrative Models'
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/implementing-least-privilege-administrative-models
+- title: 'MITRE ATT&CK — T1078.002 Valid Accounts: Domain Accounts'
+  url: https://attack.mitre.org/techniques/T1078/002/
+notes: >-
+  Threshold 10 direct members, to be calibrated; nested members and primary-group members are not
+  counted here. Domain Controllers and Read-only Domain Controllers are populated through
+  primaryGroupID, so their member attribute is normally empty.
+condition_cel: 'tier0(obj) && size(attrs(obj, "member")) > 10'
+expect:
+- CN=Backup Operators,CN=Builtin,DC=lab,DC=example

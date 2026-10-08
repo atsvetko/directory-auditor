@@ -1,0 +1,60 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0037
+title:
+  en: 'Critical directory objects could not be read'
+  ru: 'Не удалось прочитать критически важные объекты каталога'
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'Domain head; presence of AdminSDHolder, krbtgt and Domain Admins in the collection'
+attributes:
+- objectSid
+condition: >-
+  On the domain head, the collection holds no AdminSDHolder object (CN=AdminSDHolder,CN=System), no
+  account with the domain's RID 502 (krbtgt) or no group with RID 512 (Domain Admins). krbtgt and Domain
+  Admins are looked up by SID, so renaming or moving them does not matter.
+threshold: any occurrence
+rationale: >-
+  These objects are present in every domain, so failing to read them means their permissions deny read
+  to ordinary users. That can be a deliberate hardening, but it also hides the most important objects
+  from any audit, which is exactly what an attacker wants after tampering with them. Either way the
+  results of this scan are incomplete for them.
+remediation:
+  en: >-
+    Check the DACLs of the missing objects and restore read access for authenticated users unless a
+    documented decision removed it. Re-run the scan; if the objects remain unreadable, run it with an
+    account that can read them.
+  ru: >-
+    Проверьте DACL отсутствующих объектов и верните право чтения для прошедших проверку пользователей,
+    если его не убрали осознанным, задокументированным решением. Повторите сканирование; если объекты по-
+    прежнему недоступны, выполните его от имени учётной записи, которая может их прочитать.
+attack:
+- id: T1564
+  name: 'Hide Artifacts'
+- id: T1222.001
+  name: 'File and Directory Permissions Modification: Windows File and Directory Permissions Modification'
+anssi:
+- vuln_critical_objects
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: '(objectClass=domainDNS)'
+references:
+- title: 'Microsoft Learn — AdminSDHolder and SDProp'
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory
+- title: 'Microsoft Learn — Well-known security identifiers'
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-identifiers
+- title: 'MITRE ATT&CK — T1564 Hide Artifacts'
+  url: https://attack.mitre.org/techniques/T1564/
+notes: >-
+  Not reproduced in the synthetic labs (every lab has the three objects); the positive path is covered
+  by a unit test that removes them. The AdminSDHolder lookup uses its fixed DN because the object cannot
+  be moved.
+condition_cel: '!objexists("CN=AdminSDHolder,CN=System," + obj.base) || !sidexists(attr(obj, "objectSid") + "-502") || !sidexists(attr(obj, "objectSid") + "-512")'
+expect: []

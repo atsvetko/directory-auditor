@@ -1,0 +1,58 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0033
+title:
+  en: 'Inactive domain controllers'
+  ru: 'Неактивные контроллеры домена'
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'Domain controller computer accounts: lastLogonTimestamp'
+attributes:
+- lastLogonTimestamp
+- userAccountControl
+- sAMAccountName
+condition: >-
+  A domain controller account has a lastLogonTimestamp older than 45 days. An active DC authenticates
+  continuously; lastLogonTimestamp is replicated only when it moves by about 14 days, so 45 days is well
+  beyond normal lag.
+threshold: any occurrence
+rationale: >-
+  A DC object that no longer logs on is usually a server that was switched off or removed without a
+  clean demotion. Its account, replication rights and server objects remain in the directory, still
+  trusted by the rest of the domain, and can be revived or impersonated.
+remediation:
+  en: >-
+    Confirm each listed DC is really out of service, then remove it properly: demote it if it can still
+    start, otherwise clean up its server metadata. Check the remaining DCs for replication errors that
+    mention it.
+  ru: >-
+    Убедитесь, что каждый найденный контроллер домена действительно выведен из эксплуатации, затем удалите
+    его корректно: понизьте роль, если он ещё запускается, иначе очистите метаданные сервера. Проверьте
+    оставшиеся контроллеры домена на ошибки репликации, связанные с ним.
+attack:
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+anssi:
+- vuln_password_change_inactive_dc
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: '(sAMAccountType=805306369)'
+references:
+- title: 'Microsoft Learn — Last-Logon-Timestamp attribute'
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-lastlogontimestamp
+- title: 'Microsoft Learn — Clean up Active Directory Domain Controller server metadata'
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/deploy/ad-ds-metadata-cleanup
+- title: 'MITRE ATT&CK — T1078.002 Valid Accounts: Domain Accounts'
+  url: https://attack.mitre.org/techniques/T1078/002/
+notes: >-
+  A DC with no lastLogonTimestamp at all is not reported here (age_days returns -1).
+condition_cel: '(flags(obj, "userAccountControl", 8192) || flags(obj, "userAccountControl", 67108864)) && age_days(obj, "lastLogonTimestamp") > 45'
+expect:
+- CN=STALEDC,OU=Domain Controllers,DC=lab,DC=example

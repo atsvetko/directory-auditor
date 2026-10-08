@@ -1,0 +1,69 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0221
+title:
+  en: 'Privileged members whose permissions Samba never resets (no AdminSDHolder protection)'
+  ru: 'Участники привилегированных групп, разрешения которых Samba никогда не восстанавливает (нет защиты AdminSDHolder)'
+domain: samba
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'Users and groups that are members of Tier-0 groups on a Samba AD DC'
+attributes:
+- adminCount
+- memberOf
+- sAMAccountName
+condition: >-
+  On a Samba AD DC, a user or group is a Tier-0 principal through the member attribute of a privileged
+  group (directly or nested). The privileged groups themselves, the built-in Administrator and krbtgt,
+  members through primaryGroupID and computer accounts are excluded, as in DSA-0040.
+threshold: any occurrence
+rationale: >-
+  On Windows, the AdminSDHolder process (SDProp) periodically overwrites the permissions of every member of
+  a protected group with a hardened template, so access an attacker grants on a privileged account is
+  removed within the hour. Samba AD DC provisions the AdminSDHolder object but implements no equivalent
+  process: it never applies that template and never sets adminCount. On Samba, a permission added to a
+  privileged member therefore stays until someone removes it by hand, which makes a quietly planted
+  backdoor on an administrator account durable.
+remediation:
+  en: >-
+    Treat the permissions of each listed account as unprotected. Review its DACL now and remove every grant
+    to a principal that is not Tier 0; re-check after any change to privileged group membership, and
+    schedule a periodic review, because Samba will not correct it. Keep privileged group membership as small
+    as possible so fewer accounts need this manual care, and monitor changes to their security descriptors.
+  ru: >-
+    Считайте разрешения каждой найденной учётной записи незащищёнными. Проверьте её DACL сейчас и удалите
+    все права, выданные субъектам вне нулевого уровня; повторяйте проверку после любого изменения состава
+    привилегированных групп и проводите её регулярно, потому что Samba не исправит их сама. Держите состав
+    привилегированных групп минимальным, чтобы такой ручной контроль требовался для меньшего числа учётных
+    записей, и отслеживайте изменения их дескрипторов безопасности.
+attack:
+- id: T1098
+  name: Account Manipulation
+- id: T1222.001
+  name: 'File and Directory Permissions Modification: Windows File and Directory Permissions Modification'
+anssi:
+- vuln_privileged_members_no_admincount
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: '(|(objectClass=user)(objectClass=group))'
+references:
+- title: 'Microsoft Learn — Appendix C: Protected Accounts and Groups in Active Directory'
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory
+- title: 'Samba — source4/setup/provision.ldif (AdminSDHolder is provisioned)'
+  url: https://gitlab.com/samba-team/samba/-/blob/master/source4/setup/provision.ldif
+- title: 'MITRE ATT&CK — T1098 Account Manipulation'
+  url: https://attack.mitre.org/techniques/T1098/
+notes: >-
+  Samba side of ANSSI vuln_privileged_members_no_admincount; DSA-0040 covers Windows. Absence of SDProp was
+  verified in the Samba source (2026-10-08): no code under source4/dsdb or source4/scripting propagates
+  AdminSDHolder or writes adminCount=1; the only writers reset adminCount to 0. Runs on the Samba provider
+  only. No synthetic lab reproduces it (the Samba labs have no nested privileged member); the live Samba CI
+  lab, which nests Tier0 Ops in Domain Admins, must fire it on Tier0 Ops and its member.
+condition_cel: 'tier0(obj) && !("computer" in obj.class) && obj.tier0_reason.contains(" > ") && !obj.tier0_reason.endsWith("(primary group)")'
+expect: []

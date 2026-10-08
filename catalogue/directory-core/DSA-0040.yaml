@@ -1,0 +1,59 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0040
+title:
+  en: 'Members of privileged groups not marked by AdminSDHolder (adminCount not 1)'
+  ru: 'Участники привилегированных групп без отметки AdminSDHolder (adminCount не равен 1)'
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'Users and groups that are members of Tier-0 groups: adminCount'
+attributes:
+- adminCount
+- memberOf
+- sAMAccountName
+condition: >-
+  A user or group that is a Tier-0 principal through the member attribute of a privileged group
+  (directly or nested) has an adminCount other than 1. The privileged groups themselves, the built-in
+  Administrator and krbtgt, members through primaryGroupID (which AdminSDHolder does not process) and
+  computer accounts are excluded.
+threshold: any occurrence
+rationale: >-
+  The AdminSDHolder process stamps adminCount=1 on members of protected groups and periodically
+  overwrites their permissions with a hardened template, which removes any backdoor access granted on
+  them. A privileged member without adminCount=1 has not been processed, so permissions an attacker
+  added to it are not reset.
+remediation:
+  en: >-
+    Check that the AdminSDHolder process (SDProp) runs on the PDC emulator and completes. If it does, the
+    account was probably added very recently; re-check after the next run. Investigate any account that
+    stays unmarked, and review its permissions for unexpected grants.
+  ru: >-
+    Убедитесь, что процесс AdminSDHolder (SDProp) выполняется на эмуляторе PDC и завершается. Если да,
+    учётная запись, вероятно, добавлена совсем недавно — проверьте после следующего запуска. Расследуйте
+    учётные записи, которые остаются без отметки, и проверьте их разрешения на неожиданные права.
+attack:
+- id: T1098
+  name: 'Account Manipulation'
+anssi:
+- vuln_privileged_members_no_admincount
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: '(|(objectClass=user)(objectClass=group))'
+references:
+- title: 'Microsoft Learn — Appendix C: Protected Accounts and Groups in Active Directory'
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory
+- title: 'MITRE ATT&CK — T1098 Account Manipulation'
+  url: https://attack.mitre.org/techniques/T1098/
+notes: >-
+  Relies on the Tier-0 path: seeds have no ' > ' in their reason; primary-group members end with
+  '(primary group)'. The Tier-0 set is close to, not identical with, AdminSDHolder's protected list. Windows only: Samba AD DC implements no SDProp (verified in the Samba source: the AdminSDHolder object is provisioned but nothing propagates it or sets adminCount), so on Samba every such member would fire for a reason that is not a misconfiguration; DSA-0221 reports the Samba case with the right remediation. Samba is recognised by the rootDSE vendorName, as the AD provider does.
+condition_cel: 'tier0(obj) && !("computer" in obj.class) && obj.tier0_reason.contains(" > ") && !obj.tier0_reason.endsWith("(primary group)") && intattr(obj, "adminCount") != 1 && !objattr("cn=rootdse,cn=dirauditor", "vendorName").lowerAscii().contains("samba")'
+expect:
+- CN=Tier0 Ops,OU=Groups,DC=lab,DC=example

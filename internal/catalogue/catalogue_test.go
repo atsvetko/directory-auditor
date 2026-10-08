@@ -157,3 +157,60 @@ func TestEmbeddedMatchesWorkingTree(t *testing.T) {
 		t.Errorf("source = %q", built[0].Source)
 	}
 }
+
+// TestCriticalObjectsFires covers DSA-0037's positive path, which no lab
+// reproduces (every lab holds krbtgt, Domain Admins and AdminSDHolder): drop
+// each object in turn and the entry must fire on the domain head, and stay
+// silent when all three are present.
+func TestCriticalObjectsFires(t *testing.T) {
+	entries, err := LoadDir("../../catalogue")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var e Entry
+	for _, x := range entries {
+		if x.ID == "DSA-0037" {
+			e = x
+		}
+	}
+	if e.ID == "" {
+		t.Fatal("DSA-0037 not found")
+	}
+	pack, _ := e.Pack()
+	pack.Signed, pack.Provider = true, []string{"ad"}
+	run := func(drop func(snapshot.Object) bool) []string {
+		snap, err := snapshot.ReadFile("../../testdata/synthetic-lab.json.zst")
+		if err != nil {
+			t.Fatal(err)
+		}
+		kept := snap.Objects[:0]
+		for _, o := range snap.Objects {
+			if !drop(o) {
+				kept = append(kept, o)
+			}
+		}
+		snap.Objects = kept
+		res, err := check.EvaluateWith(snap, []check.Pack{pack}, check.EvalOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var dns []string
+		for _, f := range res.Checks[0].Findings {
+			dns = append(dns, f.DN)
+		}
+		return dns
+	}
+	if got := run(func(snapshot.Object) bool { return false }); len(got) != 0 {
+		t.Errorf("complete lab: fired on %v", got)
+	}
+	cases := map[string]func(snapshot.Object) bool{
+		"krbtgt":        func(o snapshot.Object) bool { return strings.HasSuffix(o.Attr("objectSid"), "-502") },
+		"Domain Admins": func(o snapshot.Object) bool { return strings.HasSuffix(o.Attr("objectSid"), "-512") },
+		"AdminSDHolder": func(o snapshot.Object) bool { return strings.HasPrefix(strings.ToLower(o.DN), "cn=adminsdholder,") },
+	}
+	for name, drop := range cases {
+		if got := run(drop); len(got) != 1 || got[0] != "DC=lab,DC=example" {
+			t.Errorf("without %s: fired on %v, want the domain head", name, got)
+		}
+	}
+}

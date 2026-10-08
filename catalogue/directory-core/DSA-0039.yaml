@@ -1,0 +1,53 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0039
+title:
+  en: 'Pre-Windows 2000 Compatible Access has members beyond the default'
+  ru: 'В группе Pre-Windows 2000 Compatible Access есть участники сверх состава по умолчанию'
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'The Pre-Windows 2000 Compatible Access group (S-1-5-32-554): member'
+attributes:
+- member
+- objectSid
+condition: >-
+  Pre-Windows 2000 Compatible Access (S-1-5-32-554) has any member other than Authenticated Users
+  (S-1-5-11), which is its membership when a domain is created with permissions compatible only with
+  modern Windows.
+threshold: any occurrence
+rationale: >-
+  The group exists for compatibility with Windows NT 4.0-era systems and grants broad read access to
+  directory data. Any member beyond Authenticated Users widens who can read that data, and in modern
+  domains the group should not be needed at all.
+remediation:
+  en: >-
+    Review each extra member and remove it unless a documented legacy dependency requires it. Plan to
+    retire the systems that need the group.
+  ru: >-
+    Проверьте каждого дополнительного участника и удалите его, если его не требует задокументированная
+    зависимость устаревшей системы. Запланируйте вывод из эксплуатации систем, которым нужна эта группа.
+attack:
+- id: T1087.002
+  name: 'Account Discovery: Domain Account'
+anssi:
+- vuln_compatible_2000_not_default
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: '(objectClass=group)'
+references:
+- title: 'Microsoft Learn — Well-known security identifiers'
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-identifiers
+- title: 'Microsoft Learn — Active Directory security groups'
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups
+notes: >-
+  ANSSI level 3. DSA-0038 reports the most dangerous case (Anonymous or Everyone) separately at level 2.
+condition_cel: 'attr(obj, "objectSid") == "S-1-5-32-554" && attrs(obj, "member").exists(m, !m.lowerAscii().startsWith("cn=s-1-5-11,"))'
+expect:
+- CN=Pre-Windows 2000 Compatible Access,CN=Builtin,DC=lab,DC=example

@@ -65,16 +65,19 @@ func writeSambaLab(path string, hardened bool) error {
 		heur = "0000000"
 	}
 	add(base, []string{"top", "domain", "domainDNS"}, policy)
+	add("CN=AdminSDHolder,CN=System,"+base, []string{"top", "container"}, map[string][]string{"whenChanged": {"20260101000000.0Z"}})
 	add("CN=Directory Service,CN=Windows NT,CN=Services,CN=Configuration,"+base, []string{"top", "nTDSService"},
 		map[string][]string{"dSHeuristics": {heur}, "tombstoneLifetime": {"180"}})
 
 	user := []string{"top", "person", "organizationalPerson", "user"}
 	adminUAC := "66048" // DONT_EXPIRE_PASSWORD, as provisioned
+	svcUAC := "66048"   // service account set never to expire (DSA-0041)
 	if hardened {
 		adminUAC = "1049088" // NORMAL_ACCOUNT | NOT_DELEGATED, password rotated
+		svcUAC = "512"       // password expires
 	}
 	for _, u := range []struct{ name, uac, rid string }{
-		{"Administrator", adminUAC, "500"}, {"krbtgt", "514", "502"}, {"j.doe", "512", "1104"}, {"svc-backup", "66048", "1105"},
+		{"Administrator", adminUAC, "500"}, {"krbtgt", "514", "502"}, {"j.doe", "512", "1104"}, {"svc-backup", svcUAC, "1105"},
 	} {
 		add(fmt.Sprintf("CN=%s,CN=Users,%s", u.name, base), user, map[string][]string{
 			"sAMAccountName": {u.name}, "userAccountControl": {u.uac}, "objectSid": {dom + "-" + u.rid}, "primaryGroupID": {"513"}, "pwdLastSet": {ft(100)}, "sAMAccountType": {"805306368"}})

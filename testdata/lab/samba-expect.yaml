@@ -31,6 +31,7 @@ must:
   DSA-0214: ["cn=global,cn=smb.conf,cn=dirauditor", "cn=public,cn=shares,cn=smb.conf,cn=dirauditor"]
   DSA-0215: ["cn=global,cn=smb.conf,cn=dirauditor"]   # log level 0
   DSA-0217: ["cn=global,cn=smb.conf,cn=dirauditor"]   # kdc:user ticket lifetime 24
+  DSA-0221: ["CN=Tier0 Ops,CN=Users,DC=lab,DC=example", "CN=svc-backup,CN=Users,DC=lab,DC=example"]   # no SDProp on Samba: nested privileged members unprotected
   DSA-0218: ["cn=global,cn=smb.conf,cn=dirauditor"]   # kerberos encryption types = legacy
   DSA-0219: ["cn=global,cn=smb.conf,cn=dirauditor"]   # NTLM enabled (info)
 allow:
@@ -40,6 +41,22 @@ allow:
   - DSA-0027   # DnsAdmins membership (fires only if the live lab populates the group)
   - DSA-0028   # secrets in readable attributes (depends on the live lab's descriptions)
   - DSA-0029   # control over protected non-Tier-0 objects (depends on the live lab's ACLs)
+  # ANSSI wave 1 (DSA-0030…0044): permitted on the live DC; each live hit is reviewed in the commit log
+  - DSA-0030
+  - DSA-0031
+  - DSA-0032
+  - DSA-0033
+  - DSA-0034
+  - DSA-0035
+  - DSA-0036
+  - DSA-0037
+  - DSA-0038
+  - DSA-0039
+  - DSA-0040
+  - DSA-0041
+  - DSA-0042
+  - DSA-0043
+  - DSA-0044
 tier0_must_include:
   - "CN=svc-backup,CN=Users,DC=lab,DC=example"      # nested: Domain Admins > Tier0 Ops > svc-backup
   - "CN=Tier0 Ops,CN=Users,DC=lab,DC=example"

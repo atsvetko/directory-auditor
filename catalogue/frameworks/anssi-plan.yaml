@@ -9,28 +9,13 @@
 #         gap      — not implemented yet; buildable on LDAP
 #         collect  — needs a collection area the engine does not read yet (named in `needs`)
 # wave:   build order. Waves follow the ANSSI level first (1 before 2 before 3), then effort.
-#   1  level-1/2 gaps detectable from the objects already collected (users, computers, groups, domain head)
+#   1  level-1/2 gaps detectable from the objects already collected — implemented as DSA-0030…0044
 #   2  remaining level-1/2 points needing a targeted read (group/GPO/key-object ACLs, PSOs, MSAs, RODC)
 #   3  level-3/4 points
 #   4  AD CS (PKI containers and certificate templates in the configuration partition)
 #   5  DNS (zones and server objects in the DNS application partitions)
 plan:
-# --- wave 1 -------------------------------------------------------------------------------------------
-- {id: vuln_dc_inconsistent_uac,             status: gap,     wave: 1, note: "DC computer accounts whose UAC, primaryGroupID or location disagree"}
-- {id: vuln_dc_obsolete,                     status: gap,     wave: 1, note: "DC operatingSystem out of vendor support"}
-- {id: vuln_password_change_dc_no_change,    status: gap,     wave: 1, note: "DC machine password older than 45 days"}
-- {id: vuln_password_change_inactive_dc,     status: gap,     wave: 1, note: "DC without a recent logon (lastLogonTimestamp)"}
-- {id: vuln_primary_group_id_1000,           status: gap,     wave: 1, note: "primaryGroupID below 1000 hides membership of a built-in privileged group"}
-- {id: vuln_privileged_members,              status: gap,     wave: 1, note: "privileged group with an unusually large direct membership"}
-- {id: vuln_user_accounts_dormant,           status: gap,     wave: 1, note: "enabled accounts with no logon for a long time"}
-- {id: vuln_critical_objects,                status: gap,     wave: 1, note: "krbtgt, AdminSDHolder or Domain Admins missing from the read"}
-- {id: vuln_compatible_2000_anonymous,       status: gap,     wave: 1, note: "Pre-Windows 2000 Compatible Access contains Anonymous or Everyone"}
-- {id: vuln_compatible_2000_not_default,     status: gap,     wave: 1, note: "Pre-Windows 2000 Compatible Access has any member beyond the default"}
-- {id: vuln_dont_expire,                     status: gap,     wave: 1, note: "enabled accounts set never to expire their password"}
-- {id: vuln_guest,                           status: gap,     wave: 1, note: "built-in Guest account enabled"}
-- {id: vuln_password_change_server_no_change_90, status: gap, wave: 1, note: "server machine password older than 90 days"}
-- {id: vuln_privileged_members_no_admincount, status: gap,    wave: 1, note: "Tier-0 member without adminCount=1 (AdminSDHolder not applied)"}
-- {id: vuln_primary_group_id_nochange,       status: gap,     wave: 1, note: "primaryGroupID changed from the default for the account type"}
+# --- wave 1 — done (DSA-0030…0044) -------------------------------------------------------------------
 # --- wave 2 -------------------------------------------------------------------------------------------
 - {id: vuln_dnsadmins,                       status: partial, wave: 2, note: "DSA-0027 covers membership; ANSSI also checks who can change the group (its ACL)"}
 - {id: vuln_dsheuristics_bad,                status: partial, wave: 2, note: "DSA-0025 covers anonymous operations; other dangerous dSHeuristics flags to add (MS-ADTS)"}
