@@ -28,12 +28,13 @@ import (
 	"github.com/atsvetko/directory-auditor/internal/provider/ad" // registers the AD / Samba provider
 	"github.com/atsvetko/directory-auditor/internal/provider/freeipa"
 	"github.com/atsvetko/directory-auditor/internal/report"
+	"github.com/atsvetko/directory-auditor/internal/runlog"
 	"github.com/atsvetko/directory-auditor/internal/snapshot"
 	"github.com/atsvetko/directory-auditor/internal/web"
 )
 
 // Scan collects a snapshot and analyses it in one go.
-func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
+func Scan(ctx context.Context, args []string, out, errw io.Writer) (code int) {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	var t provider.Target
@@ -58,6 +59,13 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 	fs.BoolVar(&local, "local", false, "auto-detect "+smbconf.DefaultPath+" on this machine and include it")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	lg := runlog.Open(o.OutDir, append([]string{"scan"}, args...))
+	out, errw = io.MultiWriter(out, lg.Writer()), io.MultiWriter(errw, lg.Writer())
+	o.Stamp = lg.Stamp
+	defer func() { lg.Close(code) }()
+	if lg.Path != "" {
+		fmt.Fprintf(errw, "run log: %s\n", lg.Path)
 	}
 	if t.StartTLS {
 		t.UseLDAPS = false
@@ -170,6 +178,7 @@ type analyseOptions struct {
 	OutDir string
 	Lang   string
 	Quick  bool
+	Stamp  string // shared by snapshot-<stamp>.json.zst and run-<stamp>.log
 }
 
 // checkFlags registers the flags that choose which checks run.
@@ -189,7 +198,11 @@ func finish(snap *snapshot.Snapshot, o analyseOptions, out, errw io.Writer) int 
 		fmt.Fprintln(errw, "error:", err)
 		return 1
 	}
-	snapPath := filepath.Join(outDir, "snapshot-"+time.Now().UTC().Format("20060102-150405")+".json.zst")
+	stamp := o.Stamp
+	if stamp == "" {
+		stamp = time.Now().UTC().Format("20060102-150405")
+	}
+	snapPath := filepath.Join(outDir, "snapshot-"+stamp+".json.zst")
 	if err := snapshot.WriteFile(snapPath, snap); err != nil {
 		fmt.Fprintln(errw, "error:", err)
 		return 1
@@ -242,7 +255,7 @@ func defaultPacksDir() string {
 }
 
 // Analyse re-runs the checks on an existing snapshot — no directory access at all.
-func Analyse(ctx context.Context, args []string, out, errw io.Writer) int {
+func Analyse(ctx context.Context, args []string, out, errw io.Writer) (code int) {
 	fs := flag.NewFlagSet("analyse", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	var snapPath string
@@ -257,6 +270,10 @@ func Analyse(ctx context.Context, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(errw, "error: --snapshot is required")
 		return 2
 	}
+	lg := runlog.Open(o.OutDir, append([]string{"analyse"}, args...))
+	out, errw = io.MultiWriter(out, lg.Writer()), io.MultiWriter(errw, lg.Writer())
+	o.Stamp = lg.Stamp
+	defer func() { lg.Close(code) }()
 	snap, err := snapshot.ReadFile(snapPath)
 	if err != nil {
 		fmt.Fprintln(errw, "error:", err)
@@ -384,7 +401,8 @@ Behaviours of this binary:
                 with --smbconf/--local (or when the wizard finds a Samba DC configuration on this machine)
                 it runs 'testparm -s -v --suppress-prompt <smb.conf>' and 'samba -V' / 'smbd -V',
                 both read-only, and reads smb.conf. Secret-looking values are redacted.
-  writes      : output directory only (snapshot, report.json, report.html)
+  writes      : output directory only (snapshot, report.json, report.html, run-<stamp>.log — progress,
+                notes and errors with timestamps, never credentials)
   directory   : read-only — no LDAP modify/add/delete code is linked (scripts/readonly-check.sh)
   credentials : prompted on the terminal (or piped with --password-stdin), used once, never written to
                 disk, the command line or the environment

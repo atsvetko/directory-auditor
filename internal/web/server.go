@@ -38,6 +38,7 @@ import (
 	"github.com/atsvetko/directory-auditor/internal/packset"
 	"github.com/atsvetko/directory-auditor/internal/provider"
 	"github.com/atsvetko/directory-auditor/internal/report"
+	"github.com/atsvetko/directory-auditor/internal/runlog"
 	"github.com/atsvetko/directory-auditor/internal/snapshot"
 )
 
@@ -81,6 +82,7 @@ type job struct {
 	result *check.Result
 	html   map[string][]byte // lang -> report
 	json   []byte
+	runlog *runlog.Log // run-<stamp>.log in the output folder (memory only for the demo)
 }
 
 // Run serves the wizard until ctx is cancelled, the user clicks Quit, or the
@@ -183,6 +185,7 @@ func (s *Server) routes() http.Handler {
 	api("GET /api/result", s.result)
 	api("GET /api/report.html", s.reportHTML)
 	api("GET /api/report.json", s.reportJSON)
+	api("GET /api/run.log", s.runLog)
 	api("POST /api/quit", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"ok": true})
 		go func() { time.Sleep(200 * time.Millisecond); s.stop() }()
@@ -395,7 +398,17 @@ const planSteps = 11
 func (s *Server) runJob(ctx context.Context, j *job, t provider.Target, demo, quick bool, pname string, conf connectResp) {
 	defer j.cancel()
 	defer s.clearSecret() // the password is not needed after collection
+	outDir := s.opts.OutDir
+	if demo {
+		outDir = "" // nothing from the demo is written to disk
+	}
+	lg := runlog.Open(outDir, []string{"ui", "mode=" + conf.Kind, "server=" + t.Server, "domain=" + t.Domain, "identity=" + conf.Identity,
+		fmt.Sprintf("tier=%d", t.Tier), fmt.Sprintf("quick=%v", quick), "provider=" + pname})
+	s.mu.Lock()
+	j.runlog = lg
+	s.mu.Unlock()
 	progress := func(msg string) {
+		lg.Printf("%s", msg)
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		j.Log = append(j.Log, msg)
@@ -407,6 +420,8 @@ func (s *Server) runJob(ctx context.Context, j *job, t provider.Target, demo, qu
 		}
 	}
 	fail := func(state string, err error) {
+		lg.Printf("%s: %v", state, err)
+		lg.Close(1)
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		j.State, j.Error = state, err.Error()
@@ -462,9 +477,16 @@ func (s *Server) runJob(ctx context.Context, j *job, t provider.Target, demo, qu
 		_ = report.WriteHTML(&hb, res, l)
 		html[l] = hb.Bytes()
 	}
-	if !demo && s.opts.OutDir != "" {
-		s.save(snap, jb.Bytes(), html["en"], progress)
+	c := res.Counts
+	lg.Printf("score %d/100 — %d checked, %d passed, %d with findings (%d findings), %d skipped; preview checks %d; %d objects, %d searches, %d LDAP requests, collection %s",
+		res.Score, c.Checked, c.Passed, c.Failed, c.Findings, c.Skipped, res.Preview, len(snap.Objects), snap.Meta.QueryCount, snap.Meta.Requests, snap.Meta.Duration)
+	for _, sk := range snap.Skipped {
+		lg.Printf("not collected: %s (%s) %s", sk.Query, sk.Reason, sk.Detail)
 	}
+	if !demo && s.opts.OutDir != "" {
+		s.save(snap, jb.Bytes(), html["en"], lg.Stamp, progress)
+	}
+	lg.Close(0)
 	s.mu.Lock()
 	j.result, j.json, j.html = res, jb.Bytes(), html
 	j.State, j.Percent, j.Phase = "done", 100, "done"
@@ -472,18 +494,23 @@ func (s *Server) runJob(ctx context.Context, j *job, t provider.Target, demo, qu
 }
 
 // save writes snapshot and reports to the output folder, as the CLI does.
-func (s *Server) save(snap *snapshot.Snapshot, js, html []byte, progress func(string)) {
+func (s *Server) save(snap *snapshot.Snapshot, js, html []byte, stamp string, progress func(string)) {
 	if err := os.MkdirAll(s.opts.OutDir, 0o750); err != nil {
 		progress("could not create output folder: " + err.Error())
 		return
 	}
-	stamp := time.Now().UTC().Format("20060102-150405")
 	sp := filepath.Join(s.opts.OutDir, "snapshot-"+stamp+".json.zst")
 	if err := snapshot.WriteFile(sp, snap); err == nil {
 		progress("saved " + sp)
+	} else {
+		progress("could not save the snapshot: " + err.Error())
 	}
-	_ = os.WriteFile(filepath.Join(s.opts.OutDir, "report-"+stamp+".json"), js, 0o640)
-	_ = os.WriteFile(filepath.Join(s.opts.OutDir, "report-"+stamp+".html"), html, 0o640)
+	for name, b := range map[string][]byte{"report-" + stamp + ".json": js, "report-" + stamp + ".html": html} {
+		if err := os.WriteFile(filepath.Join(s.opts.OutDir, name), b, 0o640); err != nil {
+			progress("could not save " + name + ": " + err.Error())
+		}
+	}
+	progress("saved reports and run-" + stamp + ".log in " + s.opts.OutDir)
 }
 
 func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
@@ -547,6 +574,20 @@ func (s *Server) reportJSON(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", `attachment; filename="directory-auditor-report.json"`)
 	_, _ = w.Write(j.json)
+}
+
+// runLog serves the current or last job's run log, for bug reports.
+func (s *Server) runLog(w http.ResponseWriter, _ *http.Request) {
+	s.mu.Lock()
+	j := s.job
+	s.mu.Unlock()
+	if j == nil || j.runlog == nil {
+		http.Error(w, "no scan yet", 404)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="directory-auditor-run.log"`)
+	_, _ = w.Write(j.runlog.Bytes())
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

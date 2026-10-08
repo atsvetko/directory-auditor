@@ -52,7 +52,7 @@ const T = {
  checksinfo:["This run evaluates {p} signed check packs and {n} preview checks (unverified catalogue entries, unsigned). Start with --no-preview to run signed packs only.","Будут выполнены подписанные пакеты проверок: {p}, и предварительные проверки: {n} (записи каталога без подписи и без проверки человеком). Запуск с --no-preview выполняет только подписанные пакеты."],
  previewtag:["preview","preview"],
  c_checked:["checked","проверено"], c_passed:["passed","пройдено"], c_find:["with findings","с находками"], c_findings:["findings","находок"], c_skip:["skipped","пропущено"],
- dl_pdf:["Download PDF report","Скачать отчёт PDF"], dl_html:["HTML","HTML"], dl_json:["JSON","JSON"], rescan:["New scan","Новое сканирование"],
+ dl_pdf:["Download PDF report","Скачать отчёт PDF"], dl_html:["HTML","HTML"], dl_json:["JSON","JSON"], dl_log:["Run log","Журнал запуска"], rescan:["New scan","Новое сканирование"],
  s_findings:["Findings","Находки"], nofind:["No findings from the checks that ran.","Выполненные проверки ничего не нашли."],
  s_tier0:["Tier 0 — who controls the domain, and why","Нулевой уровень — кто управляет доменом и почему"],
  h_obj:["Object","Объект"], h_path:["Why it is Tier 0","Почему это нулевой уровень"],
@@ -199,6 +199,7 @@ function renderResult() {
   $("n_findings").textContent = c.findings || 0; $("n_skipped").textContent = c.skipped || 0;
   $("dlhtml").href = "/api/report.html?lang=" + lang + "&t=" + encodeURIComponent(TOKEN);
   $("dljson").href = "/api/report.json?t=" + encodeURIComponent(TOKEN);
+  $("dllog").href = "/api/run.log?t=" + encodeURIComponent(TOKEN);
 
   const host = $("findings"); host.innerHTML = "";
   const failed = (r.checks || []).filter(x => x.status === "fail").sort((a, b) => sevOrder[a.severity] - sevOrder[b.severity]);

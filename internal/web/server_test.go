@@ -135,6 +135,9 @@ func TestDemoFlow(t *testing.T) {
 	if code, body := do(t, ts, "GET", "/api/report.html?lang=ru&t=tok123", "", nil); code != 200 || !strings.Contains(body, "lang=\"ru\"") {
 		t.Errorf("report download: %d", code)
 	}
+	if code, body := do(t, ts, "GET", "/api/run.log?t=tok123", "", nil); code != 200 || !strings.Contains(body, "args: ui mode=demo") || !strings.Contains(body, "evaluating checks") || !strings.Contains(body, "finished: exit 0") {
+		t.Errorf("run log: %d %s", code, body)
+	}
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }

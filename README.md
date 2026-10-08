@@ -52,6 +52,10 @@ dirauditor doctor --domain corp.example.com             # DNS SRV, ports, certif
 dirauditor manifest --queries                           # every behaviour and every LDAP search
 ```
 
+Every run writes `run-<stamp>.log` next to the snapshot and reports (version, arguments, each
+step with a timestamp, notes, errors — never credentials); the wizard offers it as **Run log**.
+Attach it to bug reports.
+
 Build from source: `go build ./cmd/dirauditor` (Go 1.25+, no CGO).
 
 Kerberos with the current logon works from Windows (SSPI, with channel binding) against any DC,
