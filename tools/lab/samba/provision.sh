@@ -34,11 +34,19 @@ fi
 
 # 1b. The distribution package may have started the classic file server; an AD
 #     DC runs its own smbd, so stop and disable those units when systemd is present.
-if command -v systemctl >/dev/null && systemctl is-system-running >/dev/null 2>&1; then
+if [[ -d /run/systemd/system ]] && command -v systemctl >/dev/null; then
   for u in smbd nmbd winbind samba-ad-dc; do
     run systemctl stop "$u" 2>/dev/null || true
     run systemctl disable "$u" 2>/dev/null || true
+    run systemctl mask "$u" 2>/dev/null || true
   done
+fi
+if (( ! DRY )); then
+  pkill -x smbd 2>/dev/null || true; pkill -x nmbd 2>/dev/null || true; pkill -x winbindd 2>/dev/null || true
+  sleep 1
+  if command -v ss >/dev/null && ss -ltn 2>/dev/null | grep -qE ':(445|389|636|88) '; then
+    echo "lab: a service already listens on a DC port:"; ss -ltnp | grep -E ':(445|389|636|88) ' || true
+  fi
 fi
 
 # 2. Provision once.
@@ -100,7 +108,7 @@ if (( ! DRY )); then
       echo "lab: LDAP up after ${i}s"; break
     fi
     sleep 1
-    [[ $i -eq 30 ]] && { echo "lab: samba did not come up; log:"; tail -20 "$LOG"; exit 1; }
+    [[ $i -eq 30 ]] && { echo "lab: samba did not come up; log:"; tail -20 "$LOG"; echo "--- log.smbd:"; tail -20 /var/log/samba/log.smbd 2>/dev/null || true; echo "--- listeners:"; ss -ltnp 2>/dev/null || true; exit 1; }
   done
   # Self-check
   ldapsearch -x -H ldap://127.0.0.1 -s base -b "" vendorVersion defaultNamingContext domainFunctionality 2>/dev/null | grep -E "^(vendorVersion|defaultNamingContext|domainFunctionality)"
