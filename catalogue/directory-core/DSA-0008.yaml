@@ -1,67 +1,78 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
 id: DSA-0008
 title:
-  en: "krbtgt account password has not been changed recently"
-  ru: "Пароль учётной записи krbtgt давно не менялся"
+  en: krbtgt account password has not been changed recently
+  ru: Пароль учётной записи krbtgt давно не менялся
 domain: directory-core
 tier: 0
 severity: medium
 quick: true
 status: draft
-verified_by: ""
-verified_on: ""
+verified_by: ''
+verified_on: ''
+object: The krbtgt account and read-only DC krbtgt accounts (krbtgt_<number>)
+attributes:
+- sAMAccountName
+- pwdLastSet
+- whenCreated
+- msDS-KrbTgtLinkBl
+condition: 'pwdLastSet of krbtgt is older than the threshold. Each krbtgt_<number> account (used by a
+  read-only domain controller) is evaluated separately with the same threshold. pwdLastSet equal to whenCreated
+  (never changed since the domain was built) is reported explicitly.
 
-object: "The krbtgt account and read-only DC krbtgt accounts (krbtgt_<number>)"
-attributes: [sAMAccountName, pwdLastSet, whenCreated, msDS-KrbTgtLinkBl]
+  '
+threshold: 'older than 180 days → medium; older than 365 days → high. These periods are this project''s
+  recommendation, not a Microsoft-published number.
 
-condition: >
-  pwdLastSet of krbtgt is older than the threshold. Each krbtgt_<number> account
-  (used by a read-only domain controller) is evaluated separately with the same
-  threshold. pwdLastSet equal to whenCreated (never changed since the domain was
-  built) is reported explicitly.
-threshold: >
-  older than 180 days → medium; older than 365 days → high. These periods are this
-  project's recommendation, not a Microsoft-published number.
+  '
+rationale: 'The krbtgt key signs and encrypts every Kerberos ticket-granting ticket in the domain. If
+  that key was ever exposed — through a compromised domain controller, a stolen backup or a replication-rights
+  abuse — tickets forged with it stay valid until the key changes. Because the account keeps its two most
+  recent passwords, the key must be changed twice to invalidate an old one.
 
-rationale: >
-  The krbtgt key signs and encrypts every Kerberos ticket-granting ticket in the
-  domain. If that key was ever exposed — through a compromised domain controller, a
-  stolen backup or a replication-rights abuse — tickets forged with it stay valid
-  until the key changes. Because the account keeps its two most recent passwords,
-  the key must be changed twice to invalidate an old one.
-
+  '
 remediation:
-  en: >
-    Reset the krbtgt password twice, waiting at least the maximum ticket lifetime
-    (10 hours by default) between the two resets so replication completes and
-    existing tickets expire normally. Do the same for each RODC krbtgt_<number>
-    account. Schedule the reset periodically and always after any suspected
+  en: 'Reset the krbtgt password twice, waiting at least the maximum ticket lifetime (10 hours by default)
+    between the two resets so replication completes and existing tickets expire normally. Do the same
+    for each RODC krbtgt_<number> account. Schedule the reset periodically and always after any suspected
     compromise of a domain controller.
-  ru: >
-    Смените пароль krbtgt дважды, выждав между сменами не меньше максимального срока
-    жизни билета (по умолчанию 10 часов), чтобы завершилась репликация и истекли
-    действующие билеты. Сделайте то же для каждой учётной записи krbtgt_<номер>
-    контроллеров только для чтения. Запланируйте периодическую смену и обязательно
-    выполняйте её после любой подозреваемой компрометации контроллера домена.
 
+    '
+  ru: 'Смените пароль krbtgt дважды, выждав между сменами не меньше максимального срока жизни билета (по
+    умолчанию 10 часов), чтобы завершилась репликация и истекли действующие билеты. Сделайте то же для
+    каждой учётной записи krbtgt_<номер> контроллеров только для чтения. Запланируйте периодическую смену
+    и обязательно выполняйте её после любой подозреваемой компрометации контроллера домена.
+
+    '
 attack:
-  - { id: T1558.001, name: "Steal or Forge Kerberos Tickets: Golden Ticket" }
-
+- id: T1558.001
+  name: 'Steal or Forge Kerberos Tickets: Golden Ticket'
 engine: declarative
 query_sketch:
   base: default
   scope: subtree
-  filter: "(&(objectClass=user)(|(sAMAccountName=krbtgt)(sAMAccountName=krbtgt_*)))"
-  attributes: [sAMAccountName, pwdLastSet, whenCreated, msDS-KrbTgtLinkBl]
-
+  filter: (&(objectClass=user)(|(sAMAccountName=krbtgt)(sAMAccountName=krbtgt_*)))
+  attributes:
+  - sAMAccountName
+  - pwdLastSet
+  - whenCreated
+  - msDS-KrbTgtLinkBl
 references:
-  - title: "Microsoft Learn — AD Forest Recovery: Reset the krbtgt password (two resets, 10-hour wait, password history of 2)"
-    url: "https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/ad-forest-recovery-resetting-the-krbtgt-password"
-  - title: "Microsoft Learn — msDS-KrbTgtLinkBl attribute"
-    url: "https://learn.microsoft.com/en-us/windows/win32/adschema/a-msds-krbtgtlinkbl"
-  - title: "MITRE ATT&CK — T1558.001 Golden Ticket"
-    url: "https://attack.mitre.org/techniques/T1558/001/"
-
-notes: >
-  The condition needs a date comparison (pwdLastSet is a Windows FILETIME); the CEL
-  condition will use an engine helper `age_days(attr)`. msDS-KrbTgtLinkBl is used only
-  to label RODC accounts (schema name confirmed on Microsoft Learn).
+- title: >-
+    Microsoft Learn — AD Forest Recovery: Reset the krbtgt password (two resets, 10-hour wait, password
+    history of 2)
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/ad-forest-recovery-resetting-the-krbtgt-password
+- title: Microsoft Learn — msDS-KrbTgtLinkBl attribute
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-msds-krbtgtlinkbl
+- title: MITRE ATT&CK — T1558.001 Golden Ticket
+  url: https://attack.mitre.org/techniques/T1558/001/
+notes: >-
+  The condition needs a date comparison (pwdLastSet is a Windows FILETIME); the CEL condition will use
+  an engine helper `age_days(attr)`. msDS-KrbTgtLinkBl is used only to label RODC accounts (schema name
+  confirmed on Microsoft Learn). Implementation notes: objectCategory=person is replaced by sAMAccountType=805306368
+  in the pack filter because the analyser matches collected attribute values, not server-side shortcuts.
+condition_cel: age_days(obj, "pwdLastSet") > 180 || age_days(obj, "pwdLastSet") == -1
+expect:
+- CN=krbtgt,CN=Users,DC=lab,DC=example

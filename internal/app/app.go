@@ -17,6 +17,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/atsvetko/directory-auditor/internal/buildinfo"
+	"github.com/atsvetko/directory-auditor/internal/catalogue"
 	"github.com/atsvetko/directory-auditor/internal/check"
 	"github.com/atsvetko/directory-auditor/internal/demo"
 	"github.com/atsvetko/directory-auditor/internal/doctor"
@@ -52,8 +53,10 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 	fs.StringVar(&outDir, "out", "dirauditor-out", "output directory")
 	fs.StringVar(&lang, "lang", "en", "report language: en or ru")
 	fs.BoolVar(&allowUnsigned, "allow-unsigned", false, "load unsigned packs (development only)")
-	var smbConf string
-	var local bool
+	var smbConf, catalogueDir string
+	var local, pwStdin bool
+	fs.StringVar(&catalogueDir, "catalogue", "", "dry run: also evaluate implemented catalogue entries from this directory (unsigned, for verification)")
+	fs.BoolVar(&pwStdin, "password-stdin", false, "read the bind password from the first line of stdin instead of the terminal (CI, pipes)")
 	fs.StringVar(&smbConf, "smbconf", "", "also audit this Samba AD DC configuration file (run on the DC; tier 2)")
 	fs.BoolVar(&local, "local", false, "auto-detect "+smbconf.DefaultPath+" on this machine and include it")
 	if err := fs.Parse(args); err != nil {
@@ -82,10 +85,16 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 		if !collectLocal(ctx, snap, smbConf, errw) {
 			return 1
 		}
-		return finish(snap, outDir, packsDir, lang, allowUnsigned, quick, out, errw)
+		return finish(snap, outDir, packsDir, catalogueDir, lang, allowUnsigned, quick, out, errw)
 	}
 	if t.BindUser != "" {
-		pw, err := promptPassword(errw, "Password for "+t.BindUser+": ")
+		var pw string
+		var err error
+		if pwStdin {
+			pw, err = readPasswordLine(os.Stdin)
+		} else {
+			pw, err = promptPassword(errw, "Password for "+t.BindUser+": ")
+		}
 		if err != nil {
 			fmt.Fprintln(errw, "error:", err)
 			return 1
@@ -117,7 +126,22 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 			return 1
 		}
 	}
-	return finish(snap, outDir, packsDir, lang, allowUnsigned, quick, out, errw)
+	return finish(snap, outDir, packsDir, catalogueDir, lang, allowUnsigned, quick, out, errw)
+}
+
+// readPasswordLine reads one line (the password) from r. Used with
+// --password-stdin so CI and scripts can pipe a secret in without putting it
+// on the command line or in the environment.
+func readPasswordLine(r io.Reader) (string, error) {
+	b, err := io.ReadAll(io.LimitReader(r, 4096))
+	if err != nil {
+		return "", err
+	}
+	line := strings.TrimRight(strings.SplitN(string(b), "\n", 2)[0], "\r")
+	if line == "" {
+		return "", fmt.Errorf("--password-stdin: no password on stdin")
+	}
+	return line, nil
 }
 
 // collectLocal adds the local Samba configuration to the snapshot.
@@ -144,7 +168,7 @@ func orUnknown(s string) string {
 }
 
 // finish writes the snapshot and analyses it.
-func finish(snap *snapshot.Snapshot, outDir, packsDir, lang string, allowUnsigned, quick bool, out, errw io.Writer) int {
+func finish(snap *snapshot.Snapshot, outDir, packsDir, catalogueDir, lang string, allowUnsigned, quick bool, out, errw io.Writer) int {
 	if err := os.MkdirAll(outDir, 0o750); err != nil {
 		fmt.Fprintln(errw, "error:", err)
 		return 1
@@ -158,7 +182,7 @@ func finish(snap *snapshot.Snapshot, outDir, packsDir, lang string, allowUnsigne
 	for _, sk := range snap.Skipped {
 		fmt.Fprintf(errw, "  not collected: %s (%s) %s\n", sk.Query, sk.Reason, sk.Detail)
 	}
-	return analyse(snap, packsDir, outDir, lang, allowUnsigned, quick, out, errw)
+	return analyse(snap, packsDir, catalogueDir, outDir, lang, allowUnsigned, quick, out, errw)
 }
 
 // Wizard starts the local web UI. With no arguments (double-click) it opens the
@@ -205,9 +229,10 @@ func defaultPacksDir() string {
 func Analyse(ctx context.Context, args []string, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("analyse", flag.ContinueOnError)
 	fs.SetOutput(errw)
-	var snapPath, packsDir, outDir, lang string
+	var snapPath, packsDir, outDir, lang, catalogueDir string
 	var allowUnsigned, quick bool
 	fs.BoolVar(&quick, "quick", false, "quick scan: run only checks marked quick")
+	fs.StringVar(&catalogueDir, "catalogue", "", "dry run: also evaluate implemented catalogue entries from this directory (unsigned, for verification)")
 	fs.StringVar(&snapPath, "snapshot", "", "snapshot file (.json.zst)")
 	fs.StringVar(&packsDir, "packs", "packs", "directory with check packs")
 	fs.StringVar(&outDir, "out", "dirauditor-out", "output directory")
@@ -229,17 +254,35 @@ func Analyse(ctx context.Context, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(errw, "error:", err)
 		return 1
 	}
-	return analyse(snap, packsDir, outDir, lang, allowUnsigned, quick, out, errw)
+	return analyse(snap, packsDir, catalogueDir, outDir, lang, allowUnsigned, quick, out, errw)
 }
 
-func analyse(snap *snapshot.Snapshot, packsDir, outDir, lang string, allowUnsigned, quick bool, out, errw io.Writer) int {
-	packs, err := check.LoadDir(packsDir, check.LoadOptions{AllowUnsigned: allowUnsigned})
-	if err != nil {
-		fmt.Fprintln(errw, "error:", err)
-		return 1
+func analyse(snap *snapshot.Snapshot, packsDir, catalogueDir, outDir, lang string, allowUnsigned, quick bool, out, errw io.Writer) int {
+	var packs []check.Pack
+	if packsDir != "" {
+		if st, err := os.Stat(packsDir); err == nil && st.IsDir() {
+			loaded, err := check.LoadDir(packsDir, check.LoadOptions{AllowUnsigned: allowUnsigned})
+			if err != nil {
+				fmt.Fprintln(errw, "error:", err)
+				return 1
+			}
+			packs = loaded
+		} else if catalogueDir == "" {
+			fmt.Fprintf(errw, "error: packs directory %s not found\n", packsDir)
+			return 1
+		}
 	}
 	if allowUnsigned {
 		fmt.Fprintln(errw, "WARNING: --allow-unsigned is set; packs were not verified (development mode)")
+	}
+	if catalogueDir != "" {
+		cp, err := catalogue.Packs(catalogueDir)
+		if err != nil {
+			fmt.Fprintln(errw, "error:", err)
+			return 1
+		}
+		fmt.Fprintf(errw, "WARNING: catalogue dry run — %d implemented entries evaluated as unsigned, unverified checks\n", len(cp))
+		packs = append(packs, cp...)
 	}
 	res, err := check.EvaluateWith(snap, packs, check.EvalOptions{Quick: quick})
 	if err != nil {
@@ -346,7 +389,8 @@ Behaviours of this binary:
                 both read-only, and reads smb.conf. Secret-looking values are redacted.
   writes      : output directory only (snapshot, report.json, report.html)
   directory   : read-only — no LDAP modify/add/delete code is linked (scripts/readonly-check.sh)
-  credentials : prompted on the terminal, used once, never written to disk or environment
+  credentials : prompted on the terminal (or piped with --password-stdin), used once, never written to
+                disk, the command line or the environment
   packs       : loaded only with a valid Ed25519 signature unless --allow-unsigned is given
   providers   : %s
 `, buildinfo.String(), strings.Join(provider.Names(), ", "))

@@ -1,0 +1,27 @@
+# FreeIPA lab (tools/lab/freeipa), scanned as admin at tier 2: everything readable.
+lab: freeipa-admin
+min_objects: 40
+allow_skip: [provider, not-collected]   # DNS zones are not installed in the lab → not collected
+must:
+  DSA-0101: ["ipauniqueid=*,cn=hbac,dc=ipa,dc=example"]
+  DSA-0102: ["ipauniqueid=*,cn=hbac,dc=ipa,dc=example"]
+  DSA-0103: ["ipauniqueid=*,cn=sudorules,cn=sudo,dc=ipa,dc=example"]
+  DSA-0104: ["ipauniqueid=*,cn=sudorules,cn=sudo,dc=ipa,dc=example"]
+  DSA-0105: ["uid=admin,cn=users,cn=accounts,dc=ipa,dc=example", "uid=carol,cn=users,cn=accounts,dc=ipa,dc=example"]
+  DSA-0107: ["cn=global_policy,cn=IPA.EXAMPLE,cn=kerberos,dc=ipa,dc=example"]   # minlength 6
+  DSA-0108: ["cn=global_policy,cn=IPA.EXAMPLE,cn=kerberos,dc=ipa,dc=example", "cn=ipaconfig,cn=etc,dc=ipa,dc=example"]
+  DSA-0109: ["fqdn=nfs01.ipa.example,cn=computers,cn=accounts,dc=ipa,dc=example"]
+  DSA-0110: ["krbprincipalname=HTTP/web01.ipa.example@IPA.EXAMPLE,cn=services,cn=accounts,dc=ipa,dc=example"]
+  DSA-0111: ["krbprincipalname=cifs/legacy.ipa.example@IPA.EXAMPLE,cn=services,cn=accounts,dc=ipa,dc=example"]
+  DSA-0112: ["cn=portal-to-ldap,cn=s4u2proxy,cn=etc,dc=ipa,dc=example"]
+  DSA-0113: ["cn=IPA.EXAMPLE,cn=kerberos,dc=ipa,dc=example"]
+  DSA-0114: ["cn=IPA.EXAMPLE,cn=kerberos,dc=ipa,dc=example"]
+  DSA-0115: ["ipauniqueid=*,cn=caacls,cn=ca,dc=ipa,dc=example"]
+  DSA-0117: ["cn=ipaconfig,cn=etc,dc=ipa,dc=example"]
+  DSA-0120: ["cn=ipaconfig,cn=etc,dc=ipa,dc=example"]
+  DSA-0121: ["cn=Helpdesk reset passwords,cn=permissions,cn=pbac,dc=ipa,dc=example"]
+  DSA-0122: ["cn=helpdesk,cn=roles,cn=accounts,dc=ipa,dc=example"]
+  DSA-0123: ["cn=anonymous-ldap-probe,cn=dirauditor"]
+dn_glob: true
+allow: []
+collected_queries: [config, realm, pwpolicies, hbac, sudo, users, groups, hosts, services, delegation, caacls, permissions, roles, privileges]

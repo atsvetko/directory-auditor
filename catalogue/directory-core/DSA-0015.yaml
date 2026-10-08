@@ -2,88 +2,100 @@
 # primary references only. A pack may be written only after `verified_by` is filled.
 id: DSA-0015
 title:
-  en: "Shadow admins: non-Tier-0 principals with control rights over Tier-0 objects"
-  ru: "Теневые администраторы: субъекты вне нулевого уровня с правами управления объектами нулевого уровня"
+  en: 'Shadow admins: non-Tier-0 principals with control rights over Tier-0 objects'
+  ru: >-
+    Теневые администраторы: субъекты вне нулевого уровня с правами управления объектами нулевого уровня
 domain: directory-core
 tier: 0
 severity: critical
 quick: true
 status: draft
-verified_by: ""
-verified_on: ""
+verified_by: ''
+verified_on: ''
+object: 'Security descriptors (nTSecurityDescriptor, DACL only) of every Tier-0 object as defined in catalogue/TIER0.md:
+  the domain naming-context head, CN=AdminSDHolder, each protected group in Microsoft''s Appendix C list
+  and its members, the Domain Controllers OU, domain-controller computer objects and krbtgt.
 
-object: >
-  Security descriptors (nTSecurityDescriptor, DACL only) of every Tier-0 object as
-  defined in catalogue/TIER0.md: the domain naming-context head, CN=AdminSDHolder,
-  each protected group in Microsoft's Appendix C list and its members, the Domain
-  Controllers OU, domain-controller computer objects and krbtgt.
-attributes: [nTSecurityDescriptor, objectSid, distinguishedName, adminCount]
+  '
+attributes:
+- nTSecurityDescriptor
+- objectSid
+- distinguishedName
+- adminCount
+condition: "An allow ACE on a Tier-0 object grants any of the rights below to a trustee that is not itself\
+  \ Tier 0 per catalogue/TIER0.md (SYSTEM, domain controllers, Enterprise Domain Controllers and the object's\
+  \ own SELF are excluded where that is the default).\n  - GenericAll (full control)\n  - WriteDacl or\
+  \ WriteOwner\n  - GenericWrite, or WriteProperty on all properties\n  - WriteProperty on the `member`\
+  \ attribute (schema GUID bf9679c0-0de6-11d0-a285-00aa003049e2) of a Tier-0 group\n  - the Reset Password\
+  \ extended right (User-Force-Change-Password, GUID 00299570-246d-11d0-a768-00aa006e0529) on a Tier-0\
+  \ account\n  - ExtendedRight with an empty object type (all extended rights)\nInherited and explicit\
+  \ ACEs both count. Each finding reports trustee, right, object, and whether the ACE is inherited.\n"
+threshold: any occurrence
+rationale: 'A principal that can change membership, permissions, owner or password of a Tier-0 object
+  can make itself an administrator, yet it does not appear in any privileged group. These "shadow admins"
+  are missed by membership reviews and by most privileged-access tooling, and they often survive from
+  past delegations, migrations or vendor installations.
 
-condition: >
-  An allow ACE on a Tier-0 object grants any of the rights below to a trustee that is
-  not itself Tier 0 per catalogue/TIER0.md (SYSTEM, domain controllers, Enterprise
-  Domain Controllers and the object's own SELF are excluded where that is the default).
-    - GenericAll (full control)
-    - WriteDacl or WriteOwner
-    - GenericWrite, or WriteProperty on all properties
-    - WriteProperty on the `member` attribute (schema GUID bf9679c0-0de6-11d0-a285-00aa003049e2) of a Tier-0 group
-    - the Reset Password extended right (User-Force-Change-Password, GUID 00299570-246d-11d0-a768-00aa006e0529) on a Tier-0 account
-    - ExtendedRight with an empty object type (all extended rights)
-  Inherited and explicit ACEs both count. Each finding reports trustee, right, object,
-  and whether the ACE is inherited.
-threshold: "any occurrence"
-
-rationale: >
-  A principal that can change membership, permissions, owner or password of a
-  Tier-0 object can make itself an administrator, yet it does not appear in any
-  privileged group. These "shadow admins" are missed by membership reviews and by
-  most privileged-access tooling, and they often survive from past delegations,
-  migrations or vendor installations.
-
+  '
 remediation:
-  en: >
-    Remove the ACE unless it is a documented, intended delegation. Where a team needs
-    to manage Tier-0 objects, make it a Tier-0 team with Tier-0 controls (separate
-    admin accounts, privileged-access workstations) instead of granting rights to a
-    standard group. Review AdminSDHolder (DSA-0016) so the ACE is not re-applied by
-    SDProp, and enable auditing of DACL and owner changes on Tier-0 objects.
-  ru: >
-    Удалите ACE, если это не задокументированное и намеренное делегирование. Если
-    команде нужно управлять объектами нулевого уровня, сделайте её командой нулевого
-    уровня с соответствующими мерами (отдельные административные учётные записи,
-    защищённые рабочие станции администраторов), а не выдавайте права обычной группе.
-    Проверьте AdminSDHolder (DSA-0016), чтобы SDProp не восстановил ACE, и включите
-    аудит изменений DACL и владельца на объектах нулевого уровня.
+  en: 'Remove the ACE unless it is a documented, intended delegation. Where a team needs to manage Tier-0
+    objects, make it a Tier-0 team with Tier-0 controls (separate admin accounts, privileged-access workstations)
+    instead of granting rights to a standard group. Review AdminSDHolder (DSA-0016) so the ACE is not
+    re-applied by SDProp, and enable auditing of DACL and owner changes on Tier-0 objects.
 
+    '
+  ru: 'Удалите ACE, если это не задокументированное и намеренное делегирование. Если команде нужно управлять
+    объектами нулевого уровня, сделайте её командой нулевого уровня с соответствующими мерами (отдельные
+    административные учётные записи, защищённые рабочие станции администраторов), а не выдавайте права
+    обычной группе. Проверьте AdminSDHolder (DSA-0016), чтобы SDProp не восстановил ACE, и включите аудит
+    изменений DACL и владельца на объектах нулевого уровня.
+
+    '
 attack:
-  - { id: T1098, name: "Account Manipulation" }
-  - { id: T1222.001, name: "File and Directory Permissions Modification: Windows" }
-  - { id: T1484, name: "Domain or Tenant Policy Modification" }
-
-engine: "complex:tier0_acl"   # DACL parsing + transitive Tier-0 membership; not expressible as one LDAP filter
+- id: T1098
+  name: Account Manipulation
+- id: T1222.001
+  name: 'File and Directory Permissions Modification: Windows'
+- id: T1484
+  name: Domain or Tenant Policy Modification
+engine: complex:tier0_acl
 query_sketch:
   base: default
   scope: subtree
-  notes: >
-    Read nTSecurityDescriptor with the SD_FLAGS control set to DACL_SECURITY_INFORMATION
-    (0x4) so a non-admin can read it. Resolve trustee SIDs; resolve nested group
-    membership including primaryGroupID.
+  notes: 'Read nTSecurityDescriptor with the SD_FLAGS control set to DACL_SECURITY_INFORMATION (0x4) so
+    a non-admin can read it. Resolve trustee SIDs; resolve nested group membership including primaryGroupID.
 
+    '
+  filter: (objectClass=*)
 references:
-  - title: "Microsoft Learn — Appendix C: Protected accounts and groups in Active Directory"
-    url: "https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory"
-  - title: "Microsoft Learn — Enterprise access model (privileged access)"
-    url: "https://learn.microsoft.com/en-us/security/privileged-access-workstations/privileged-access-access-model"
-  - title: "Microsoft Learn — Reset Password extended right (User-Force-Change-Password)"
-    url: "https://learn.microsoft.com/en-us/windows/win32/adschema/r-user-force-change-password"
-  - title: "Microsoft Learn — member attribute"
-    url: "https://learn.microsoft.com/en-us/windows/win32/adschema/a-member"
-  - title: "CyberArk — Shadow Admins: The Stealthy Accounts That You Should Fear The Most"
-    url: "https://www.cyberark.com/resources/threat-research/shadow-admins-the-stealthy-accounts-that-you-should-fear-the-most"
-  - title: "SpecterOps — An ACE Up the Sleeve: Designing Active Directory DACL Backdoors"
-    url: "https://specterops.io/assets/resources/an_ace_up_the_sleeve.pdf"
-
-notes: >
-  Shares the Tier-0 object set and membership resolver with DSA-0014 and DSA-0016.
-  Verify: the protected-groups list against Appendix C for the target OS level; the
-  default ACEs to exclude (e.g. Exchange groups, if present, are reported, not excluded).
+- title: 'Microsoft Learn — Appendix C: Protected accounts and groups in Active Directory'
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory
+- title: Microsoft Learn — Enterprise access model (privileged access)
+  url: >-
+    https://learn.microsoft.com/en-us/security/privileged-access-workstations/privileged-access-access-model
+- title: Microsoft Learn — Reset Password extended right (User-Force-Change-Password)
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/r-user-force-change-password
+- title: Microsoft Learn — member attribute
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-member
+- title: 'CyberArk — Shadow Admins: The Stealthy Accounts That You Should Fear The Most'
+  url: >-
+    https://www.cyberark.com/resources/threat-research/shadow-admins-the-stealthy-accounts-that-you-should-fear-the-most
+- title: 'SpecterOps — An ACE Up the Sleeve: Designing Active Directory DACL Backdoors'
+  url: https://specterops.io/assets/resources/an_ace_up_the_sleeve.pdf
+notes: >-
+  Shares the Tier-0 object set and membership resolver with DSA-0014 and DSA-0016. Verify: the protected-groups
+  list against Appendix C for the target OS level; the default ACEs to exclude (e.g. Exchange groups,
+  if present, are reported, not excluded). Implementation notes: objectCategory=person is replaced by
+  sAMAccountType=805306368 in the pack filter because the analyser matches collected attribute values,
+  not server-side shortcuts. SELF (S-1-5-10) and CREATOR OWNER (S-1-3-0) trustees are ignored; Tier-0
+  trustees include other-domain SIDs with Tier-0 RIDs.
+condition_cel: '!obj.dn.lowerAscii().startsWith("cn=adminsdholder,") && (tier0(obj) || obj.dn.lowerAscii()
+  == obj.base.lowerAscii() || obj.dn.lowerAscii().startsWith("ou=domain controllers,")) && sd_readable(obj)
+  && aces(obj).exists(a, a.allow && a.effective && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"])
+  && (mask_has(a.mask, 0x10000000) || mask_has(a.mask, 0xF01FF) || mask_has(a.mask, 0x40000) || mask_has(a.mask,
+  0x80000) || mask_has(a.mask, 0x40000000) || (mask_has(a.mask, 0x20) && (a.object_type == "" || a.object_type
+  == "bf9679c0-0de6-11d0-a285-00aa003049e2")) || (mask_has(a.mask, 0x100) && (a.object_type == "" || a.object_type
+  == "00299570-246d-11d0-a768-00aa006e0529"))))'
+expect:
+- CN=Domain Admins,CN=Users,DC=lab,DC=example

@@ -1,0 +1,72 @@
+# FreeIPA lab: a privileged freeipa-server container on the runner, populated
+# with deliberately weak objects, scanned as an ordinary user and as admin, and
+# checked against testdata/lab/freeipa-*-expect.yaml. ~15 minutes, so it runs
+# nightly and on demand rather than on every push.
+name: lab-freeipa
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DIRAUDITOR_LAB: "1"
+  IPA_PASSWORD: "Lab-Admin-Pass-2026!"
+  IPA_USER_PASSWORD: "Lab-User-Pass-2026!"
+
+jobs:
+  freeipa:
+    name: FreeIPA server (container)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: build
+        run: CGO_ENABLED=0 go build -trimpath -o dirauditor ./cmd/dirauditor
+
+      - name: start FreeIPA
+        run: tools/lab/freeipa/run.sh
+      - name: populate lab objects
+        run: tools/lab/freeipa/populate.sh
+
+      - name: pin the LDAPS certificate
+        id: pin
+        run: |
+          PIN=$(openssl s_client -connect 127.0.0.1:636 -servername ipa.ipa.example </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':')
+          echo "pin=$PIN" >> "$GITHUB_OUTPUT"
+
+      - name: scan as an ordinary user (tier 1)
+        run: |
+          echo "$IPA_USER_PASSWORD" | ./dirauditor scan --provider freeipa --server ipa.ipa.example --domain ipa.example \
+            --user audit --password-stdin --pin "${{ steps.pin.outputs.pin }}" --tier 1 \
+            --catalogue catalogue --packs "" --out lab-user --lang en
+      - name: verify (user)
+        run: go run ./tools/lab/verify -report lab-user/report.json -expect testdata/lab/freeipa-user-expect.yaml
+
+      - name: scan as admin (tier 2)
+        run: |
+          echo "$IPA_PASSWORD" | ./dirauditor scan --provider freeipa --server ipa.ipa.example --domain ipa.example \
+            --user admin --password-stdin --pin "${{ steps.pin.outputs.pin }}" --tier 2 \
+            --catalogue catalogue --packs "" --out lab-admin --lang en
+      - name: verify (admin)
+        run: go run ./tools/lab/verify -report lab-admin/report.json -expect testdata/lab/freeipa-admin-expect.yaml
+
+      - name: container log on failure
+        if: failure()
+        run: docker logs --tail 80 dirauditor-ipa || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: freeipa-lab-reports
+          path: |
+            lab-user/report.html
+            lab-user/report.json
+            lab-admin/report.html
+            lab-admin/report.json
+          retention-days: 14

@@ -1,0 +1,46 @@
+# Expected outcome of `dirauditor scan --catalogue catalogue --local` against the
+# Samba lab built by tools/lab/samba/provision.sh + populate.sh.
+# Checked by `go run ./tools/lab/verify`. Entries evaluated but not listed under
+# `must` or `allow` must pass; `skipped` checks are only accepted for the
+# reasons listed in allow_skip.
+lab: samba
+min_objects: 50
+allow_skip: [provider, tier]      # FreeIPA entries skip by provider; tier-2 entries skip when --local is absent
+must:
+  DSA-0001: ["CN=j.legacy,CN=Users,DC=lab,DC=example"]        # DONT_REQ_PREAUTH
+  DSA-0002: ["CN=svc-backup,CN=Users,DC=lab,DC=example"]      # Tier-0 (nested) account with an SPN
+  DSA-0004: ["CN=APP01,CN=Computers,DC=lab,DC=example"]       # unconstrained delegation
+  DSA-0007: ["CN=Administrator,CN=Users,DC=lab,DC=example", "CN=old.admin,CN=Users,DC=lab,DC=example"]  # not NOT_DELEGATED / Protected Users
+  DSA-0011: ["CN=j.legacy,CN=Users,DC=lab,DC=example"]        # reversible encryption flag
+  DSA-0013: ["DC=lab,DC=example"]                 # machine-account quota 10 (Samba default)
+  DSA-0015: ["CN=Domain Admins,CN=Users,DC=lab,DC=example"]   # Helpdesk has GenericAll
+  DSA-0019: ["CN=old.admin,CN=Users,DC=lab,DC=example"]       # orphaned adminCount
+  DSA-0020: ["DC=lab,DC=example"]                 # lockout threshold 0
+  DSA-0021: ["DC=lab,DC=example"]                 # min length 7
+  DSA-0022: ["DC=lab,DC=example"]                 # complexity off
+  DSA-0023: ["DC=lab,DC=example"]                 # never expires / no history
+  DSA-0024: ["cn=rootdse,cn=dirauditor"]          # FL 2008 R2
+  DSA-0025: ["CN=Directory Service,CN=Windows NT,CN=Services,CN=Configuration,DC=lab,DC=example"]
+  DSA-0202: ["cn=global,cn=smb.conf,cn=dirauditor"]   # server schannel = auto
+  DSA-0203: ["cn=global,cn=smb.conf,cn=dirauditor"]   # reject md5 clients = no
+  DSA-0206: ["cn=global,cn=smb.conf,cn=dirauditor"]   # ntlmv1-permitted
+  DSA-0207: ["cn=global,cn=smb.conf,cn=dirauditor"]   # allow dns updates = nonsecure
+  DSA-0208: ["cn=global,cn=smb.conf,cn=dirauditor"]   # NT1
+  DSA-0211: ["cn=global,cn=smb.conf,cn=dirauditor"]   # old password allowed period 1440
+  DSA-0212: ["cn=global,cn=smb.conf,cn=dirauditor"]   # dsdb:schema update allowed
+  DSA-0214: ["cn=global,cn=smb.conf,cn=dirauditor", "cn=public,cn=shares,cn=smb.conf,cn=dirauditor"]
+  DSA-0215: ["cn=global,cn=smb.conf,cn=dirauditor"]   # log level 0
+  DSA-0217: ["cn=global,cn=smb.conf,cn=dirauditor"]   # kdc:user ticket lifetime 24
+  DSA-0218: ["cn=global,cn=smb.conf,cn=dirauditor"]   # kerberos encryption types = legacy
+  DSA-0219: ["cn=global,cn=smb.conf,cn=dirauditor"]   # NTLM enabled (info)
+allow:
+  - DSA-0201   # upstream version check; the runner's distribution package may be older than 4.23 but patched
+  - DSA-0220   # RC4 default inferred from version < 4.24.0
+tier0_must_include:
+  - "CN=svc-backup,CN=Users,DC=lab,DC=example"      # nested: Domain Admins > Tier0 Ops > svc-backup
+  - "CN=Tier0 Ops,CN=Users,DC=lab,DC=example"
+  - "CN=DC1,OU=Domain Controllers,DC=lab,DC=example"
+tier0_must_exclude:
+  - "CN=old.admin,CN=Users,DC=lab,DC=example"       # adminCount=1 but no longer a member
+  - "CN=helpdesk1,CN=Users,DC=lab,DC=example"
+collected_queries: [domain-head, users, computers, groups, adminsdholder, dc-ou, ds-heuristics, protected-sd]

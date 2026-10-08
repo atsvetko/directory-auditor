@@ -1,0 +1,67 @@
+# Samba AD DC lab: provisions a real (deliberately weak) domain on the runner,
+# scans it as an ordinary user over pinned LDAPS plus the local smb.conf, and
+# checks the findings against testdata/lab/samba-expect.yaml.
+name: lab-samba
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "**/*.md"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DIRAUDITOR_LAB: "1"
+
+jobs:
+  samba:
+    name: Samba AD DC (Ubuntu package)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: build
+        run: CGO_ENABLED=0 go build -trimpath -o dirauditor ./cmd/dirauditor
+
+      - name: install samba
+        run: |
+          sudo apt-get update -q
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q samba samba-dsdb-modules samba-vfs-modules winbind krb5-user ldb-tools ldap-utils
+          samba -V
+      - name: provision lab domain
+        run: sudo -E tools/lab/samba/provision.sh
+      - name: populate lab objects
+        run: sudo -E tools/lab/samba/populate.sh
+
+      - name: doctor
+        run: ./dirauditor doctor --domain lab.example --server dc1.lab.example || true
+
+      - name: scan (ordinary user, pinned LDAPS, local smb.conf, catalogue dry run)
+        run: |
+          PIN=$(sudo openssl x509 -in /var/lib/samba/private/tls/cert.pem -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':')
+          echo 'Lab-User-Pass-2026!' | sudo -E ./dirauditor scan \
+            --server dc1.lab.example --domain lab.example \
+            --user audit@lab.example --password-stdin --pin "$PIN" \
+            --local --catalogue catalogue --packs "" --out lab-out --lang en
+      - name: verify findings
+        run: |
+          sudo chown -R "$USER" lab-out
+          go run ./tools/lab/verify -report lab-out/report.json -expect testdata/lab/samba-expect.yaml
+
+      - name: samba log on failure
+        if: failure()
+        run: sudo tail -50 /var/log/samba-lab.log || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: samba-lab-report
+          path: |
+            lab-out/report.html
+            lab-out/report.json
+          retention-days: 14

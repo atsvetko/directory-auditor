@@ -1,55 +1,70 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
 id: DSA-0010
 title:
-  en: "Accounts allowed to have an empty password"
-  ru: "Учётные записи, которым разрешён пустой пароль"
+  en: Accounts allowed to have an empty password
+  ru: Учётные записи, которым разрешён пустой пароль
 domain: directory-core
 tier: 0
 severity: high
 quick: true
 status: draft
-verified_by: ""
-verified_on: ""
+verified_by: ''
+verified_on: ''
+object: Enabled user accounts
+attributes:
+- userAccountControl
+- sAMAccountName
+- pwdLastSet
+- lastLogonTimestamp
+condition: 'userAccountControl has PASSWD_NOTREQD (0x20, decimal 32) set and ACCOUNTDISABLE (0x2) not
+  set. Severity is raised to critical for Tier-0 accounts. Evidence: password age and last logon, to separate
+  leftover accounts from active ones.
 
-object: "Enabled user accounts"
-attributes: [userAccountControl, sAMAccountName, pwdLastSet, lastLogonTimestamp]
+  '
+threshold: any occurrence
+rationale: 'The flag exempts the account from the domain password policy, so it may have an empty or arbitrarily
+  short password. Such accounts are usually created by provisioning scripts, migrations or third-party
+  tools and are rarely noticed, because nothing about them looks unusual in group membership reviews.
 
-condition: >
-  userAccountControl has PASSWD_NOTREQD (0x20, decimal 32) set and ACCOUNTDISABLE
-  (0x2) not set. Severity is raised to critical for Tier-0 accounts. Evidence:
-  password age and last logon, to separate leftover accounts from active ones.
-threshold: "any occurrence"
-
-rationale: >
-  The flag exempts the account from the domain password policy, so it may have an
-  empty or arbitrarily short password. Such accounts are usually created by
-  provisioning scripts, migrations or third-party tools and are rarely noticed,
-  because nothing about them looks unusual in group membership reviews.
-
+  '
 remediation:
-  en: >
-    Clear "password not required" on the account and set a password that meets
-    policy; disable the account if it is unused. Find and fix the provisioning
-    process that set the flag so new accounts do not inherit it.
-  ru: >
-    Снимите флаг «пароль не требуется» и задайте пароль, соответствующий политике;
-    если учётная запись не используется, отключите её. Найдите и исправьте процесс
-    подготовки учётных записей, который выставил флаг, чтобы новые учётные записи его
-    не получали.
+  en: 'Clear "password not required" on the account and set a password that meets policy; disable the
+    account if it is unused. Find and fix the provisioning process that set the flag so new accounts do
+    not inherit it.
 
+    '
+  ru: 'Снимите флаг «пароль не требуется» и задайте пароль, соответствующий политике; если учётная запись
+    не используется, отключите её. Найдите и исправьте процесс подготовки учётных записей, который выставил
+    флаг, чтобы новые учётные записи его не получали.
+
+    '
 attack:
-  - { id: T1078.002, name: "Valid Accounts: Domain Accounts" }
-
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
 engine: declarative
 query_sketch:
   base: default
   scope: subtree
-  filter: "(&(objectCategory=person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=32)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
-  attributes: [sAMAccountName, userAccountControl, pwdLastSet, lastLogonTimestamp]
-
+  filter: >-
+    (&(sAMAccountType=805306368)(userAccountControl:1.2.840.113556.1.4.803:=32)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))
+  attributes:
+  - sAMAccountName
+  - userAccountControl
+  - pwdLastSet
+  - lastLogonTimestamp
 references:
-  - title: "Microsoft Learn — Use the UserAccountControl flags to manipulate user account properties (PASSWD_NOTREQD 0x0020)"
-    url: "https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties"
-  - title: "MITRE ATT&CK — T1078.002 Valid Accounts: Domain Accounts"
-    url: "https://attack.mitre.org/techniques/T1078/002/"
-
-notes: "The flag does not mean the password is empty — only that it may be. The report wording must say so."
+- title: >-
+    Microsoft Learn — Use the UserAccountControl flags to manipulate user account properties (PASSWD_NOTREQD
+    0x0020)
+  url: >-
+    https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties
+- title: 'MITRE ATT&CK — T1078.002 Valid Accounts: Domain Accounts'
+  url: https://attack.mitre.org/techniques/T1078/002/
+notes: >-
+  The flag does not mean the password is empty — only that it may be. The report wording must say so.
+  Implementation notes: objectCategory=person is replaced by sAMAccountType=805306368 in the pack filter
+  because the analyser matches collected attribute values, not server-side shortcuts.
+condition_cel: flags(obj, "userAccountControl", 32) && !flags(obj, "userAccountControl", 2)
+expect:
+- CN=kiosk,CN=Users,DC=lab,DC=example

@@ -160,7 +160,7 @@ func objectToCEL(o snapshot.Object, now int64, t0 *tier0.Set) map[string]any {
 	for i, c := range o.Class {
 		cls[i] = c
 	}
-	m := map[string]any{"dn": o.DN, "class": cls, "attrs": attrs, "now": now, "tier0": false, "tier0_reason": ""}
+	m := map[string]any{"dn": o.DN, "class": cls, "attrs": attrs, "now": now, "tier0": false, "tier0_reason": "", "base": currentBase}
 	if t0 != nil {
 		if ok, why := t0.IsDN(o.DN); ok {
 			m["tier0"], m["tier0_reason"] = true, why

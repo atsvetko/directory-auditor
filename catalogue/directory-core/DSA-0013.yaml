@@ -1,65 +1,73 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
 id: DSA-0013
 title:
-  en: "Any authenticated user can add computers to the domain"
-  ru: "Любой аутентифицированный пользователь может добавлять компьютеры в домен"
+  en: Any authenticated user can add computers to the domain
+  ru: Любой аутентифицированный пользователь может добавлять компьютеры в домен
 domain: directory-core
 tier: 0
 severity: medium
 quick: true
 status: draft
-verified_by: ""
-verified_on: ""
+verified_by: ''
+verified_on: ''
+object: The domain naming-context head; computer accounts (for evidence)
+attributes:
+- ms-DS-MachineAccountQuota
+- ms-DS-CreatorSID
+- sAMAccountName
+- whenCreated
+condition: 'ms-DS-MachineAccountQuota on the domain head is greater than 0 (the default is 10). Evidence:
+  the quota value and the number of computer accounts whose ms-DS-CreatorSID points to a non-administrative
+  user (machines added through the quota).
 
-object: "The domain naming-context head; computer accounts (for evidence)"
-attributes: [ms-DS-MachineAccountQuota, ms-DS-CreatorSID, sAMAccountName, whenCreated]
+  '
+threshold: quota > 0
+rationale: 'The quota lets every authenticated user create computer accounts without any delegated permission,
+  and the creator controls attributes of the accounts it creates. Self-created computer accounts are a
+  common building block in privilege-escalation chains (for example through resource-based delegation),
+  and they bypass the organisation''s normal process for joining machines.
 
-condition: >
-  ms-DS-MachineAccountQuota on the domain head is greater than 0 (the default is 10).
-  Evidence: the quota value and the number of computer accounts whose
-  ms-DS-CreatorSID points to a non-administrative user (machines added through the
-  quota).
-threshold: "quota > 0"
-
-rationale: >
-  The quota lets every authenticated user create computer accounts without any
-  delegated permission, and the creator controls attributes of the accounts it
-  creates. Self-created computer accounts are a common building block in
-  privilege-escalation chains (for example through resource-based delegation), and
-  they bypass the organisation's normal process for joining machines.
-
+  '
 remediation:
-  en: >
-    Set ms-DS-MachineAccountQuota to 0 on the domain object. Grant the "create
-    computer objects" permission on the OUs where machines are joined to a dedicated
-    group (help desk, deployment service) instead. Review existing computer accounts
-    created through the quota (ms-DS-CreatorSID set to a regular user) and remove
-    the ones that are not legitimate.
-  ru: >
-    Установите ms-DS-MachineAccountQuota равным 0 на объекте домена. Вместо квоты
-    выдайте право создания объектов-компьютеров в нужных подразделениях (OU) отдельной
-    группе (служба поддержки, служба развёртывания). Проверьте уже созданные через
-    квоту учётные записи компьютеров (ms-DS-CreatorSID указывает на обычного
+  en: 'Set ms-DS-MachineAccountQuota to 0 on the domain object. Grant the "create computer objects" permission
+    on the OUs where machines are joined to a dedicated group (help desk, deployment service) instead.
+    Review existing computer accounts created through the quota (ms-DS-CreatorSID set to a regular user)
+    and remove the ones that are not legitimate.
+
+    '
+  ru: 'Установите ms-DS-MachineAccountQuota равным 0 на объекте домена. Вместо квоты выдайте право создания
+    объектов-компьютеров в нужных подразделениях (OU) отдельной группе (служба поддержки, служба развёртывания).
+    Проверьте уже созданные через квоту учётные записи компьютеров (ms-DS-CreatorSID указывает на обычного
     пользователя) и удалите нелегитимные.
 
+    '
 attack:
-  - { id: T1136.002, name: "Create Account: Domain Account" }
-
+- id: T1136.002
+  name: 'Create Account: Domain Account'
 engine: declarative
 query_sketch:
   base: default
   scope: base
-  filter: "(&(objectClass=domainDNS)(ms-DS-MachineAccountQuota>=1))"
-  attributes: [ms-DS-MachineAccountQuota]
-
+  filter: (&(objectClass=domainDNS)(ms-DS-MachineAccountQuota>=1))
+  attributes:
+  - ms-DS-MachineAccountQuota
 references:
-  - title: "Microsoft Learn — Default limit to number of workstations a user can join to the domain (default 10, ms-DS-CreatorSID)"
-    url: "https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/default-workstation-numbers-join-domain"
-  - title: "Microsoft Learn — ms-DS-MachineAccountQuota attribute"
-    url: "https://learn.microsoft.com/en-us/windows/win32/adschema/a-ms-ds-machineaccountquota"
-  - title: "MITRE ATT&CK — T1136.002 Create Account: Domain Account"
-    url: "https://attack.mitre.org/techniques/T1136/002/"
-
-notes: >
-  Samba AD DC honours the same attribute; confirm its default in the Samba lab.
-  Setting the quota to 0 can break self-service domain joins — the remediation text
-  names the delegation that replaces it.
+- title: >-
+    Microsoft Learn — Default limit to number of workstations a user can join to the domain (default 10,
+    ms-DS-CreatorSID)
+  url: >-
+    https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/default-workstation-numbers-join-domain
+- title: Microsoft Learn — ms-DS-MachineAccountQuota attribute
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-ms-ds-machineaccountquota
+- title: 'MITRE ATT&CK — T1136.002 Create Account: Domain Account'
+  url: https://attack.mitre.org/techniques/T1136/002/
+notes: >-
+  Samba AD DC honours the same attribute; confirm its default in the Samba lab. Setting the quota to 0
+  can break self-service domain joins — the remediation text names the delegation that replaces it. Implementation
+  notes: objectCategory=person is replaced by sAMAccountType=805306368 in the pack filter because the
+  analyser matches collected attribute values, not server-side shortcuts.
+condition_cel: intattr(obj, "ms-DS-MachineAccountQuota") > 0
+expect:
+- DC=lab,DC=example
+- DC=samba,DC=example

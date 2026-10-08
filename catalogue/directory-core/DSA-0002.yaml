@@ -1,64 +1,83 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
 id: DSA-0002
 title:
-  en: "Tier-0 user accounts with a service principal name"
-  ru: "Учётные записи пользователей нулевого уровня с именем участника-службы (SPN)"
+  en: Tier-0 user accounts with a service principal name
+  ru: Учётные записи пользователей нулевого уровня с именем участника-службы (SPN)
 domain: directory-core
 tier: 0
 severity: critical
 quick: true
 status: draft
-verified_by: ""
-verified_on: ""
+verified_by: ''
+verified_on: ''
+object: Enabled user accounts (not computers) that are Tier 0
+attributes:
+- servicePrincipalName
+- adminCount
+- sAMAccountName
+- pwdLastSet
+- msDS-SupportedEncryptionTypes
+- userAccountControl
+condition: 'The account has at least one servicePrincipalName value, is not a computer account, is enabled,
+  is not krbtgt, and is Tier 0 (adminCount = 1 or resolved membership in a Tier-0 group as in DSA-0015).
+  Evidence: SPNs, password age, supported encryption types.
 
-object: "Enabled user accounts (not computers) that are Tier 0"
-attributes: [servicePrincipalName, adminCount, sAMAccountName, pwdLastSet, msDS-SupportedEncryptionTypes, userAccountControl]
+  '
+threshold: any occurrence
+rationale: 'Any authenticated user can request a Kerberos service ticket for any SPN, and part of that
+  ticket is encrypted with a key derived from the service account''s password. If the account is privileged,
+  the strength of one password is all that stands between an ordinary user and domain administration,
+  and the guessing happens offline where lockout policies do not apply.
 
-condition: >
-  The account has at least one servicePrincipalName value, is not a computer
-  account, is enabled, is not krbtgt, and is Tier 0 (adminCount = 1 or resolved
-  membership in a Tier-0 group as in DSA-0015). Evidence: SPNs, password age,
-  supported encryption types.
-threshold: "any occurrence"
-
-rationale: >
-  Any authenticated user can request a Kerberos service ticket for any SPN, and part
-  of that ticket is encrypted with a key derived from the service account's
-  password. If the account is privileged, the strength of one password is all that
-  stands between an ordinary user and domain administration, and the guessing
-  happens offline where lockout policies do not apply.
-
+  '
 remediation:
-  en: >
-    Remove SPNs from privileged accounts and run the service under a dedicated,
-    non-privileged account, preferably a group Managed Service Account (gMSA), whose
-    password is generated and rotated by the domain. If an SPN must remain, use a long
-    random password (25+ characters), allow AES encryption types only and keep the
-    account out of Tier-0 groups.
-  ru: >
-    Удалите SPN с привилегированных учётных записей и запускайте службу от отдельной
-    непривилегированной учётной записи, лучше всего — групповой управляемой учётной
-    записи службы (gMSA), пароль которой создаёт и меняет сам домен. Если SPN
-    должен остаться, задайте длинный случайный пароль (от 25 символов), разрешите
+  en: 'Remove SPNs from privileged accounts and run the service under a dedicated, non-privileged account,
+    preferably a group Managed Service Account (gMSA), whose password is generated and rotated by the
+    domain. If an SPN must remain, use a long random password (25+ characters), allow AES encryption types
+    only and keep the account out of Tier-0 groups.
+
+    '
+  ru: 'Удалите SPN с привилегированных учётных записей и запускайте службу от отдельной непривилегированной
+    учётной записи, лучше всего — групповой управляемой учётной записи службы (gMSA), пароль которой создаёт
+    и меняет сам домен. Если SPN должен остаться, задайте длинный случайный пароль (от 25 символов), разрешите
     только шифрование AES и исключите учётную запись из групп нулевого уровня.
 
+    '
 attack:
-  - { id: T1558.003, name: "Steal or Forge Kerberos Tickets: Kerberoasting" }
-
-engine: "complex:tier0_membership"
+- id: T1558.003
+  name: 'Steal or Forge Kerberos Tickets: Kerberoasting'
+engine: complex:tier0_membership
 query_sketch:
   base: default
   scope: subtree
-  filter: "(&(objectCategory=person)(objectClass=user)(servicePrincipalName=*)(!(sAMAccountName=krbtgt))(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
-  attributes: [sAMAccountName, servicePrincipalName, adminCount, pwdLastSet, msDS-SupportedEncryptionTypes, memberOf, primaryGroupID]
-
+  filter: >-
+    (&(sAMAccountType=805306368)(servicePrincipalName=*)(!(sAMAccountName=krbtgt))(!(userAccountControl:1.2.840.113556.1.4.803:=2)))
+  attributes:
+  - sAMAccountName
+  - servicePrincipalName
+  - adminCount
+  - pwdLastSet
+  - msDS-SupportedEncryptionTypes
+  - memberOf
+  - primaryGroupID
 references:
-  - title: "Microsoft Learn — Group Managed Service Accounts overview"
-    url: "https://learn.microsoft.com/en-us/windows-server/security/group-managed-service-accounts/group-managed-service-accounts-overview"
-  - title: "Microsoft Learn — Appendix C: Protected accounts and groups in Active Directory"
-    url: "https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory"
-  - title: "MITRE ATT&CK — T1558.003 Kerberoasting"
-    url: "https://attack.mitre.org/techniques/T1558/003/"
-  - title: "ADSecurity — Cracking Kerberos TGS Tickets Using Kerberoast"
-    url: "https://adsecurity.org/?p=2293"
-
-notes: "Non-privileged accounts with SPNs and weak settings are DSA-0003."
+- title: Microsoft Learn — Group Managed Service Accounts overview
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/security/group-managed-service-accounts/group-managed-service-accounts-overview
+- title: 'Microsoft Learn — Appendix C: Protected accounts and groups in Active Directory'
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory
+- title: MITRE ATT&CK — T1558.003 Kerberoasting
+  url: https://attack.mitre.org/techniques/T1558/003/
+- title: ADSecurity — Cracking Kerberos TGS Tickets Using Kerberoast
+  url: https://adsecurity.org/?p=2293
+notes: >-
+  Non-privileged accounts with SPNs and weak settings are DSA-0003. Implementation notes: objectCategory=person
+  is replaced by sAMAccountType=805306368 in the pack filter because the analyser matches collected attribute
+  values, not server-side shortcuts.
+condition_cel: size(attrs(obj, "servicePrincipalName")) > 0 && attr(obj, "sAMAccountName").lowerAscii()
+  != "krbtgt" && !flags(obj, "userAccountControl", 2) && (tier0(obj) || intattr(obj, "adminCount") ==
+  1)
+expect:
+- CN=svc_backup,CN=Users,DC=lab,DC=example

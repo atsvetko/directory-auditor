@@ -1,0 +1,67 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0220
+title:
+  en: KDC default encryption types predate the AES-only default (Samba before 4.24.0)
+  ru: Типы шифрования KDC по умолчанию старше AES-only (Samba до 4.24.0)
+domain: samba
+tier: 2
+severity: medium
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC; the Samba version
+attributes:
+- kdc default domain supported enctypes
+- kdc supported enctypes
+condition: >-
+  The Samba version is below 4.24.0 and `kdc default domain supported enctypes` is unset or 0. On these
+  versions the built-in default for accounts without msDS-SupportedEncryptionTypes included RC4; Samba
+  4.24.0 changed it to AES-only (CVE-2026-20833). Explicit RC4 is DSA-0210.
+threshold: version < 4.24.0 and parameter unset
+rationale: >-
+  Service and user accounts that never had msDS-SupportedEncryptionTypes set — most accounts created by
+  hand — take their Kerberos key types from this default. With the old default the KDC issues RC4 service
+  tickets for them, which can be cracked offline at NT-hash speed. Distributions back-port the fix under
+  old version numbers, so this finding needs a look at the vendor's advisory before acting.
+remediation:
+  en: >-
+    Upgrade to 4.24+ (or confirm the distribution package carries the CVE-2026-20833 fix), or set `kdc
+    default domain supported enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96` explicitly on
+    every DC after checking that no client depends on RC4.
+  ru: >-
+    Обновитесь до 4.24+ (или подтвердите, что пакет дистрибутива содержит исправление CVE-2026-20833)
+    либо явно задайте `kdc default domain supported enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96`
+    на каждом контроллере, убедившись, что ни один клиент не зависит от RC4.
+attack:
+- id: T1558.003
+  name: 'Steal or Forge Kerberos Tickets: Kerberoasting'
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - kdc default domain supported enctypes
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file. The version comes from cn=samba,cn=dirauditor.
+references:
+- title: >-
+    Samba 4.24.0 release notes — domain encryption types changed to AES by default, CVE-2026-20833
+  url: https://github.com/samba-team/samba/blob/samba-4.24.0/WHATSNEW.txt
+- title: >-
+    Samba smb.conf(5) — 'kdc default domain supported enctypes' (docs-xml/smbdotconf/security/kdcdefaultdomainsupportedenctypes.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/kdcdefaultdomainsupportedenctypes.xml
+- title: MITRE ATT&CK — T1558.003 Kerberoasting
+  url: https://attack.mitre.org/techniques/T1558/003/
+notes: >-
+  Back-port versions unknown (advisory not reachable at verification time) — single-source; the remediation
+  says to check the vendor advisory first.
+condition_cel: version_lt(objattr("cn=samba,cn=dirauditor", "version"), "4.24.0") && (attr(obj, "kdc default
+  domain supported enctypes").lowerAscii().trim() == "" || attr(obj, "kdc default domain supported enctypes").lowerAscii().trim()
+  == "0")
+expect: []

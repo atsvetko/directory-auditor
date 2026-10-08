@@ -70,6 +70,23 @@ func (s *Set) IsSID(sid string) (bool, string) {
 			}
 		}
 	}
+	// A domain SID with a Tier-0 RID from another domain of the forest (the
+	// forest root's Enterprise Admins seen from a child domain, a trusted
+	// domain's Domain Admins): the object is not in this snapshot, but the
+	// trustee is an administrator somewhere and must not be mistaken for a
+	// shadow admin.
+	if strings.HasPrefix(sid, "S-1-5-21-") {
+		if i := strings.LastIndexByte(sid, '-'); i > 0 {
+			if rid, err := strconv.ParseUint(sid[i+1:], 10, 32); err == nil {
+				if n, ok := domainGroupRIDs[uint32(rid)]; ok {
+					return true, n + " (other domain)"
+				}
+				if rid == 500 {
+					return true, "built-in Administrator account (other domain)"
+				}
+			}
+		}
+	}
 	return false, ""
 }
 

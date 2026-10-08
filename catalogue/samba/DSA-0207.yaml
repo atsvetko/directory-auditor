@@ -57,7 +57,7 @@ references:
   url: https://learn.microsoft.com/en-us/windows-server/networking/dns/deploy/dns-dynamic-update
 - title: MITRE ATT&CK — T1557 Adversary-in-the-Middle
   url: https://attack.mitre.org/techniques/T1557/
-notes: ''
-condition_cel: attr(obj, "allow dns updates").lowerAscii().trim() == "nonsecure"
+notes: testparm prints the value as 'nonsecure and secure'; the condition matches the prefix.
+condition_cel: attr(obj, "allow dns updates").lowerAscii().trim().startsWith("nonsecure")
 expect:
 - cn=global,cn=smb.conf,cn=dirauditor

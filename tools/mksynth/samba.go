@@ -69,11 +69,15 @@ func writeSambaLab(path string, hardened bool) error {
 		map[string][]string{"dSHeuristics": {heur}, "tombstoneLifetime": {"180"}})
 
 	user := []string{"top", "person", "organizationalPerson", "user"}
+	adminUAC := "66048" // DONT_EXPIRE_PASSWORD, as provisioned
+	if hardened {
+		adminUAC = "1049088" // NORMAL_ACCOUNT | NOT_DELEGATED, password rotated
+	}
 	for _, u := range []struct{ name, uac, rid string }{
-		{"Administrator", "66048", "500"}, {"krbtgt", "514", "502"}, {"j.doe", "512", "1104"}, {"svc-backup", "66048", "1105"},
+		{"Administrator", adminUAC, "500"}, {"krbtgt", "514", "502"}, {"j.doe", "512", "1104"}, {"svc-backup", "66048", "1105"},
 	} {
 		add(fmt.Sprintf("CN=%s,CN=Users,%s", u.name, base), user, map[string][]string{
-			"sAMAccountName": {u.name}, "userAccountControl": {u.uac}, "objectSid": {dom + "-" + u.rid}, "primaryGroupID": {"513"}, "pwdLastSet": {ft(100)}})
+			"sAMAccountName": {u.name}, "userAccountControl": {u.uac}, "objectSid": {dom + "-" + u.rid}, "primaryGroupID": {"513"}, "pwdLastSet": {ft(100)}, "sAMAccountType": {"805306368"}})
 	}
 	for _, g := range []struct{ name, sid string }{{"Domain Admins", dom + "-512"}, {"Domain Controllers", dom + "-516"}, {"Administrators", "S-1-5-32-544"}} {
 		dn := fmt.Sprintf("CN=%s,CN=Users,%s", g.name, base)
@@ -83,7 +87,7 @@ func writeSambaLab(path string, hardened bool) error {
 		add(dn, []string{"top", "group"}, map[string][]string{"sAMAccountName": {g.name}, "objectSid": {g.sid}, "member": {"CN=Administrator,CN=Users," + base}})
 	}
 	add("CN=DC1,OU=Domain Controllers,"+base, append(append([]string{}, user...), "computer"), map[string][]string{
-		"sAMAccountName": {"DC1$"}, "objectSid": {dom + "-1000"}, "primaryGroupID": {"516"}, "userAccountControl": {"532480"},
+		"sAMAccountName": {"DC1$"}, "objectSid": {dom + "-1000"}, "primaryGroupID": {"516"}, "userAccountControl": {"532480"}, "sAMAccountType": {"805306369"},
 		"operatingSystem": {"Samba"}, "dNSHostName": {"dc1.samba.example"}, "pwdLastSet": {ft(20)}})
 
 	// Local configuration as the smb.conf collector would record it (testparm

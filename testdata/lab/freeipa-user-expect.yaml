@@ -1,0 +1,20 @@
+# FreeIPA lab (tools/lab/freeipa), scanned as an ordinary user (audit) at tier 1.
+# Containers that need an IPA privilege are expected to be reported as not
+# collected, so entries on them are skipped, never passed.
+lab: freeipa-user
+min_objects: 25
+allow_skip: [provider, tier, not-collected]
+must:
+  DSA-0101: ["ipauniqueid=*,cn=hbac,dc=ipa,dc=example"]                 # allow_all (DN carries a generated id; see dn_glob)
+  DSA-0102: ["ipauniqueid=*,cn=hbac,dc=ipa,dc=example"]                 # devs_everywhere
+  DSA-0103: ["ipauniqueid=*,cn=sudorules,cn=sudo,dc=ipa,dc=example"]    # root_everything
+  DSA-0104: ["ipauniqueid=*,cn=sudorules,cn=sudo,dc=ipa,dc=example"]    # ops_nopasswd
+  DSA-0105: ["uid=admin,cn=users,cn=accounts,dc=ipa,dc=example", "uid=carol,cn=users,cn=accounts,dc=ipa,dc=example"]
+  DSA-0108: ["cn=ipaconfig,cn=etc,dc=ipa,dc=example"]                   # KDC:Disable Lockout (policy part not readable)
+  DSA-0115: ["ipauniqueid=*,cn=caacls,cn=ca,dc=ipa,dc=example"]         # everyone_any_profile
+  DSA-0117: ["cn=ipaconfig,cn=etc,dc=ipa,dc=example"]                   # migration mode
+  DSA-0120: ["cn=ipaconfig,cn=etc,dc=ipa,dc=example"]                   # KDC:Disable Default Preauth for SPNs
+  DSA-0123: ["cn=anonymous-ldap-probe,cn=dirauditor"]                   # anonymous enumeration (IPA default)
+dn_glob: true
+allow: []
+collected_queries: [config, hbac, sudo, users, groups, hosts, services, caacls]

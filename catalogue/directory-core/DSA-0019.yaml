@@ -1,65 +1,83 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
 id: DSA-0019
 title:
-  en: "Former administrators still marked as protected (orphaned adminCount)"
-  ru: "Бывшие администраторы всё ещё помечены как защищённые (оставшийся adminCount)"
+  en: Former administrators still marked as protected (orphaned adminCount)
+  ru: Бывшие администраторы всё ещё помечены как защищённые (оставшийся adminCount)
 domain: directory-core
 tier: 0
 severity: low
 quick: false
 status: draft
-verified_by: ""
-verified_on: ""
+verified_by: ''
+verified_on: ''
+object: User and group objects with adminCount = 1
+attributes:
+- adminCount
+- sAMAccountName
+- memberOf
+- primaryGroupID
+- nTSecurityDescriptor
+- userAccountControl
+- lastLogonTimestamp
+condition: 'adminCount = 1, the object is not currently Tier 0 (resolver from catalogue/TIER0.md finds
+  no protected-group membership), and the object is enabled. Evidence: whether ACL inheritance is still
+  disabled on the object (SE_DACL_PROTECTED in the security descriptor control flags) and last logon.
+  Raised to medium when the account is enabled, logs on regularly and still has inheritance disabled.
 
-object: "User and group objects with adminCount = 1"
-attributes: [adminCount, sAMAccountName, memberOf, primaryGroupID, nTSecurityDescriptor, userAccountControl, lastLogonTimestamp]
+  '
+threshold: any occurrence
+rationale: 'When an account joins a protected group, the domain sets adminCount to 1 and turns off permission
+  inheritance on it. When the account leaves the group, neither change is reverted — Microsoft assumed
+  such accounts would be disabled or deleted. The leftover state hides the account from delegated administration
+  (OU-level permissions no longer apply), keeps a past administrator looking privileged in reports, and
+  is a known way to obstruct password resets.
 
-condition: >
-  adminCount = 1, the object is not currently Tier 0 (resolver from
-  catalogue/TIER0.md finds no protected-group membership), and the object is enabled.
-  Evidence: whether ACL inheritance is still disabled on the object (SE_DACL_PROTECTED
-  in the security descriptor control flags) and last logon. Raised to medium when
-  the account is enabled, logs on regularly and still has inheritance disabled.
-threshold: "any occurrence"
-
-rationale: >
-  When an account joins a protected group, the domain sets adminCount to 1 and
-  turns off permission inheritance on it. When the account leaves the group, neither
-  change is reverted — Microsoft assumed such accounts would be disabled or deleted.
-  The leftover state hides the account from delegated administration (OU-level
-  permissions no longer apply), keeps a past administrator looking privileged in
-  reports, and is a known way to obstruct password resets.
-
+  '
 remediation:
-  en: >
-    For accounts that should remain in use, set adminCount to 0 and re-enable
-    permission inheritance, then confirm OU-level delegations apply again. For
-    former administrators who left their role, prefer disabling or deleting the
-    account. Monitor changes to adminCount outside SDProp.
-  ru: >
-    Для учётных записей, которые должны продолжать работать, установите adminCount в
-    0 и снова включите наследование разрешений, затем убедитесь, что делегирование на
-    уровне подразделений (OU) снова действует. Учётные записи бывших администраторов,
-    сменивших роль, лучше отключить или удалить. Отслеживайте изменения adminCount,
-    выполненные не процессом SDProp.
+  en: 'For accounts that should remain in use, set adminCount to 0 and re-enable permission inheritance,
+    then confirm OU-level delegations apply again. For former administrators who left their role, prefer
+    disabling or deleting the account. Monitor changes to adminCount outside SDProp.
 
+    '
+  ru: 'Для учётных записей, которые должны продолжать работать, установите adminCount в 0 и снова включите
+    наследование разрешений, затем убедитесь, что делегирование на уровне подразделений (OU) снова действует.
+    Учётные записи бывших администраторов, сменивших роль, лучше отключить или удалить. Отслеживайте изменения
+    adminCount, выполненные не процессом SDProp.
+
+    '
 attack:
-  - { id: T1098, name: "Account Manipulation" }
-
-engine: "complex:tier0_membership"
+- id: T1098
+  name: Account Manipulation
+engine: complex:tier0_membership
 query_sketch:
   base: default
   scope: subtree
-  filter: "(&(adminCount=1)(|(objectClass=user)(objectClass=group))(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
-  attributes: [sAMAccountName, adminCount, memberOf, primaryGroupID, lastLogonTimestamp]
-
+  filter: >-
+    (&(adminCount=1)(|(objectClass=user)(objectClass=group))(!(userAccountControl:1.2.840.113556.1.4.803:=2)))
+  attributes:
+  - sAMAccountName
+  - adminCount
+  - memberOf
+  - primaryGroupID
+  - lastLogonTimestamp
 references:
-  - title: "Microsoft AskDS — Five common questions about AdminSDHolder and SDProp (adminCount is not reset on removal)"
-    url: "https://learn.microsoft.com/en-us/archive/blogs/askds/five-common-questions-about-adminsdholder-and-sdprop"
-  - title: "CISA — Eviction Strategies Tool, CM0125: Reset and Monitor adminCount Attribute"
-    url: "https://www.cisa.gov/eviction-strategies-tool/info-countermeasures/CM0125"
-  - title: "Microsoft Learn — Appendix C: Protected accounts and groups in Active Directory"
-    url: "https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory"
-  - title: "MITRE ATT&CK — T1098 Account Manipulation"
-    url: "https://attack.mitre.org/techniques/T1098/"
-
-notes: "Also used by DSA-0009: adminCount alone never decides Tier-0 status."
+- title: >-
+    Microsoft AskDS — Five common questions about AdminSDHolder and SDProp (adminCount is not reset on
+    removal)
+  url: >-
+    https://learn.microsoft.com/en-us/archive/blogs/askds/five-common-questions-about-adminsdholder-and-sdprop
+- title: 'CISA — Eviction Strategies Tool, CM0125: Reset and Monitor adminCount Attribute'
+  url: https://www.cisa.gov/eviction-strategies-tool/info-countermeasures/CM0125
+- title: 'Microsoft Learn — Appendix C: Protected accounts and groups in Active Directory'
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory
+- title: MITRE ATT&CK — T1098 Account Manipulation
+  url: https://attack.mitre.org/techniques/T1098/
+notes: >-
+  Also used by DSA-0009: adminCount alone never decides Tier-0 status. Implementation notes: objectCategory=person
+  is replaced by sAMAccountType=805306368 in the pack filter because the analyser matches collected attribute
+  values, not server-side shortcuts.
+condition_cel: intattr(obj, "adminCount") == 1 && !tier0(obj) && !flags(obj, "userAccountControl", 2)
+expect:
+- CN=old.admin,CN=Users,DC=lab,DC=example

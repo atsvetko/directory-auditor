@@ -1,70 +1,87 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
 id: DSA-0004
 title:
-  en: "Unconstrained Kerberos delegation on accounts other than domain controllers"
-  ru: "Неограниченное делегирование Kerberos на учётных записях, не являющихся контроллерами домена"
+  en: Unconstrained Kerberos delegation on accounts other than domain controllers
+  ru: >-
+    Неограниченное делегирование Kerberos на учётных записях, не являющихся контроллерами домена
 domain: directory-core
 tier: 0
 severity: high
 quick: true
 status: draft
-verified_by: ""
-verified_on: ""
+verified_by: ''
+verified_on: ''
+object: Computer and user accounts
+attributes:
+- userAccountControl
+- sAMAccountName
+- servicePrincipalName
+- operatingSystem
+- primaryGroupID
+condition: 'userAccountControl has TRUSTED_FOR_DELEGATION (0x80000, decimal 524288) set, the account is
+  enabled, and it is not a writable domain controller (SERVER_TRUST_ACCOUNT 0x2000 not set and primaryGroupID
+  is not 516). Read-only DCs (primaryGroupID 521) are reported as findings because they should not carry
+  this flag.
 
-object: "Computer and user accounts"
-attributes: [userAccountControl, sAMAccountName, servicePrincipalName, operatingSystem, primaryGroupID]
+  '
+threshold: any occurrence
+rationale: 'A service with unconstrained delegation receives a reusable copy of the Kerberos ticket-granting
+  ticket of every user who authenticates to it, and those tickets remain in the host''s memory. Whoever
+  controls that host can act as those users anywhere in the domain, including administrators. The exposure
+  is greatest when privileged accounts or domain controllers can be made to authenticate to the host.
 
-condition: >
-  userAccountControl has TRUSTED_FOR_DELEGATION (0x80000, decimal 524288) set, the
-  account is enabled, and it is not a writable domain controller (SERVER_TRUST_ACCOUNT
-  0x2000 not set and primaryGroupID is not 516). Read-only DCs (primaryGroupID 521)
-  are reported as findings because they should not carry this flag.
-threshold: "any occurrence"
-
-rationale: >
-  A service with unconstrained delegation receives a reusable copy of the Kerberos
-  ticket-granting ticket of every user who authenticates to it, and those tickets
-  remain in the host's memory. Whoever controls that host can act as those users
-  anywhere in the domain, including administrators. The exposure is greatest when
-  privileged accounts or domain controllers can be made to authenticate to the host.
-
+  '
 remediation:
-  en: >
-    Replace unconstrained delegation with Kerberos constrained delegation or
-    resource-based constrained delegation limited to the specific services the
-    application needs. Until then, treat the host as Tier 0. Mark Tier-0 accounts
-    "Account is sensitive and cannot be delegated" and add them to Protected Users
+  en: 'Replace unconstrained delegation with Kerberos constrained delegation or resource-based constrained
+    delegation limited to the specific services the application needs. Until then, treat the host as Tier
+    0. Mark Tier-0 accounts "Account is sensitive and cannot be delegated" and add them to Protected Users
     (DSA-0007) so their tickets are never delegated.
-  ru: >
-    Замените неограниченное делегирование ограниченным делегированием Kerberos или
-    делегированием на основе ресурса, ограниченным конкретными службами, нужными
-    приложению. До этого относите узел к нулевому уровню. Пометьте учётные записи
-    нулевого уровня флагом «Учётная запись важна и не может быть делегирована» и
-    добавьте их в группу Protected Users (DSA-0007), чтобы их билеты никогда не
-    делегировались.
 
+    '
+  ru: 'Замените неограниченное делегирование ограниченным делегированием Kerberos или делегированием на
+    основе ресурса, ограниченным конкретными службами, нужными приложению. До этого относите узел к нулевому
+    уровню. Пометьте учётные записи нулевого уровня флагом «Учётная запись важна и не может быть делегирована»
+    и добавьте их в группу Protected Users (DSA-0007), чтобы их билеты никогда не делегировались.
+
+    '
 attack:
-  - { id: T1550.003, name: "Use Alternate Authentication Material: Pass the Ticket" }
-  - { id: T1187, name: "Forced Authentication" }
-
+- id: T1550.003
+  name: 'Use Alternate Authentication Material: Pass the Ticket'
+- id: T1187
+  name: Forced Authentication
 engine: declarative
 query_sketch:
   base: default
   scope: subtree
-  filter: "(&(userAccountControl:1.2.840.113556.1.4.803:=524288)(!(userAccountControl:1.2.840.113556.1.4.803:=2))(!(primaryGroupID=516)))"
-  attributes: [sAMAccountName, userAccountControl, servicePrincipalName, operatingSystem, primaryGroupID]
-
+  filter: >-
+    (&(userAccountControl:1.2.840.113556.1.4.803:=524288)(!(userAccountControl:1.2.840.113556.1.4.803:=2))(!(primaryGroupID=516)))
+  attributes:
+  - sAMAccountName
+  - userAccountControl
+  - servicePrincipalName
+  - operatingSystem
+  - primaryGroupID
 references:
-  - title: "Microsoft Learn — Kerberos constrained delegation overview"
-    url: "https://learn.microsoft.com/en-us/windows-server/security/kerberos/kerberos-constrained-delegation-overview"
-  - title: "Microsoft Learn — Use the UserAccountControl flags to manipulate user account properties"
-    url: "https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties"
-  - title: "Microsoft Learn — Protected Users security group"
-    url: "https://learn.microsoft.com/en-us/windows-server/security/credentials-protection-and-management/protected-users-security-group"
-  - title: "Microsoft Learn — Well-known SIDs (domain-relative RIDs)"
-    url: "https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids"
-  - title: "MITRE ATT&CK — T1550.003 Pass the Ticket"
-    url: "https://attack.mitre.org/techniques/T1550/003/"
-
-notes: >
-  primaryGroupID 516 = DOMAIN_GROUP_RID_CONTROLLERS (0x204), 521 =
-  DOMAIN_GROUP_RID_READONLY_CONTROLLERS (0x209), per Microsoft's well-known SIDs table.
+- title: Microsoft Learn — Kerberos constrained delegation overview
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/security/kerberos/kerberos-constrained-delegation-overview
+- title: Microsoft Learn — Use the UserAccountControl flags to manipulate user account properties
+  url: >-
+    https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties
+- title: Microsoft Learn — Protected Users security group
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/security/credentials-protection-and-management/protected-users-security-group
+- title: Microsoft Learn — Well-known SIDs (domain-relative RIDs)
+  url: https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids
+- title: MITRE ATT&CK — T1550.003 Pass the Ticket
+  url: https://attack.mitre.org/techniques/T1550/003/
+notes: >-
+  primaryGroupID 516 = DOMAIN_GROUP_RID_CONTROLLERS (0x204), 521 = DOMAIN_GROUP_RID_READONLY_CONTROLLERS
+  (0x209), per Microsoft's well-known SIDs table. Implementation notes: objectCategory=person is replaced
+  by sAMAccountType=805306368 in the pack filter because the analyser matches collected attribute values,
+  not server-side shortcuts.
+condition_cel: flags(obj, "userAccountControl", 524288) && !flags(obj, "userAccountControl", 2) && intattr(obj,
+  "primaryGroupID") != 516 && !flags(obj, "userAccountControl", 8192)
+expect:
+- CN=APP01,OU=Servers,DC=lab,DC=example

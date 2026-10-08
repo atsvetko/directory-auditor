@@ -38,7 +38,7 @@ var (
 )
 
 var accountAttrs = []string{
-	"objectClass", "sAMAccountName", "userPrincipalName", "objectSid", "objectGUID", "sIDHistory",
+	"objectClass", "objectCategory", "sAMAccountType", "sAMAccountName", "userPrincipalName", "objectSid", "objectGUID", "sIDHistory",
 	"userAccountControl", "pwdLastSet", "lastLogonTimestamp", "whenCreated", "whenChanged",
 	"adminCount", "primaryGroupID", "memberOf", "servicePrincipalName",
 	"msDS-SupportedEncryptionTypes", "msDS-AllowedToDelegateTo",

@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/atsvetko/directory-auditor/internal/check"
 )
 
 // Entry is one catalogue record.
@@ -181,5 +183,55 @@ func LoadDir(dir string) ([]Entry, error) {
 		return out, fmt.Errorf("catalogue invalid:\n  %s", strings.Join(errs, "\n  "))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+// Pack converts an implemented entry (one with condition_cel) into an unsigned
+// check pack for a catalogue dry run (`dirauditor analyse --catalogue DIR`):
+// the engine evaluates the entry exactly as a pack would be, so an entry can be
+// tried against a real directory before anyone signs off on it. ok is false
+// for entries without a condition.
+func (e Entry) Pack() (check.Pack, bool) {
+	if strings.TrimSpace(e.ConditionCEL) == "" {
+		return check.Pack{}, false
+	}
+	providers := map[string][]string{"freeipa": {"freeipa"}, "samba": {"samba"}}[e.Domain]
+	if providers == nil {
+		providers = []string{"ad", "samba"}
+	}
+	filter, _ := e.QuerySketch["filter"].(string)
+	if filter == "" {
+		filter = "(objectClass=*)"
+	}
+	p := check.Pack{
+		ID: e.ID, Title: check.Text{EN: e.Title["en"], RU: e.Title["ru"]}, Provider: providers, Domain: e.Domain,
+		Tier: e.Tier, Severity: e.Severity, Quick: e.Quick, Query: check.Query{Filter: filter}, Condition: e.ConditionCEL,
+		Evidence: e.Attributes, Source: "catalogue:" + e.Path, Signed: false,
+		Remediation: map[string]check.Remediation{
+			"en": {Why: strings.TrimSpace(e.Rationale), Fix: strings.TrimSpace(e.Remediation["en"])},
+			"ru": {Why: strings.TrimSpace(e.Rationale), Fix: strings.TrimSpace(e.Remediation["ru"])},
+		},
+	}
+	for _, a := range e.Attack {
+		p.Attack = append(p.Attack, a.ID)
+	}
+	for _, r := range e.References {
+		p.References = append(p.References, check.Reference{Title: r.Title, URL: r.URL})
+	}
+	return p, true
+}
+
+// Packs converts every implemented entry under dir.
+func Packs(dir string) ([]check.Pack, error) {
+	entries, err := LoadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var out []check.Pack
+	for _, e := range entries {
+		if p, ok := e.Pack(); ok {
+			out = append(out, p)
+		}
+	}
 	return out, nil
 }

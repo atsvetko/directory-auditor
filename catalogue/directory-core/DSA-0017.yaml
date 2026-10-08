@@ -1,67 +1,74 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
 id: DSA-0017
 title:
-  en: "Accounts with SID history, especially privileged or same-domain SIDs"
-  ru: "Учётные записи с журналом SID (sIDHistory), особенно с привилегированными SID или SID того же домена"
+  en: Accounts with SID history, especially privileged or same-domain SIDs
+  ru: >-
+    Учётные записи с журналом SID (sIDHistory), особенно с привилегированными SID или SID того же домена
 domain: directory-core
 tier: 0
 severity: high
 quick: true
 status: draft
-verified_by: ""
-verified_on: ""
+verified_by: ''
+verified_on: ''
+object: User, group and computer objects with sIDHistory populated
+attributes:
+- sIDHistory
+- objectSid
+- sAMAccountName
+- whenChanged
+condition: "sIDHistory is populated. Severity:\n  - critical when any value has the current domain's SID\
+  \ prefix (the object\n    carries another identity from its own domain), or ends in a Tier-0 RID (500,\n\
+  \    512, 516, 518, 519) or is a Tier-0 built-in SID (S-1-5-32-544 … 551);\n  - high when any value\
+  \ belongs to a domain that is not a current trusted domain\n    (a migration source that no longer exists);\n\
+  \  - medium otherwise (ordinary migration leftovers).\n"
+threshold: any occurrence
+rationale: 'SID history exists so that migrated accounts keep access to resources in the old domain: every
+  SID in the attribute is added to the user''s access token at sign-in. A privileged SID in that list
+  grants privileged access without any group membership, and a SID from the account''s own domain has
+  no migration purpose at all. Values left over after a migration is finished only widen access.
 
-object: "User, group and computer objects with sIDHistory populated"
-attributes: [sIDHistory, objectSid, sAMAccountName, whenChanged]
-
-condition: >
-  sIDHistory is populated. Severity:
-    - critical when any value has the current domain's SID prefix (the object
-      carries another identity from its own domain), or ends in a Tier-0 RID (500,
-      512, 516, 518, 519) or is a Tier-0 built-in SID (S-1-5-32-544 … 551);
-    - high when any value belongs to a domain that is not a current trusted domain
-      (a migration source that no longer exists);
-    - medium otherwise (ordinary migration leftovers).
-threshold: "any occurrence"
-
-rationale: >
-  SID history exists so that migrated accounts keep access to resources in the old
-  domain: every SID in the attribute is added to the user's access token at sign-in.
-  A privileged SID in that list grants privileged access without any group
-  membership, and a SID from the account's own domain has no migration purpose at
-  all. Values left over after a migration is finished only widen access.
-
+  '
 remediation:
-  en: >
-    Investigate same-domain and privileged SID-history values as a possible
-    compromise. Once a migration is complete and resource permissions have been
-    re-assigned to the new SIDs, clear sIDHistory on migrated objects. Keep SID
-    filtering enabled on trusts (DSA-0018) so SID history from other forests is not
+  en: 'Investigate same-domain and privileged SID-history values as a possible compromise. Once a migration
+    is complete and resource permissions have been re-assigned to the new SIDs, clear sIDHistory on migrated
+    objects. Keep SID filtering enabled on trusts (DSA-0018) so SID history from other forests is not
     honoured.
-  ru: >
-    Значения журнала SID из собственного домена и привилегированные SID расследуйте
-    как возможную компрометацию. После завершения миграции и переназначения прав на
-    ресурсах новым SID очистите sIDHistory у перенесённых объектов. Держите
-    фильтрацию SID на доверительных отношениях включённой (DSA-0018), чтобы журнал SID
+
+    '
+  ru: 'Значения журнала SID из собственного домена и привилегированные SID расследуйте как возможную компрометацию.
+    После завершения миграции и переназначения прав на ресурсах новым SID очистите sIDHistory у перенесённых
+    объектов. Держите фильтрацию SID на доверительных отношениях включённой (DSA-0018), чтобы журнал SID
     из других лесов не учитывался.
 
+    '
 attack:
-  - { id: T1134.005, name: "Access Token Manipulation: SID-History Injection" }
-
-engine: "complex:sid_classify"
+- id: T1134.005
+  name: 'Access Token Manipulation: SID-History Injection'
+engine: complex:sid_classify
 query_sketch:
   base: default
   scope: subtree
-  filter: "(sIDHistory=*)"
-  attributes: [sAMAccountName, sIDHistory, objectSid, objectClass]
-
+  filter: (sIDHistory=*)
+  attributes:
+  - sAMAccountName
+  - sIDHistory
+  - objectSid
+  - objectClass
 references:
-  - title: "Microsoft Learn — sIDHistory attribute"
-    url: "https://learn.microsoft.com/en-us/windows/win32/adschema/a-sidhistory"
-  - title: "Microsoft Learn — Well-known SIDs (Tier-0 RIDs)"
-    url: "https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids"
-  - title: "MITRE ATT&CK — T1134.005 SID-History Injection"
-    url: "https://attack.mitre.org/techniques/T1134/005/"
-  - title: "ADSecurity — Sneaky Active Directory Persistence #14: SID History"
-    url: "https://adsecurity.org/?p=1772"
-
-notes: "Needs the trusted-domain SID list (trustedDomain objects, securityIdentifier) — collected for DSA-0018 as well."
+- title: Microsoft Learn — sIDHistory attribute
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-sidhistory
+- title: Microsoft Learn — Well-known SIDs (Tier-0 RIDs)
+  url: https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids
+- title: MITRE ATT&CK — T1134.005 SID-History Injection
+  url: https://attack.mitre.org/techniques/T1134/005/
+- title: 'ADSecurity — Sneaky Active Directory Persistence #14: SID History'
+  url: https://adsecurity.org/?p=1772
+notes: >-
+  Needs the trusted-domain SID list (trustedDomain objects, securityIdentifier) — collected for DSA-0018
+  as well. Implementation notes: objectCategory=person is replaced by sAMAccountType=805306368 in the
+  pack filter because the analyser matches collected attribute values, not server-side shortcuts.
+condition_cel: size(attrs(obj, "sIDHistory")) > 0
+expect:
+- CN=mig.user,CN=Users,DC=lab,DC=example
