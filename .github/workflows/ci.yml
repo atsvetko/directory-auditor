@@ -87,6 +87,76 @@ jobs:
           path: dist/
           retention-days: 14
 
+  windows:
+    # The real windows/amd64 binary, run on Windows: tests, CLI, the wizard over
+    # its API and the SSPI error path. Cross-compiled builds above never execute.
+    name: windows smoke (native)
+    needs: verify
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: go test (windows)
+        run: go test -count=1 ./...
+      - name: build
+        run: go build -trimpath -o dirauditor.exe ./cmd/dirauditor
+      - name: cli
+        shell: pwsh
+        run: |
+          # exit codes are checked by hand: expected failures must not throw
+          $ErrorActionPreference = "Continue"; $PSNativeCommandUseErrorActionPreference = $false
+          .\dirauditor.exe version
+          .\dirauditor.exe manifest | Select-String -Pattern "Preview checks built in" | Out-String | Write-Host
+          .\dirauditor.exe analyse --snapshot testdata\synthetic-lab.json.zst --out out
+          if ($LASTEXITCODE -ne 0) { throw "analyse failed" }
+          $r = Get-Content out\report.json -Raw | ConvertFrom-Json
+          if ($r.preview_checks -ne 68) { throw "preview_checks = $($r.preview_checks)" }
+          if (-not (Test-Path out\report.html)) { throw "no report.html" }
+          $log = Get-ChildItem out\run-*.log | Select-Object -First 1
+          if (-not (Select-String -Path $log -Pattern "finished: exit 0")) { throw "run log incomplete" }
+          # error paths must end in a message, not a panic
+          .\dirauditor.exe doctor --server nonexistent.invalid 2>&1 | Tee-Object -Variable d | Out-Null
+          if ($LASTEXITCODE -eq 0) { throw "doctor should fail" }
+          if (-not ($d -join "`n" | Select-String -Pattern "cause:")) { throw "doctor gave no cause: $d" }
+          .\dirauditor.exe scan --server nonexistent.invalid --out scan-out 2>&1 | Tee-Object -Variable sc | Out-Null
+          if ($LASTEXITCODE -eq 0) { throw "scan should fail" }
+          if ($sc -join "`n" | Select-String -Pattern "panic|goroutine") { throw "scan panicked: $sc" }
+          Write-Host "scan error path:" ($sc -join "`n")
+      - name: wizard over its API
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"; $PSNativeCommandUseErrorActionPreference = $false
+          $p = Start-Process -FilePath .\dirauditor.exe -ArgumentList "ui","--no-browser","--out","wiz-out" -RedirectStandardError ui.err -RedirectStandardOutput ui.out -PassThru
+          $url = $null
+          for ($i = 0; $i -lt 50 -and -not $url; $i++) {
+            Start-Sleep -Milliseconds 200
+            $txt = (Get-Content ui.err -Raw -ErrorAction SilentlyContinue) + (Get-Content ui.out -Raw -ErrorAction SilentlyContinue)
+            if ($txt -match "http://127\.0\.0\.1:\d+/\?t=[0-9a-f]+") { $url = $Matches[0] }
+          }
+          if (-not $url) { Get-Content ui.err, ui.out; throw "wizard did not print its address" }
+          $base = $url -replace '/\?t=.*$', ''; $tok = ($url -split 't=')[1]
+          $h = @{ "X-DA-Token" = $tok }
+          $info = Invoke-RestMethod "$base/api/info" -Headers $h
+          if ($info.preview -ne 68) { throw "info.preview = $($info.preview)" }
+          $c = Invoke-RestMethod "$base/api/connect" -Method Post -Headers $h -ContentType "application/json" -Body '{"mode":"demo"}'
+          if (-not $c.ok) { throw "connect: $($c | ConvertTo-Json)" }
+          $null = Invoke-RestMethod "$base/api/scan" -Method Post -Headers $h -ContentType "application/json" -Body '{"quick":false}'
+          $state = ""
+          for ($i = 0; $i -lt 100 -and $state -ne "done"; $i++) { Start-Sleep -Milliseconds 200; $state = (Invoke-RestMethod "$base/api/status" -Headers $h).state; if ($state -eq "error") { throw "scan error" } }
+          if ($state -ne "done") { throw "scan did not finish" }
+          $res = Invoke-RestMethod "$base/api/result" -Headers $h
+          if ($res.preview_checks -ne 68 -or $res.inventory.tier0.Count -lt 5) { throw "result: preview $($res.preview_checks), tier0 $($res.inventory.tier0.Count)" }
+          $log = Invoke-WebRequest "$base/api/run.log?t=$tok" -UseBasicParsing
+          if ($log.Content -notmatch "finished: exit 0") { throw "run log: $($log.Content)" }
+          # the page itself renders (static assets served, CSP present)
+          $page = Invoke-WebRequest "$base/?t=$tok" -UseBasicParsing
+          if ($page.StatusCode -ne 200 -or -not $page.Headers["Content-Security-Policy"]) { throw "page: $($page.StatusCode)" }
+          $null = Invoke-RestMethod "$base/api/quit" -Method Post -Headers $h -ContentType "application/json" -Body '{}'
+          if (-not $p.WaitForExit(10000)) { $p.Kill(); throw "wizard did not quit" }
+          Write-Host "wizard ok: $url"
+
   sbom:
     name: SBOM (CycloneDX)
     needs: verify
