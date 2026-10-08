@@ -54,6 +54,13 @@ type Entry struct {
 	ConditionCEL string   `yaml:"condition_cel"`
 	Expect       []string `yaml:"expect"`
 
+	// Secret masks the finding evidence of this entry (the attribute may hold a
+	// live credential). EvidencePrincipals is a CEL list<string> of the SIDs a
+	// permission finding is about; the engine resolves them to names. Both are
+	// optional and flow straight into the generated pack.
+	Secret             bool   `yaml:"secret"`
+	EvidencePrincipals string `yaml:"evidence_principals"`
+
 	Path string `yaml:"-"`
 }
 
@@ -229,7 +236,8 @@ func (e Entry) Pack() (check.Pack, bool) {
 	p := check.Pack{
 		ID: e.ID, Title: check.Text{EN: e.Title["en"], RU: e.Title["ru"]}, Provider: providers, Domain: e.Domain,
 		Tier: e.Tier, Severity: e.Severity, Quick: e.Quick, Query: check.Query{Filter: filter}, Condition: e.ConditionCEL,
-		Evidence: e.Attributes, Source: "catalogue:" + e.Path, Signed: false, Preview: true,
+		Evidence: e.Attributes, Secret: e.Secret, EvidencePrincipals: e.EvidencePrincipals,
+		Source: "catalogue:" + e.Path, Signed: false, Preview: true,
 		Remediation: map[string]check.Remediation{
 			"en": {Why: strings.TrimSpace(e.Rationale), Fix: strings.TrimSpace(e.Remediation["en"])},
 			"ru": {Why: strings.TrimSpace(e.Rationale), Fix: strings.TrimSpace(e.Remediation["ru"])},

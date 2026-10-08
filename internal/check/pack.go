@@ -36,6 +36,17 @@ type Pack struct {
 	Remediation map[string]Remediation `yaml:"remediation"` // keyed by language: en, ru
 	References  []Reference            `yaml:"references"`
 
+	// Secret masks the evidence values of this check's findings (the attribute
+	// may hold a live credential). The full value is shown only when the run is
+	// asked for it explicitly (EvalOptions.ShowSecrets).
+	Secret bool `yaml:"secret"`
+	// EvidencePrincipals is an optional CEL expression returning a list of SID
+	// strings: the principals a permission finding is actually about. The engine
+	// resolves each SID to a name and records them as the "principals" evidence,
+	// so an operator sees who holds the dangerous right without decoding the raw
+	// security descriptor.
+	EvidencePrincipals string `yaml:"evidence_principals"`
+
 	// Source is the file the pack was loaded from; Signed reports whether a valid signature was present.
 	Source string `yaml:"-"`
 	Signed bool   `yaml:"-"`
@@ -124,6 +135,11 @@ func (p *Pack) Validate() error {
 		errs = append(errs, "condition is required")
 	} else if _, err := CompileCondition(p.Condition); err != nil {
 		errs = append(errs, "condition: "+err.Error())
+	}
+	if p.EvidencePrincipals != "" {
+		if _, err := CompileStringList(p.EvidencePrincipals); err != nil {
+			errs = append(errs, "evidence_principals: "+err.Error())
+		}
 	}
 	for _, lang := range []string{"en", "ru"} {
 		r, ok := p.Remediation[lang]

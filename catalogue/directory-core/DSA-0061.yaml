@@ -1,0 +1,81 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0061
+title:
+  en: Non-Tier-0 principals with a control path to Tier 0
+  ru: Субъекты вне нулевого уровня, имеющие путь управления к нулевому уровню
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  Every user, group and computer, against the graph of control rights and group memberships that leads to a Tier-0
+  object
+attributes:
+- sAMAccountName
+- objectClass
+- path_to_tier0
+condition: >-
+  A principal that is not itself Tier 0 can reach a Tier-0 object through a chain of one or more steps, where each
+  step is either a control right over an object (the rights of DSA-0015: GenericAll, WriteDacl, WriteOwner, GenericWrite,
+  write to the member attribute, the reset-password right, or all extended rights) or membership of a group that
+  holds such a right. Controlling the domain head or the Domain Controllers OU counts as reaching Tier 0. The shortest
+  such path is reported.
+threshold: any occurrence
+rationale: >-
+  Direct dangerous permissions on Tier-0 objects (DSA-0015, DSA-0016, DSA-0029) are only the first layer. An attacker
+  also wins by taking a longer route: control an ordinary group that can write the membership of a privileged group,
+  or whose members can reset an administrator's password, and so on. Each hop is individually unremarkable and passes
+  a membership review, yet the chain ends in domain control. Enumerating every principal that has any such path
+  turns a set of scattered ACE findings into the real question — who can become Tier 0 — and is the model behind
+  modern attack-path tooling.
+remediation:
+  en: >-
+    Treat every listed principal as effectively Tier 0 until the path is cut. Follow path_to_tier0 to the first
+    hop that should not exist and remove that delegation; one well-chosen cut usually breaks many paths at once.
+    Prefer removing broad control rights on groups and OUs over trying to vet every principal. Re-run after each
+    change, because cutting one path can reveal others, and keep the shortest paths (one or two hops) at the top
+    of the work list.
+  ru: >-
+    Считайте каждый найденный субъект фактически принадлежащим нулевому уровню, пока путь не разорван. Пройдите
+    по path_to_tier0 до первого лишнего перехода и удалите это делегирование; один удачно выбранный разрыв обычно
+    ломает сразу много путей. Предпочитайте удаление широких прав управления на группах и подразделениях проверке
+    каждого субъекта по отдельности. Повторяйте анализ после каждого изменения, поскольку разрыв одного пути может
+    открыть другие, и держите самые короткие пути (один-два перехода) в начале списка работ.
+attack:
+- id: T1098
+  name: Account Manipulation
+- id: T1222.001
+  name: >-
+    File and Directory Permissions Modification: Windows File and Directory Permissions Modification
+engine: complex:control_graph
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (|(objectClass=user)(objectClass=group)(objectClass=computer))
+  notes: >-
+    Reuses the security descriptors and group memberships already collected; the control graph is computed in the
+    engine, not by LDAP.
+references:
+- title: Microsoft Learn — Enterprise access model (privileged access)
+  url: >-
+    https://learn.microsoft.com/en-us/security/privileged-access-workstations/privileged-access-access-model
+- title: 'Microsoft Learn — Appendix C: Protected Accounts and Groups in Active Directory'
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory
+- title: MITRE ATT&CK — T1098 Account Manipulation
+  url: https://attack.mitre.org/techniques/T1098/
+notes: >-
+  Transitive superset of DSA-0015/0016/0029 (direct control) and of membership checks: a one-hop finding here overlaps
+  those by design, and the value is the multi-hop paths they cannot show. The graph covers ACL control edges and
+  group membership; it does not yet follow control of an OU or container down to the objects inside it (a separate
+  collection step), so some real paths are still missed — a conservative, no-false-path stance. Well-known broad
+  trustees (Everyone, Authenticated Users) with a path are reported through the direct checks; here only principals
+  that exist as objects are listed. path_to_tier0 shows the shortest path found.
+condition_cel: '!tier0(obj) && hasattr(obj, "objectSid") && reaches_tier0(obj)'
+expect:
+- CN=Helpdesk,OU=Groups,DC=lab,DC=example
+- CN=j.doe,CN=Users,DC=lab,DC=example

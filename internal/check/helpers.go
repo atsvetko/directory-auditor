@@ -2,6 +2,7 @@ package check
 
 import (
 	"encoding/base64"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/atsvetko/directory-auditor/internal/secdesc"
 	"github.com/atsvetko/directory-auditor/internal/snapshot"
+	"github.com/atsvetko/directory-auditor/internal/tier0"
 )
 
 // Helper functions available to pack conditions, in addition to attr, attrs,
@@ -47,6 +49,8 @@ import (
 //	holds_tier0(obj)                              a Tier-0 object lies below obj in the tree
 //	spn_known("cifs/fs01.lab.example")            the SPN's host belongs to a collected account; hosts
 //	                                              outside the snapshot's DNS domain count as known
+//	reaches_tier0(obj)                            a non-Tier-0 principal has a control path to a Tier-0
+//	                                              object (transitive ACL + group membership graph)
 func helperOptions() []cel.EnvOption {
 	mapT := cel.MapType(cel.StringType, cel.DynType)
 	aceList := cel.ListType(cel.MapType(cel.StringType, cel.DynType))
@@ -199,6 +203,12 @@ func helperOptions() []cel.EnvOption {
 				cel.UnaryBinding(func(s ref.Val) ref.Val {
 					return types.Bool(spnKnown(string(s.(types.String))))
 				}))),
+		cel.Function("reaches_tier0",
+			cel.Overload("reaches_tier0_map", []*cel.Type{mapT}, cel.BoolType,
+				cel.UnaryBinding(func(o ref.Val) ref.Val {
+					sid := firstAttr(o, "objectSid")
+					return types.Bool(sid != "" && currentReachers[strings.ToUpper(sid)])
+				}))),
 		cel.Function("aces",
 			cel.Overload("aces_map", []*cel.Type{mapT}, aceList,
 				cel.UnaryBinding(func(o ref.Val) ref.Val { return aceVals(o, "nTSecurityDescriptor") }))),
@@ -306,15 +316,24 @@ var (
 	currentT0Parents   map[string]bool   // lower(DN) of every ancestor of a Tier-0 object
 	currentHosts       map[string]bool   // lower host names and short names of collected accounts
 	currentDNSDomain   string            // DNS domain derived from the base DN
+	currentNames       map[string]string // upper(SID) -> display name (sAMAccountName or CN)
+	currentReachers    map[string]bool   // upper(SID) -> has a control path to a Tier-0 object
+	currentReachPath   map[string]string // upper(SID) -> that path, for the finding evidence
 )
 
 func indexSnapshot(snap *snapshot.Snapshot) map[string]*snapshot.Object {
 	idx := make(map[string]*snapshot.Object, len(snap.Objects))
 	sids := make(map[string]bool, len(snap.Objects))
+	currentNames = map[string]string{}
 	for i := range snap.Objects {
 		idx[strings.ToLower(snap.Objects[i].DN)] = &snap.Objects[i]
 		if sid := snap.Objects[i].Attr("objectSid"); sid != "" {
 			sids[strings.ToUpper(sid)] = true
+			name := snap.Objects[i].Attr("sAMAccountName")
+			if name == "" {
+				name = shortDN(snap.Objects[i].DN)
+			}
+			currentNames[strings.ToUpper(sid)] = name
 		}
 	}
 	currentSIDs = sids
@@ -475,4 +494,238 @@ func versionParts(s string) []int {
 		out = append(out, n)
 	}
 	return out
+}
+
+// --- Principal naming, secret masking and the Tier-0 control graph ----------
+
+// wellKnownName labels the built-in SIDs that appear as trustees but are not
+// collected objects, so a finding names them instead of printing a bare SID.
+var wellKnownName = map[string]string{
+	"S-1-1-0":      "Everyone",
+	"S-1-5-7":      "Anonymous Logon",
+	"S-1-5-11":     "Authenticated Users",
+	"S-1-5-9":      "Enterprise Domain Controllers",
+	"S-1-5-10":     "SELF",
+	"S-1-3-0":      "CREATOR OWNER",
+	"S-1-5-32-545": "BUILTIN\\Users",
+	"S-1-5-32-544": "BUILTIN\\Administrators",
+}
+
+// resolvePrincipal turns a SID into "name (SID)" using the snapshot's accounts
+// and the well-known table; an unknown SID is returned unchanged.
+func resolvePrincipal(sid string) string {
+	up := strings.ToUpper(sid)
+	if n := currentNames[up]; n != "" {
+		return n + " (" + sid + ")"
+	}
+	// Domain-relative RID of a domain SID with no collected object, e.g. a
+	// group that was not read; name it by its RID so it is still actionable.
+	if n := wellKnownName[up]; n != "" {
+		return n + " (" + sid + ")"
+	}
+	if strings.HasPrefix(up, "S-1-5-32-") {
+		return "BUILTIN\\" + up[len("S-1-5-32-"):] + " (" + sid + ")"
+	}
+	return sid
+}
+
+// maskSecret hides a credential that was found in a readable attribute while
+// keeping enough context to locate it: any leading words before the final
+// whitespace-separated token are kept, the token is reduced to its first two
+// characters plus bullets, and its true length is shown.
+func maskSecret(v string) string {
+	v = strings.TrimRight(v, " \t")
+	if v == "" {
+		return ""
+	}
+	prefix, secret := "", v
+	if i := strings.LastIndexAny(v, " \t"); i >= 0 {
+		prefix, secret = v[:i+1], v[i+1:]
+	}
+	r := []rune(secret)
+	keep := 2
+	if len(r) <= keep {
+		keep = 0
+	}
+	bullets := len(r) - keep
+	if bullets < 3 {
+		bullets = 3
+	}
+	if bullets > 12 {
+		bullets = 12
+	}
+	return prefix + string(r[:keep]) + strings.Repeat("•", bullets) + fmt.Sprintf(" (%d chars)", len(r))
+}
+
+// shortDN returns the value of the first RDN of a DN (its CN), honouring
+// backslash-escaped commas, for compact path and name display.
+func shortDN(dn string) string {
+	end := len(dn)
+	for i := 0; i < len(dn); i++ {
+		if dn[i] == '\\' {
+			i++
+			continue
+		}
+		if dn[i] == ',' {
+			end = i
+			break
+		}
+	}
+	rdn := dn[:end]
+	if j := strings.IndexByte(rdn, '='); j >= 0 {
+		return rdn[j+1:]
+	}
+	return rdn
+}
+
+// controlRight reports whether an ACE grants a right that lets its trustee take
+// control of the object (rewrite its ACL, owner, membership or password, or run
+// all extended rights), with a short label for the path. It is the same right
+// set DSA-0015 uses, kept in one place.
+func controlRight(a secdesc.ACE) (string, bool) {
+	m := a.Mask
+	switch {
+	case m&0x10000000 == 0x10000000:
+		return "GenericAll", true
+	case m&0x000F01FF == 0x000F01FF:
+		return "FullControl", true
+	case m&0x40000000 == 0x40000000:
+		return "GenericWrite", true
+	case m&0x40000 != 0:
+		return "WriteDacl", true
+	case m&0x80000 != 0:
+		return "WriteOwner", true
+	case m&0x20 != 0 && (a.ObjectType == "" || a.ObjectType == "bf9679c0-0de6-11d0-a285-00aa003049e2"):
+		return "Write-Member", true
+	case m&0x100 != 0 && a.ObjectType == "":
+		return "AllExtendedRights", true
+	case m&0x100 != 0 && a.ObjectType == "00299570-246d-11d0-a768-00aa006e0529":
+		return "ResetPassword", true
+	}
+	return "", false
+}
+
+// controlGraph computes, for one snapshot, every non-Tier-0 principal that can
+// reach a Tier-0 object through a chain of control edges (dangerous ACLs) and
+// group memberships, with a readable path for each. It works backwards from the
+// Tier-0 set (plus the domain head and the Domain Controllers OU, controlling
+// either of which yields Tier 0) to a fixpoint: a principal that controls a
+// reachable object becomes reachable, and so does every member of a reachable
+// group. It is read-only graph arithmetic over data already collected.
+func controlGraph(snap *snapshot.Snapshot, t0 *tier0.Set) (map[string]bool, map[string]string) {
+	sidToDN := map[string]string{} // upper(SID) -> DN (lower)
+	type ctl struct{ trustee, right string }
+	controllers := map[string][]ctl{} // lower(DN) -> who controls it
+	members := map[string][]string{}  // lower(group DN) -> member DNs (lower)
+	dnToSID := map[string]string{}    // lower(DN) -> upper(SID)
+	disp := map[string]string{}       // lower(DN) -> display name (original-case CN)
+	name := func(ldn string) string {
+		if d := disp[ldn]; d != "" {
+			return d
+		}
+		return shortDN(ldn)
+	}
+
+	for i := range snap.Objects {
+		o := &snap.Objects[i]
+		ldn := strings.ToLower(o.DN)
+		disp[ldn] = shortDN(o.DN)
+		if sid := o.Attr("objectSid"); sid != "" {
+			sidToDN[strings.ToUpper(sid)] = ldn
+			dnToSID[ldn] = strings.ToUpper(sid)
+		}
+		for k, vals := range o.Attrs {
+			if strings.EqualFold(k, "member") {
+				for _, m := range vals {
+					members[ldn] = append(members[ldn], strings.ToLower(m))
+				}
+			}
+		}
+		raw := o.Attr("nTSecurityDescriptor")
+		if raw == "" {
+			continue
+		}
+		b, err := base64.StdEncoding.DecodeString(raw)
+		if err != nil {
+			continue
+		}
+		d, err := secdesc.Parse(b)
+		if err != nil {
+			continue
+		}
+		for _, a := range d.DACL {
+			if !a.Allow() || !a.Effective() || a.Trustee == "S-1-5-10" || a.Trustee == "S-1-3-0" {
+				continue
+			}
+			if label, ok := controlRight(a); ok {
+				controllers[ldn] = append(controllers[ldn], ctl{strings.ToUpper(a.Trustee), label})
+			}
+		}
+	}
+
+	// Seed the frontier: controlling any of these yields Tier 0.
+	reason := map[string]string{} // lower(DN) -> path from controlling it to Tier 0
+	seed := func(dn, why string) {
+		l := strings.ToLower(dn)
+		if _, ok := reason[l]; !ok {
+			reason[l] = why
+		}
+	}
+	for _, dn := range t0.DNs() { // t0.DNs returns lower-cased DNs
+		seed(dn, "Tier 0")
+	}
+	seed(snap.Meta.BaseDN, "domain root")
+	for i := range snap.Objects {
+		if strings.HasPrefix(strings.ToLower(snap.Objects[i].DN), "ou=domain controllers,") {
+			seed(snap.Objects[i].DN, "Domain Controllers OU")
+		}
+	}
+
+	reachers := map[string]bool{}
+	path := map[string]string{}
+	addReacher := func(sid, p string) bool {
+		if reachers[sid] {
+			return false
+		}
+		if ok, _ := t0.IsSID(sid); ok { // a Tier-0 trustee holding the right is legitimate
+			return false
+		}
+		reachers[sid] = true
+		path[sid] = p
+		if dn, ok := sidToDN[sid]; ok {
+			if _, seen := reason[dn]; !seen {
+				reason[dn] = p // controlling this principal now reaches Tier 0 too
+				return true
+			}
+		}
+		return false
+	}
+
+	for changed := true; changed; {
+		changed = false
+		for dn, why := range reason {
+			for _, c := range controllers[dn] {
+				if addReacher(c.trustee, c.right+" on "+name(dn)+" → "+why) {
+					changed = true
+				}
+			}
+		}
+		// A member of a group that can reach Tier 0 inherits that reach.
+		for gdn, ms := range members {
+			gsid := dnToSID[gdn]
+			if gsid == "" || !reachers[gsid] {
+				continue
+			}
+			for _, mdn := range ms {
+				msid := dnToSID[mdn]
+				if msid == "" {
+					continue
+				}
+				if addReacher(msid, "member of "+name(gdn)+" → "+path[gsid]) {
+					changed = true
+				}
+			}
+		}
+	}
+	return reachers, path
 }

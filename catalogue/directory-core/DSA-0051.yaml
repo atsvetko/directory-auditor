@@ -48,6 +48,9 @@ references:
 notes: >-
   Enterprise Key Admins is Tier 0 in our model, so DSA-0015 does not report this ACE; this check reports the over-broad
   default itself.
+evidence_principals: >-
+  aces(obj).filter(a, a.allow && a.trustee.startsWith("S-1-5-21-") && sid_rid(a.trustee) == 527 &&
+  a.object_type == "" && (mask_has(a.mask, 0x10000000) || mask_has(a.mask, 0xF01FF))).map(a, a.trustee)
 condition_cel: >-
   sd_readable(obj) && aces(obj).exists(a, a.allow && a.trustee.startsWith("S-1-5-21-") && sid_rid(a.trustee) ==
   527 && a.object_type == "" && (mask_has(a.mask, 0x10000000) || mask_has(a.mask, 0xF01FF)))

@@ -177,10 +177,11 @@ func orUnknown(s string) string {
 // analyseOptions are the flags scan and analyse share.
 type analyseOptions struct {
 	packset.Options
-	OutDir string
-	Lang   string
-	Quick  bool
-	Stamp  string // shared by snapshot-<stamp>.json.zst and run-<stamp>.log
+	OutDir      string
+	Lang        string
+	Quick       bool
+	ShowSecrets bool
+	Stamp       string // shared by snapshot-<stamp>.json.zst and run-<stamp>.log
 }
 
 // checkFlags registers the flags that choose which checks run.
@@ -190,6 +191,7 @@ func checkFlags(fs *flag.FlagSet, o *analyseOptions, defaultPacks string) {
 	fs.BoolVar(&o.NoPreview, "no-preview", false, "do not evaluate the preview checks built into this binary (unverified catalogue entries); signed packs only")
 	fs.StringVar(&o.CatalogueDir, "catalogue", "", "take preview checks from this catalogue working tree instead of the built-in copy (for verifying entries)")
 	fs.BoolVar(&o.Quick, "quick", false, "quick scan: run only checks marked quick")
+	fs.BoolVar(&o.ShowSecrets, "show-secrets", false, "show credentials found in readable attributes in full (default: masked)")
 	fs.StringVar(&o.Lang, "lang", "en", "report language: en or ru")
 }
 
@@ -303,7 +305,7 @@ func analyse(snap *snapshot.Snapshot, o analyseOptions, out, errw io.Writer) int
 	for _, n := range set.Notes {
 		fmt.Fprintln(errw, "NOTE:", n)
 	}
-	res, err := check.EvaluateWith(snap, set.Packs, check.EvalOptions{Quick: o.Quick})
+	res, err := check.EvaluateWith(snap, set.Packs, check.EvalOptions{Quick: o.Quick, ShowSecrets: o.ShowSecrets})
 	if err != nil {
 		fmt.Fprintln(errw, "error:", err)
 		return 1

@@ -2,6 +2,7 @@ package check
 
 import (
 	"fmt"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -151,6 +152,19 @@ func CompileCondition(expr string) (cel.Program, error) {
 	return celEnv.Program(ast, cel.EvalOptions(cel.OptOptimize))
 }
 
+// CompileStringList type-checks a CEL expression used for evidence_principals;
+// the result must be a list (of SID strings).
+func CompileStringList(expr string) (cel.Program, error) {
+	ast, iss := celEnv.Compile(expr)
+	if iss != nil && iss.Err() != nil {
+		return nil, iss.Err()
+	}
+	if ast.OutputType().Kind() != cel.ListKind {
+		return nil, fmt.Errorf("evidence_principals must evaluate to a list, got %s", ast.OutputType())
+	}
+	return celEnv.Program(ast, cel.EvalOptions(cel.OptOptimize))
+}
+
 func objectToCEL(o snapshot.Object, now int64, t0 *tier0.Set) map[string]any {
 	attrs := make(map[string]any, len(o.Attrs))
 	for k, v := range o.Attrs {
@@ -205,7 +219,8 @@ func allAttr(o ref.Val, name string) []string {
 
 // EvalOptions tunes a run.
 type EvalOptions struct {
-	Quick bool // run only packs marked quick: true; the rest are reported as skipped ("quick")
+	Quick       bool // run only packs marked quick: true; the rest are reported as skipped ("quick")
+	ShowSecrets bool // show credential evidence in full instead of masking it (opt-in)
 }
 
 // currentTier0 is the Tier-0 set of the snapshot being evaluated, read by the
@@ -229,9 +244,11 @@ func EvaluateWith(snap *snapshot.Snapshot, packs []Pack, opts EvalOptions) (*Res
 	t0 := tier0.ResolveFor(snap.Meta.Provider, snap.Objects, snap.Meta.DomainSID)
 	currentTier0, currentIndex, currentBase = t0, indexSnapshot(snap), snap.Meta.BaseDN
 	currentT0Parents = tier0Parents(t0.DNs())
+	currentReachers, currentReachPath = controlGraph(snap, t0)
 	defer func() {
 		currentTier0, currentIndex, currentSIDs, currentBase = nil, nil, nil, ""
 		currentSchemaGUIDs, currentT0Parents, currentHosts, currentDNSDomain = nil, nil, nil, ""
+		currentNames, currentReachers, currentReachPath = nil, nil, nil
 	}()
 	now := snap.Collected.Unix()
 	inv := Inventory{Objects: len(snap.Objects), Collected: snap.Collected, Identity: snap.Meta.Identity,
@@ -276,7 +293,7 @@ func EvaluateWith(snap *snapshot.Snapshot, packs []Pack, opts EvalOptions) (*Res
 		case p.Tier > snap.Meta.Tier:
 			cr.Status, cr.Skip = "skipped", "tier"
 		default:
-			if err := runPack(snap, &p, &cr, now, t0); err != nil {
+			if err := runPack(snap, &p, &cr, now, t0, opts.ShowSecrets); err != nil {
 				cr.Status, cr.Skip = "skipped", "error"
 				cr.Findings = nil
 				cr.Evidence(err)
@@ -295,7 +312,7 @@ func (cr *CheckResult) Evidence(err error) {
 	cr.Findings = append(cr.Findings, Finding{CheckID: cr.ID, Severity: "info", DN: "", Evidence: map[string]string{"error": err.Error()}})
 }
 
-func runPack(snap *snapshot.Snapshot, p *Pack, cr *CheckResult, now int64, t0 *tier0.Set) error {
+func runPack(snap *snapshot.Snapshot, p *Pack, cr *CheckResult, now int64, t0 *tier0.Set, showSecrets bool) error {
 	// <default> in a pack filter stands for the snapshot's base DN, so packs
 	// can name containers (memberOf=cn=admins,…,<default>) without hard-coding a domain.
 	filter, err := ParseFilter(strings.ReplaceAll(p.Query.Filter, "<default>", snap.Meta.BaseDN))
@@ -305,6 +322,12 @@ func runPack(snap *snapshot.Snapshot, p *Pack, cr *CheckResult, now int64, t0 *t
 	prog, err := CompileCondition(p.Condition)
 	if err != nil {
 		return err
+	}
+	var princProg cel.Program
+	if p.EvidencePrincipals != "" {
+		if princProg, err = CompileStringList(p.EvidencePrincipals); err != nil {
+			return err
+		}
 	}
 	for _, o := range snap.Objects {
 		if !filter.Match(o) {
@@ -319,7 +342,32 @@ func runPack(snap *snapshot.Snapshot, p *Pack, cr *CheckResult, now int64, t0 *t
 		if b, ok := out.Value().(bool); ok && b {
 			f := Finding{CheckID: p.ID, Severity: p.Severity, DN: o.DN, Evidence: map[string]string{}}
 			for _, a := range p.Evidence {
-				f.Evidence[a] = strings.Join(values(o, a), "; ")
+				// The raw security descriptor is replaced by the named principals
+				// when a check resolves them; otherwise it is noise in the report.
+				if strings.EqualFold(a, "nTSecurityDescriptor") && p.EvidencePrincipals != "" {
+					continue
+				}
+				// path_to_tier0 is synthesised from the control graph, not an attribute.
+				if strings.EqualFold(a, "path_to_tier0") {
+					if sid := o.Attr("objectSid"); sid != "" {
+						f.Evidence["path_to_tier0"] = currentReachPath[strings.ToUpper(sid)]
+					}
+					continue
+				}
+				v := strings.Join(values(o, a), "; ")
+				if p.Secret && !showSecrets && v != "" {
+					v = maskSecret(v)
+				}
+				f.Evidence[a] = v
+			}
+			if princProg != nil {
+				names, err := evalPrincipals(princProg, obj)
+				if err != nil {
+					return fmt.Errorf("evidence_principals of %s on %s: %w", p.ID, o.DN, err)
+				}
+				if names != "" {
+					f.Evidence["principals"] = names
+				}
 			}
 			if why, _ := obj["tier0_reason"].(string); why != "" {
 				f.Evidence["tier0"] = why
@@ -337,6 +385,30 @@ func runPack(snap *snapshot.Snapshot, p *Pack, cr *CheckResult, now int64, t0 *t
 		cr.Status = "pass"
 	}
 	return nil
+}
+
+// evalPrincipals runs an evidence_principals expression and returns the SIDs it
+// yields, de-duplicated, each resolved to "name (SID)" and joined for display.
+func evalPrincipals(prog cel.Program, obj map[string]any) (string, error) {
+	out, _, err := prog.Eval(map[string]any{"obj": obj})
+	if err != nil {
+		return "", err
+	}
+	native, err := out.ConvertToNative(reflect.TypeOf([]string{}))
+	if err != nil {
+		return "", err
+	}
+	sids, _ := native.([]string)
+	seen := map[string]bool{}
+	var names []string
+	for _, sid := range sids {
+		if sid == "" || seen[strings.ToUpper(sid)] {
+			continue
+		}
+		seen[strings.ToUpper(sid)] = true
+		names = append(names, resolvePrincipal(sid))
+	}
+	return strings.Join(names, "; "), nil
 }
 
 var objectClassRe = regexp.MustCompile(`(?i)objectclass=([A-Za-z0-9_-]+)`)

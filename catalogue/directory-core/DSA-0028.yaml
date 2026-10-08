@@ -67,6 +67,7 @@ notes: >-
   lower-cased value. This is a preview-quality heuristic — a human confirms each hit — so the controlled
   vocabulary matters less than catching the obvious cases. A future revision could add entropy-based
   detection of secret-looking tokens.
+secret: true
 condition_cel: '["description", "info", "comment"].exists(f, attr(obj, f).lowerAscii().contains("password")
   || attr(obj, f).lowerAscii().contains("passwd") || attr(obj, f).lowerAscii().contains("pwd") || attr(obj,
   f).lowerAscii().contains("secret")) || hasattr(obj, "userpassword") || hasattr(obj, "unixuserpassword")'

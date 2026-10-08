@@ -52,6 +52,10 @@ references:
 notes: >-
   Shares the managed-service-account collection with the ANSSI wave-2 MSA points. The descriptor is read as returned
   to the auditing account; when it is not readable the check does not fire.
+evidence_principals: >-
+  aces_of(obj, "msDS-GroupMSAMembership").filter(a, a.allow && ((a.trustee in ["S-1-1-0", "S-1-5-7",
+  "S-1-5-11", "S-1-5-32-545"] || (a.trustee.startsWith("S-1-5-21-") && sid_rid(a.trustee) in [513, 515])) ||
+  (tier0(obj) && !a.trustee_tier0))).map(a, a.trustee)
 condition_cel: >-
   aces_of(obj, "msDS-GroupMSAMembership").exists(a, a.allow && ((a.trustee in ["S-1-1-0", "S-1-5-7", "S-1-5-11",
   "S-1-5-32-545"] || (a.trustee.startsWith("S-1-5-21-") && sid_rid(a.trustee) in [513, 515])) || (tier0(obj) &&

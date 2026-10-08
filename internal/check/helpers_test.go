@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -169,5 +170,34 @@ func TestWave2aHelpers(t *testing.T) {
 		if got := spnKnown(spn); got != want {
 			t.Errorf("spnKnown(%q) = %v, want %v", spn, got, want)
 		}
+	}
+}
+
+func TestMaskSecret(t *testing.T) {
+	for in, want := range map[string]string{
+		"User Password LpSdu1la)Di_": "User Password Lp•••••••••• (12 chars)",
+		"Welcome1!":                  "We••••••• (9 chars)",
+		"":                           "",
+	} {
+		if got := maskSecret(in); got != want {
+			t.Errorf("maskSecret(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if m := maskSecret("x"); !strings.HasSuffix(m, "(1 chars)") {
+		t.Errorf("short secret: %q", m)
+	}
+}
+
+func TestResolvePrincipal(t *testing.T) {
+	currentNames = map[string]string{"S-1-5-21-1-2-3-1105": "j.doe"}
+	defer func() { currentNames = nil }()
+	if got := resolvePrincipal("S-1-5-21-1-2-3-1105"); got != "j.doe (S-1-5-21-1-2-3-1105)" {
+		t.Errorf("named: %q", got)
+	}
+	if got := resolvePrincipal("S-1-5-11"); got != "Authenticated Users (S-1-5-11)" {
+		t.Errorf("well-known: %q", got)
+	}
+	if got := resolvePrincipal("S-1-5-21-9-8-7-1500"); got != "S-1-5-21-9-8-7-1500" {
+		t.Errorf("unknown should pass through: %q", got)
 	}
 }

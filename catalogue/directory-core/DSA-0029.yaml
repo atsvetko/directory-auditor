@@ -67,6 +67,11 @@ notes: >-
   adminCount=1 objects that are not currently Tier 0 — orphaned or delegated admins. The masks mirror
   DSA-0015: GenericAll 0x10000000 and 0xF01FF, WriteDacl 0x40000, WriteOwner 0x80000, GenericWrite
   0x40000000, plus WriteProperty 0x20 unconstrained by an object type. SELF and CREATOR OWNER are ignored.
+evidence_principals: >-
+  aces(obj).filter(a, a.allow && a.effective && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"])
+  && (mask_has(a.mask, 0x10000000) || mask_has(a.mask, 0xF01FF) || mask_has(a.mask, 0x40000) ||
+  mask_has(a.mask, 0x80000) || mask_has(a.mask, 0x40000000) || (mask_has(a.mask, 0x20) && a.object_type ==
+  ""))).map(a, a.trustee)
 condition_cel: 'intattr(obj, "adminCount") == 1 && !tier0(obj) && obj.dn.lowerAscii() != obj.base.lowerAscii()
   && !obj.dn.lowerAscii().startsWith("ou=domain controllers,") && !obj.dn.lowerAscii().startsWith("cn=adminsdholder,")
   && sd_readable(obj) && aces(obj).exists(a, a.allow && a.effective && !a.trustee_tier0 && !(a.trustee in
