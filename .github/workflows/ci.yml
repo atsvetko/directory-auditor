@@ -124,6 +124,7 @@ jobs:
           if ($LASTEXITCODE -eq 0) { throw "scan should fail" }
           if ($sc -join "`n" | Select-String -Pattern "panic|goroutine") { throw "scan panicked: $sc" }
           Write-Host "scan error path:" ($sc -join "`n")
+          exit 0   # the last native command failed on purpose; pwsh would otherwise return its exit code
       - name: wizard over its API
         shell: pwsh
         run: |
