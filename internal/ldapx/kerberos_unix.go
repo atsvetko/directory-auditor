@@ -8,32 +8,51 @@ import (
 	"os"
 	"strings"
 
-	"github.com/go-ldap/ldap/v3/gssapi"
+	"github.com/jcmturner/gokrb5/v8/client"
+	"github.com/jcmturner/gokrb5/v8/config"
+	"github.com/jcmturner/gokrb5/v8/credentials"
 )
 
-func bindCurrentUser(c *Conn, spn string) (string, error) {
-	ccache, err := ccachePath()
-	if err != nil {
-		return "", err
-	}
-	conf := os.Getenv("KRB5_CONFIG")
-	if conf == "" {
-		conf = "/etc/krb5.conf"
-	}
-	cl, err := gssapi.NewClientFromCCache(ccache, conf)
-	if err != nil {
-		return "", fmt.Errorf("ldapx: cannot use Kerberos ticket cache %s with %s: %w (run `kinit user@REALM` first)", ccache, conf, err)
-	}
-	defer cl.Close()
-	who := cl.Credentials.CName().PrincipalNameString() + "@" + cl.Credentials.Realm()
-	if err := c.c.GSSAPIBind(cl, spn, ""); err != nil {
-		hint := ""
-		if _, cerr := c.peerCertificate(); cerr == nil {
-			hint = " Samba DCs ('ldap server require strong auth = yes', the default) and Windows DCs with LdapEnforceChannelBinding=2 require TLS channel binding, which the Linux Kerberos client cannot send yet; use --user (simple bind over LDAPS) for this run."
+// newGSSContext builds the Kerberos context on gokrb5: from the credential
+// cache for the current logon, or from a password — then the KDC is the
+// directory server itself, so no krb5.conf is needed on this machine.
+func newGSSContext(spn string, channelBinding []byte, account, password, domainHint, kdc string) (gssContext, error) {
+	if account == "" {
+		ccache, err := ccachePath()
+		if err != nil {
+			return nil, err
 		}
-		return "", fmt.Errorf("ldapx: Kerberos bind to %s as %s failed: %w.%s", spn, who, err, hint)
+		confPath := os.Getenv("KRB5_CONFIG")
+		if confPath == "" {
+			confPath = "/etc/krb5.conf"
+		}
+		conf, err := config.Load(confPath)
+		if err != nil {
+			return nil, fmt.Errorf("Kerberos configuration %s: %w", confPath, err)
+		}
+		cc, err := credentials.LoadCCache(ccache)
+		if err != nil {
+			return nil, fmt.Errorf("Kerberos ticket cache %s: %w (run `kinit user@REALM` first)", ccache, err)
+		}
+		cl, err := client.NewFromCCache(cc, conf, client.DisablePAFXFAST(true))
+		if err != nil {
+			return nil, fmt.Errorf("Kerberos ticket cache %s: %w (run `kinit user@REALM` first)", ccache, err)
+		}
+		return newKrb5Context(cl, spn, channelBinding), nil
 	}
-	return who, nil
+	name, realm := splitPrincipal(account, domainHint)
+	if realm == "" {
+		return nil, errors.New("Kerberos with a password needs the realm: use user@domain or pass --domain")
+	}
+	conf, err := config.NewFromString(krb5ConfigFor(realm, kdc))
+	if err != nil {
+		return nil, err
+	}
+	cl := client.NewWithPassword(name, realm, password, conf, client.DisablePAFXFAST(true))
+	if err := cl.Login(); err != nil {
+		return nil, fmt.Errorf("Kerberos login as %s@%s at KDC %s: %w", name, realm, kdc, err)
+	}
+	return newKrb5Context(cl, spn, channelBinding), nil
 }
 
 // ccachePath resolves the file credential cache. KEYRING:, KCM: and DIR:
@@ -46,7 +65,7 @@ func ccachePath() (string, error) {
 	case strings.HasPrefix(v, "FILE:"):
 		return strings.TrimPrefix(v, "FILE:"), nil
 	case strings.Contains(v, ":") && !strings.HasPrefix(v, "/"):
-		return "", errors.New("ldapx: the Kerberos cache " + v + " is not a file; run `KRB5CCNAME=FILE:/tmp/dirauditor.cc kinit user@REALM` and start again with that KRB5CCNAME")
+		return "", errors.New("the Kerberos cache " + v + " is not a file; run `KRB5CCNAME=FILE:/tmp/dirauditor.cc kinit user@REALM` and start again with that KRB5CCNAME")
 	}
 	return v, nil
 }

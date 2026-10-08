@@ -15,9 +15,8 @@ import (
 type Target struct {
 	Server            string // host or host:port; empty = discover from Domain
 	Domain            string // DNS domain name
-	UseLDAPS          bool
-	StartTLS          bool
-	InsecurePlaintext bool
+	TLS               string // auto (default), ldaps, starttls, none — see ldapx.TLSMode
+	InsecurePlaintext bool   // allow a password over an unencrypted connection (labs only)
 	PinSHA256         string
 	BindUser          string // empty = current logon (Kerberos)
 	BindPassword      string // used once, never stored
@@ -40,10 +39,12 @@ type Provider interface {
 
 // CheckResult describes a successful test connection.
 type CheckResult struct {
-	Identity string // who we are bound as
-	Dialect  string // ad, samba
-	Domain   string // DNS domain derived from the naming context
-	BaseDN   string
+	Identity  string // who we are bound as
+	Dialect   string // ad, samba
+	Domain    string // DNS domain derived from the naming context
+	BaseDN    string
+	Transport string // how the session is protected (ldapx.Conn.Transport)
+	Encrypted bool   // TLS or SASL sealing
 }
 
 var (

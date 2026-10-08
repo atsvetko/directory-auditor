@@ -26,54 +26,84 @@ import (
 	"github.com/go-ldap/ldap/v3"
 )
 
-// Options controls how a connection is made. Plain LDAP without TLS is refused
-// unless InsecurePlaintext is set (development only).
+// TLSMode says how the connection is protected.
+type TLSMode string
+
+const (
+	// TLSAuto tries LDAPS, then StartTLS, then plain LDAP — where a Kerberos
+	// bind negotiates a SASL security layer (sealing) so the session is still
+	// encrypted, and a password is refused unless InsecurePlaintext is set.
+	TLSAuto     TLSMode = "auto"
+	TLSLDAPS    TLSMode = "ldaps"
+	TLSStartTLS TLSMode = "starttls"
+	TLSNone     TLSMode = "none"
+)
+
+// Options controls how a connection is made.
 type Options struct {
 	Server            string        // host or host:port
-	UseLDAPS          bool          // 636 with TLS from the start
-	StartTLS          bool          // 389 then StartTLS
-	InsecurePlaintext bool          // allow no TLS at all (never the default)
+	TLS               TLSMode       // "" = TLSAuto
+	InsecurePlaintext bool          // allow a password (simple bind) on an unencrypted connection (labs only)
 	PinSHA256         string        // optional hex SHA-256 of the server certificate (self-signed CAs)
 	ServerName        string        // SNI / verification name when it differs from Server
 	Timeout           time.Duration // dial and per-request timeout
 	MaxQPS            int           // 0 = unlimited; collectors throttle to this
+	Domain            string        // DNS domain; the Kerberos realm for --user with a password
 }
+
+// ErrCertificate marks a TLS failure caused by the server certificate (not
+// trusted, name mismatch, pin mismatch): the fix is trust or --pin, never a
+// fallback to an unencrypted connection.
+var ErrCertificate = errors.New("server certificate not accepted")
 
 // Conn is a read-only LDAP session.
 type Conn struct {
 	c        *ldap.Conn
-	queries  int // logical searches
-	requests int // wire requests (pages, range chunks)
+	sec      *secConn   // the plaintext connection, when there is no TLS
+	gss      gssContext // the Kerberos context after a Kerberos bind
+	queries  int        // logical searches
+	requests int        // wire requests (pages, range chunks)
 	last     time.Time
 	opts     Options
+
+	transport  string // ldaps | starttls | ldap
+	protection string // tls | sasl-seal | sasl-sign | none
+	noTLS      string // why TLS is not in use (auto mode)
 }
 
-// Dial opens a connection according to opts. It never binds; call BindSimple
-// (or, later, BindGSSAPI) explicitly so the identity used is always visible.
-func Dial(ctx context.Context, opts Options) (*Conn, error) {
-	if opts.Timeout == 0 {
-		opts.Timeout = 15 * time.Second
+// Transport describes how the session is protected, for reports and logs.
+func (c *Conn) Transport() string {
+	switch c.transport {
+	case "ldaps":
+		return "LDAPS"
+	case "starttls":
+		return "StartTLS"
 	}
-	host, port, err := net.SplitHostPort(opts.Server)
-	if err != nil {
-		host = opts.Server
-		port = "389"
-		if opts.UseLDAPS {
-			port = "636"
-		}
+	switch c.protection {
+	case "sasl-seal":
+		return "LDAP, Kerberos-sealed (no TLS)"
+	case "sasl-sign":
+		return "LDAP, Kerberos-signed (no TLS)"
 	}
-	if !opts.UseLDAPS && !opts.StartTLS && !opts.InsecurePlaintext {
-		return nil, errors.New("ldapx: refusing a plaintext LDAP connection; use LDAPS, StartTLS, or --insecure-plaintext for a lab")
-	}
-	serverName := opts.ServerName
+	return "LDAP, unencrypted"
+}
+
+// Encrypted reports whether the session is confidential (TLS or SASL sealing).
+func (c *Conn) Encrypted() bool { return c.transport != "ldap" || c.protection == "sasl-seal" }
+
+// NoTLSReason says why the connection has no TLS ("" when it has).
+func (c *Conn) NoTLSReason() string { return c.noTLS }
+
+func (o Options) tlsConfig(host string) *tls.Config {
+	serverName := o.ServerName
 	if serverName == "" {
 		serverName = host
 	}
-	tlsCfg := &tls.Config{ServerName: serverName, MinVersion: tls.VersionTLS12}
-	if opts.PinSHA256 != "" {
-		pin := strings.ToLower(strings.ReplaceAll(opts.PinSHA256, ":", ""))
-		tlsCfg.InsecureSkipVerify = true // verification is done by the pin below, not skipped
-		tlsCfg.VerifyPeerCertificate = func(raw [][]byte, _ [][]*x509.Certificate) error {
+	cfg := &tls.Config{ServerName: serverName, MinVersion: tls.VersionTLS12}
+	if o.PinSHA256 != "" {
+		pin := strings.ToLower(strings.ReplaceAll(o.PinSHA256, ":", ""))
+		cfg.InsecureSkipVerify = true // verification is done by the pin below, not skipped
+		cfg.VerifyPeerCertificate = func(raw [][]byte, _ [][]*x509.Certificate) error {
 			if len(raw) == 0 {
 				return errors.New("ldapx: no server certificate presented")
 			}
@@ -84,34 +114,130 @@ func Dial(ctx context.Context, opts Options) (*Conn, error) {
 			return nil
 		}
 	}
-
-	dialer := &net.Dialer{Timeout: opts.Timeout}
-	addr := net.JoinHostPort(host, port)
-	var c *ldap.Conn
-	switch {
-	case opts.UseLDAPS:
-		c, err = ldap.DialURL("ldaps://"+addr, ldap.DialWithDialer(dialer), ldap.DialWithTLSConfig(tlsCfg))
-	default:
-		c, err = ldap.DialURL("ldap://"+addr, ldap.DialWithDialer(dialer))
-		if err == nil && opts.StartTLS {
-			if e := c.StartTLS(tlsCfg); e != nil {
-				c.Close()
-				return nil, fmt.Errorf("ldapx: StartTLS: %w", e)
-			}
-		}
-	}
-	if err != nil {
-		return nil, fmt.Errorf("ldapx: dial %s: %w", addr, err)
-	}
-	c.SetTimeout(opts.Timeout)
-	return &Conn{c: c, opts: opts}, nil
+	return cfg
 }
 
-// BindSimple authenticates with a DN or UPN and password over the (TLS) session.
-// The password is used once and not retained by this package.
+// certError reports whether a TLS failure is about the certificate (trust,
+// name, pin) rather than the server not speaking TLS at all.
+func certError(err error) bool {
+	var ua x509.UnknownAuthorityError
+	var hn x509.HostnameError
+	var ce x509.CertificateInvalidError
+	var ve *tls.CertificateVerificationError
+	if errors.As(err, &ua) || errors.As(err, &hn) || errors.As(err, &ce) || errors.As(err, &ve) {
+		return true
+	}
+	m := err.Error()
+	return strings.Contains(m, "does not match pin") || strings.Contains(m, "x509:") || strings.Contains(m, "certificate")
+}
+
+// Dial opens a connection according to opts. It never binds; call
+// BindKerberos or BindSimple explicitly so the identity used is always visible.
+//
+// In TLSAuto mode a server that offers no TLS at all (a Windows DC without a
+// certificate is the common case) is reached over plain LDAP; the bind then
+// decides what is acceptable there. A certificate the client does not trust
+// is never a reason to fall back.
+func Dial(ctx context.Context, opts Options) (*Conn, error) {
+	if opts.Timeout == 0 {
+		opts.Timeout = 15 * time.Second
+	}
+	if opts.TLS == "" {
+		opts.TLS = TLSAuto
+	}
+	host, port, err := net.SplitHostPort(opts.Server)
+	if err != nil {
+		host, port = opts.Server, ""
+	}
+	dialer := &net.Dialer{Timeout: opts.Timeout}
+	tlsCfg := opts.tlsConfig(host)
+	var reasons []string
+
+	if opts.TLS == TLSAuto || opts.TLS == TLSLDAPS {
+		p := port
+		if p == "" {
+			p = "636"
+		}
+		addr := net.JoinHostPort(host, p)
+		c, err := ldap.DialURL("ldaps://"+addr, ldap.DialWithDialer(dialer), ldap.DialWithTLSConfig(tlsCfg))
+		if err == nil {
+			c.SetTimeout(opts.Timeout)
+			return &Conn{c: c, opts: opts, transport: "ldaps", protection: "tls"}, nil
+		}
+		// A certificate problem hard-fails only when LDAPS was asked for
+		// explicitly. In auto mode it is a reason to try the next transport:
+		// Kerberos sealing there gives mutual authentication and
+		// confidentiality without depending on the certificate.
+		if certError(err) && opts.TLS == TLSLDAPS {
+			return nil, fmt.Errorf("ldapx: LDAPS %s: %w: %v", addr, ErrCertificate, err)
+		}
+		if opts.TLS == TLSLDAPS {
+			return nil, fmt.Errorf("ldapx: dial %s: %w", addr, err)
+		}
+		reasons = append(reasons, "LDAPS "+addr+": "+shortErr(err))
+	}
+
+	p := port
+	if p == "" {
+		p = "389"
+	}
+	addr := net.JoinHostPort(host, p)
+	if opts.TLS == TLSAuto || opts.TLS == TLSStartTLS {
+		c, err := ldap.DialURL("ldap://"+addr, ldap.DialWithDialer(dialer))
+		if err != nil {
+			return nil, fmt.Errorf("ldapx: dial %s: %w%s", addr, err, after(reasons))
+		}
+		c.SetTimeout(opts.Timeout)
+		err = c.StartTLS(tlsCfg)
+		if err == nil {
+			return &Conn{c: c, opts: opts, transport: "starttls", protection: "tls"}, nil
+		}
+		c.Close()
+		if certError(err) && opts.TLS == TLSStartTLS {
+			return nil, fmt.Errorf("ldapx: StartTLS %s: %w: %v", addr, ErrCertificate, err)
+		}
+		if opts.TLS == TLSStartTLS {
+			return nil, fmt.Errorf("ldapx: StartTLS %s: %w", addr, err)
+		}
+		reasons = append(reasons, "StartTLS: "+shortErr(err))
+	}
+
+	raw, err := dialer.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("ldapx: dial %s: %w%s", addr, err, after(reasons))
+	}
+	sec := &secConn{Conn: raw}
+	c := ldap.NewConn(sec, false)
+	c.SetTimeout(opts.Timeout)
+	c.Start()
+	return &Conn{c: c, sec: sec, opts: opts, transport: "ldap", protection: "none", noTLS: strings.Join(reasons, "; ")}, nil
+}
+
+func shortErr(err error) string {
+	m := err.Error()
+	for _, cut := range []string{"LDAP Result Code 200 \"Network Error\": ", "ldap: "} {
+		m = strings.ReplaceAll(m, cut, "")
+	}
+	return m
+}
+
+func after(reasons []string) string {
+	if len(reasons) == 0 {
+		return ""
+	}
+	return " (after " + strings.Join(reasons, "; ") + ")"
+}
+
+// BindSimple authenticates with a DN or UPN and password. The password is
+// used once and not retained by this package. On an unencrypted connection it
+// is refused unless Options.InsecurePlaintext is set: a password must not
+// cross the network in the clear.
 func (c *Conn) BindSimple(user, password string) error {
 	if password == "" {
 		return errors.New("ldapx: refusing an unauthenticated (empty-password) simple bind")
+	}
+	if c.transport == "ldap" && !c.opts.InsecurePlaintext {
+		return fmt.Errorf("ldapx: refusing to send a password over an unencrypted connection (%s); use Kerberos (the current logon, or --user with the domain as Kerberos realm), or --insecure-plaintext in a lab", c.noTLS)
 	}
 	return c.c.Bind(user, password)
 }
@@ -319,8 +445,14 @@ func (c *Conn) Queries() int { return c.queries }
 // Requests reports wire-level requests (each page and range chunk counts).
 func (c *Conn) Requests() int { return c.requests }
 
-// Close ends the session.
-func (c *Conn) Close() { c.c.Close() }
+// Close ends the session and releases the Kerberos context, if any.
+func (c *Conn) Close() {
+	c.c.Close()
+	if c.gss != nil {
+		_ = c.gss.Close()
+		c.gss = nil
+	}
+}
 
 // Scope mirrors LDAP search scopes without exposing go-ldap types.
 type Scope int

@@ -97,6 +97,13 @@ run sh -c "testparm -s --suppress-prompt /etc/samba/smb.conf >/dev/null"
 # 4. Kerberos client config for the lab realm.
 run cp /var/lib/samba/private/krb5.conf /etc/krb5.conf
 
+# 4b. Register the standard service principal names (ldap/<dc>, …). A fresh
+#     provision may not have them until the periodic task runs; the Kerberos
+#     SASL bind over plain LDAP needs ldap/<dc> to resolve.
+if (( ! DRY )); then
+  run $PY /usr/sbin/samba_spnupdate 2>/dev/null || true
+fi
+
 # 5. Start samba in the foreground (no systemd needed) unless it is running.
 if (( ! DRY )); then
   if ! pgrep -x samba >/dev/null; then

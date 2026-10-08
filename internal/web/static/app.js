@@ -35,11 +35,14 @@ const T = {
  c_man:["Enter domain and credentials","Указать домен и учётные данные"],
  c_man_d:["Another domain, a non-joined machine, Samba AD DC, or a dedicated audit account.","Другой домен, компьютер вне домена, Samba AD DC или отдельная учётная запись для аудита."],
  f_dom:["Domain","Домен"], f_dc:["Domain controller (optional)","Контроллер домена (необязательно)"], f_user:["User","Пользователь"], f_pw:["Password","Пароль"],
- f_tls:["Connection security","Защита подключения"], o_ldaps:["LDAPS (636) — recommended","LDAPS (636) — рекомендуется"], o_starttls:["StartTLS (389)","StartTLS (389)"],
+ f_tls:["Connection security","Защита подключения"], o_ldaps:["LDAPS (636)","LDAPS (636)"], o_starttls:["StartTLS (389)","StartTLS (389)"],
  f_pin:["Certificate fingerprint (only if the DC certificate is not trusted here)","Отпечаток сертификата (только если сертификат КД здесь не доверенный)"],
  f_hint:["A normal user account covers ~80% of checks. The password is used once in memory and never saved.","Обычной учётной записи достаточно для ~80% проверок. Пароль используется один раз в памяти и нигде не сохраняется."],
  demo:["Try with demo data","Попробовать на демо-данных"], connect:["Connect","Подключиться"], connecting:["Connecting…","Подключение…"],
- connok:["Connected to {s} as {i} · {k}.","Подключено к {s} как {i} · {k}."],
+ connok:["Connected to {s} as {i} · {k} · {t}.","Подключено к {s} как {i} · {k} · {t}."],
+ unencrypted:["The connection is not encrypted (lab mode): directory data will cross the network in clear.","Подключение не зашифровано (режим стенда): данные каталога пойдут по сети в открытом виде."],
+ o_auto:["Automatic — LDAPS, then StartTLS, then LDAP with Kerberos sealing (recommended)","Автоматически — LDAPS, затем StartTLS, затем LDAP с шифрованием Kerberos (рекомендуется)"],
+ o_none:["Unencrypted LDAP (389) — lab only, sends the password in clear","LDAP без шифрования (389) — только стенд, пароль уходит открытым"],
  sc_h:["Choose a scan","Выберите сканирование"],
  fast:["Fast scan","Быстрое сканирование"], fast_d:["The highest-value checks · about a minute · best first look.","Самые ценные проверки · около минуты · для первого знакомства."],
  full:["Full scan","Полное сканирование"], full_d:["Every check your account can run · a few minutes.","Все проверки, доступные вашей учётной записи · несколько минут."],
@@ -48,6 +51,7 @@ const T = {
  r_target:["Target","Цель"], pdf_sub:["Directory security assessment","Оценка защищённости каталога"],
  unsigned:["Unsigned check packs were loaded (development mode). Do not rely on this report.","Загружены неподписанные пакеты проверок (режим разработки). Не полагайтесь на этот отчёт."],
  nopacks:["No check packs are loaded yet: catalogue entries become checks only after human verification. The Tier-0 inventory below is complete.","Пакеты проверок пока не загружены: записи каталога становятся проверками только после проверки человеком. Инвентаризация нулевого уровня ниже — полная."],
+ r_unenc:["The directory session was not encrypted — data crossed the network in clear (lab mode).","Подключение к каталогу не было зашифровано — данные прошли по сети в открытом виде (режим стенда)."],
  preview:["Preview checks: {n} catalogue entries were evaluated as checks. They are unsigned and not yet verified by a human (status draft). Treat their findings as leads to confirm, not as verified results.","Предварительные проверки: {n} записей каталога оценены как проверки. Они не подписаны и ещё не проверены человеком (статус «черновик»). Считайте их находки поводом для проверки, а не подтверждённым результатом."],
  checksinfo:["This run evaluates {p} signed check packs and {n} preview checks (unverified catalogue entries, unsigned). Start with --no-preview to run signed packs only.","Будут выполнены подписанные пакеты проверок: {p}, и предварительные проверки: {n} (записи каталога без подписи и без проверки человеком). Запуск с --no-preview выполняет только подписанные пакеты."],
  previewtag:["preview","preview"],
@@ -121,7 +125,8 @@ function showErr(prefix, msg, fix) {
 }
 function renderConn() {
   const k = {samba: "Samba AD DC", demo: "demo", freeipa: "FreeIPA / IdM", "389ds": "389 Directory Server"}[conn.kind] || "Active Directory";
-  $("connok").textContent = "✓ " + t("connok", {s: conn.server, i: conn.identity, k: k}) + (conn.smbconf ? " " + t("connok_smb") : "");
+  $("connok").textContent = "✓ " + t("connok", {s: conn.server, i: conn.identity, k: k, t: conn.transport || "—"}) + (conn.smbconf ? " " + t("connok_smb") : "")
+    + (conn.transport && !conn.encrypted ? " " + t("unencrypted") : "");
   $("scantarget").textContent = conn.domain + " · " + conn.identity;
 }
 async function connect(kind) {
@@ -189,7 +194,8 @@ function renderResult() {
   $("r_target").textContent = inv.domain || r.target;
   const when = (inv.collected_at || r.analysed_at || "").replace("T", " ").slice(0, 16) + " UTC";
   const kind = {samba: "Samba AD DC", freeipa: "FreeIPA / IdM", "389ds": "389 Directory Server"}[r.dialect] || "Active Directory";
-  $("r_sub").textContent = [kind, (lang === "ru" ? "уровень " : "tier ") + r.tier, when, (inv.identity || "")].filter(Boolean).join(" · ");
+  $("r_sub").textContent = [kind, (lang === "ru" ? "уровень " : "tier ") + r.tier, when, (inv.identity || ""), (inv.transport || "")].filter(Boolean).join(" · ");
+  $("r_unenc").classList.toggle("hidden", !inv.unencrypted);
   $("pc_meta").innerHTML = esc(inv.domain || r.target) + "<br>" + esc(when) + "<br>" + esc(inv.identity || "");
   $("unsigned").classList.toggle("hidden", !r.unsigned_packs);
   $("nopacks").classList.toggle("hidden", (r.checks || []).length > 0);

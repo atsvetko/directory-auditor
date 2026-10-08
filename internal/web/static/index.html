@@ -45,7 +45,7 @@
       <label><span data-t="f_dc">Domain controller (optional)</span><input class="inp mono" id="m_server" placeholder="dc01.corp.example.com" spellcheck="false"></label>
       <label><span data-t="f_user">User</span><input class="inp mono" id="m_user" placeholder="audit@corp.example.com" spellcheck="false"></label>
       <label><span data-t="f_pw">Password</span><input class="inp" id="m_password" type="password" autocomplete="new-password"></label>
-      <label class="wide"><span data-t="f_tls">Connection security</span><select class="inp" id="m_security"><option value="ldaps" data-t="o_ldaps">LDAPS (636) — recommended</option><option value="starttls" data-t="o_starttls">StartTLS (389)</option></select></label>
+      <label class="wide"><span data-t="f_tls">Connection security</span><select class="inp" id="m_security"><option value="auto" data-t="o_auto">Automatic — LDAPS, then StartTLS, then LDAP with Kerberos sealing (recommended)</option><option value="ldaps" data-t="o_ldaps">LDAPS (636)</option><option value="starttls" data-t="o_starttls">StartTLS (389)</option><option value="none" data-t="o_none">Unencrypted LDAP (389) — lab only, sends the password in clear</option></select></label>
       <label class="wide"><span data-t="f_pin">Certificate fingerprint (only if the DC certificate is not trusted here)</span><input class="inp mono" id="m_pin" placeholder="SHA-256, from `dirauditor doctor`" spellcheck="false"></label>
     </form>
     <div class="infobar"><span class="ii">i</span><span data-t="f_hint">A normal user account covers ~80% of checks. The password is used once in memory and never saved.</span></div>
@@ -89,6 +89,7 @@
     <div class="infobar notice hidden" id="unsigned"><span class="ii">!</span><span data-t="unsigned">Unsigned check packs were loaded (development mode). Do not rely on this report.</span></div>
     <div class="infobar notice hidden" id="nopacks"><span class="ii">i</span><span data-t="nopacks">No check packs are loaded yet: catalogue entries become checks only after human verification. The Tier-0 inventory below is complete.</span></div>
     <div class="infobar hidden" id="preview"><span class="ii">i</span><span id="preview_t"></span></div>
+    <div class="infobar notice hidden" id="r_unenc"><span class="ii">!</span><span data-t="r_unenc">The directory session was not encrypted — data crossed the network in clear (lab mode).</span></div>
 
     <div class="counts">
       <div class="cnt"><b id="n_checked">0</b><span data-t="c_checked">checked</span></div>

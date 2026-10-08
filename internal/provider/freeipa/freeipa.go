@@ -109,7 +109,7 @@ func (p Provider) Check(ctx context.Context, t provider.Target) (provider.CheckR
 	if err != nil {
 		return provider.CheckResult{}, err
 	}
-	return provider.CheckResult{Identity: id, Dialect: Fingerprint(root), BaseDN: base, Domain: domainFromDN(base)}, nil
+	return provider.CheckResult{Identity: id, Dialect: Fingerprint(root), BaseDN: base, Domain: domainFromDN(base), Transport: c.Transport(), Encrypted: c.Encrypted()}, nil
 }
 
 func (p Provider) Collect(ctx context.Context, t provider.Target, progress func(string)) (*snapshot.Snapshot, error) {
@@ -131,7 +131,8 @@ func (p Provider) Collect(ctx context.Context, t provider.Target, progress func(
 		return nil, errors.New("freeipa: rootDSE publishes no naming context")
 	}
 	meta := snapshot.Meta{Provider: p.Name(), Dialect: Fingerprint(root), Target: t.Server, Domain: t.Domain,
-		Tier: t.Tier, Tool: "dirauditor " + buildinfo.Version, RootDSE: root, BaseDN: base}
+		Tier: t.Tier, Tool: "dirauditor " + buildinfo.Version, RootDSE: root, BaseDN: base,
+		Extra: map[string]string{"transport": c.Transport(), "encrypted": fmt.Sprint(c.Encrypted())}}
 	if meta.Domain == "" {
 		meta.Domain = domainFromDN(base)
 	}
@@ -200,8 +201,8 @@ func dial(ctx context.Context, t provider.Target) (*ldapx.Conn, error) {
 	if t.Server == "" {
 		return nil, errors.New("freeipa: --server is required")
 	}
-	return ldapx.Dial(ctx, ldapx.Options{Server: t.Server, UseLDAPS: t.UseLDAPS, StartTLS: t.StartTLS,
-		InsecurePlaintext: t.InsecurePlaintext, PinSHA256: t.PinSHA256, MaxQPS: t.MaxQPS, Timeout: 20 * time.Second})
+	return ldapx.Dial(ctx, ldapx.Options{Server: t.Server, TLS: ldapx.TLSMode(t.TLS),
+		InsecurePlaintext: t.InsecurePlaintext, PinSHA256: t.PinSHA256, MaxQPS: t.MaxQPS, Timeout: 20 * time.Second, Domain: t.Domain})
 }
 
 func domainFromDN(dn string) string {

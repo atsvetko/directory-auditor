@@ -85,8 +85,9 @@ func Run(ctx context.Context, domain, server string) []Step {
 	raw, err := d.DialContext(ctx, "tcp", net.JoinHostPort(server, "636"))
 	if err != nil {
 		s.Cause = "port 636 unreachable"
-		s.Fix = "use StartTLS on 389 (--starttls) if LDAPS is not enabled on the DC"
+		s.Fix = "LDAPS is not enabled on the DC (or a firewall blocks 636); the default mode falls back to StartTLS, then to plain LDAP with Kerberos signing and sealing"
 		steps = append(steps, s)
+		steps = append(steps, rootDSESteps(ctx, server, "", timeout, time.Now)...)
 		return steps
 	}
 	var fingerprint string // of the leaf certificate, for the anonymous rootDSE read below
@@ -104,6 +105,16 @@ func Run(ctx context.Context, domain, server string) []Step {
 				s.Info = fmt.Sprintf("subject %s, issuer %s, SHA-256 %s", c.Subject.CommonName, c.Issuer.CommonName, fingerprint)
 			}
 			tc2.Close()
+		}
+		if fingerprint == "" {
+			// The port accepted the TCP connection but no TLS handshake
+			// completed even without verification: there is no LDAPS listener
+			// with a certificate behind it (a DC without a server certificate).
+			s.Cause = "the DC accepts TCP on 636 but does not complete a TLS handshake: no server certificate is installed, so LDAPS is not offered (" + err.Error() + ")"
+			s.Fix = "nothing to trust or pin; the default mode falls back to StartTLS, then to plain LDAP with Kerberos signing and sealing (the password path needs --insecure-plaintext, which sends it in clear). To enable LDAPS, install a server-authentication certificate on the DC"
+			steps = append(steps, s)
+			steps = append(steps, rootDSESteps(ctx, server, "", timeout, time.Now)...)
+			return steps
 		}
 		s.Cause = "certificate not trusted by this host: " + err.Error()
 		s.Fix = "import the domain CA into this host's trust store, or pin the fingerprint shown above with --pin <sha256>"
@@ -125,14 +136,19 @@ func Run(ctx context.Context, domain, server string) []Step {
 	return steps
 }
 
-// rootDSESteps reads the rootDSE anonymously over LDAPS — pinned to the
-// certificate just inspected, no bind, no credentials — to identify the server
-// and compare its clock with ours.
+// rootDSESteps reads the rootDSE anonymously — over LDAPS pinned to the
+// certificate just inspected when there is one, otherwise over StartTLS or
+// plain LDAP as the scan would — no bind, no credentials — to identify the
+// server and compare its clock with ours.
 func rootDSESteps(ctx context.Context, server, pin string, timeout time.Duration, now func() time.Time) []Step {
 	s := Step{Name: "LDAP rootDSE " + server}
-	c, err := ldapx.Dial(ctx, ldapx.Options{Server: server, UseLDAPS: true, PinSHA256: pin, Timeout: timeout})
+	mode := ldapx.TLSLDAPS
+	if pin == "" {
+		mode = ldapx.TLSAuto
+	}
+	c, err := ldapx.Dial(ctx, ldapx.Options{Server: server, TLS: mode, PinSHA256: pin, Timeout: timeout})
 	if err != nil {
-		s.Cause, s.Fix = err.Error(), "LDAPS answered TLS but not LDAP; check that the host is a directory server"
+		s.Cause, s.Fix = err.Error(), "the port answered but not as LDAP; check that the host is a directory server"
 		return []Step{s}
 	}
 	defer c.Close()
@@ -142,7 +158,7 @@ func rootDSESteps(ctx context.Context, server, pin string, timeout time.Duration
 		return []Step{s}
 	}
 	s.OK = true
-	s.Info = describeRoot(root)
+	s.Info = describeRoot(root) + " · via " + c.Transport()
 	return []Step{s, skewStep(root["currentTime"], now())}
 }
 

@@ -45,9 +45,8 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) (code int) {
 	fs.StringVar(&t.Server, "server", "", "domain controller host[:port]")
 	fs.StringVar(&t.Domain, "domain", "", "DNS domain name")
 	fs.StringVar(&t.BindUser, "user", "", "bind identity (DN or UPN); empty = current logon via Kerberos (no password)")
-	fs.BoolVar(&t.UseLDAPS, "ldaps", true, "use LDAPS (636)")
-	fs.BoolVar(&t.StartTLS, "starttls", false, "use StartTLS on 389 instead of LDAPS")
-	fs.BoolVar(&t.InsecurePlaintext, "insecure-plaintext", false, "allow LDAP without TLS (lab only)")
+	fs.StringVar(&t.TLS, "tls", "auto", "connection security: auto (LDAPS, then StartTLS, then plain LDAP with Kerberos sealing), ldaps, starttls, none")
+	fs.BoolVar(&t.InsecurePlaintext, "insecure-plaintext", false, "allow a password (simple bind) over an unencrypted connection (lab only)")
 	fs.StringVar(&t.PinSHA256, "pin", "", "hex SHA-256 of the server certificate to pin")
 	fs.IntVar(&t.Tier, "tier", 0, "privilege tier to use: 0 user LDAP, 1 +SYSVOL/probes, 2 admin")
 	fs.IntVar(&t.MaxQPS, "max-qps", 0, "throttle LDAP queries per second (0 = unlimited)")
@@ -67,8 +66,11 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) (code int) {
 	if lg.Path != "" {
 		fmt.Fprintf(errw, "run log: %s\n", lg.Path)
 	}
-	if t.StartTLS {
-		t.UseLDAPS = false
+	switch t.TLS {
+	case "auto", "ldaps", "starttls", "none":
+	default:
+		fmt.Fprintln(errw, "error: --tls must be auto, ldaps, starttls or none")
+		return 2
 	}
 	if local && smbConf == "" {
 		if smbConf = smbconf.Detect(""); smbConf == "" {
@@ -208,6 +210,12 @@ func finish(snap *snapshot.Snapshot, o analyseOptions, out, errw io.Writer) int 
 		return 1
 	}
 	fmt.Fprintf(errw, "snapshot: %s (%d objects, %d searches, %d requests, %s)\n", snapPath, len(snap.Objects), snap.Meta.QueryCount, snap.Meta.Requests, snap.Meta.Duration)
+	if tr := snap.Meta.Extra["transport"]; tr != "" {
+		fmt.Fprintf(errw, "  session: %s as %s\n", tr, snap.Meta.Identity)
+		if snap.Meta.Extra["encrypted"] == "false" {
+			fmt.Fprintln(errw, "  WARNING: the session was not encrypted — directory data crossed the network in clear (lab mode)")
+		}
+	}
 	for _, sk := range snap.Skipped {
 		fmt.Fprintf(errw, "  not collected: %s (%s) %s\n", sk.Query, sk.Reason, sk.Detail)
 	}
@@ -404,8 +412,14 @@ Behaviours of this binary:
   writes      : output directory only (snapshot, report.json, report.html, run-<stamp>.log — progress,
                 notes and errors with timestamps, never credentials)
   directory   : read-only — no LDAP modify/add/delete code is linked (scripts/readonly-check.sh)
-  credentials : prompted on the terminal (or piped with --password-stdin), used once, never written to
-                disk, the command line or the environment
+  transport   : --tls auto (default) tries LDAPS, then StartTLS, then plain LDAP with a Kerberos SASL
+                security layer (GSSAPI sealing on 389, so the session is still encrypted and signed);
+                --tls ldaps|starttls|none forces one. A password is refused on an unencrypted
+                connection unless --insecure-plaintext is given.
+  credentials : Kerberos first (current logon, or --user turned into a ticket at the DC's KDC so the
+                password never crosses the network; simple bind is the fallback). Prompted on the
+                terminal or piped with --password-stdin, used once, never written to disk, the
+                command line or the environment
   checks      : signed packs (Ed25519) from --packs, plus the preview checks built into this binary —
                 implemented catalogue entries, unsigned and not yet verified by a human; reports label
                 them. --no-preview evaluates signed packs only; the preview set is listed below.

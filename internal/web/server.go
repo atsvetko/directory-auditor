@@ -246,21 +246,23 @@ type connectReq struct {
 	Server   string `json:"server"`
 	User     string `json:"user"`
 	Password string `json:"password"`
-	Security string `json:"security"` // ldaps, starttls
+	Security string `json:"security"` // auto, ldaps, starttls, none
 	Pin      string `json:"pin"`
 	SmbConf  bool   `json:"smbconf"` // include the local Samba DC configuration (when detected)
 }
 
 type connectResp struct {
-	OK       bool   `json:"ok"`
-	Domain   string `json:"domain,omitempty"`
-	Server   string `json:"server,omitempty"`
-	Identity string `json:"identity,omitempty"`
-	Kind     string `json:"kind,omitempty"` // ad, samba, freeipa, demo
-	Provider string `json:"provider,omitempty"`
-	SmbConf  string `json:"smbconf,omitempty"` // local configuration that will be included
-	Error    string `json:"error,omitempty"`
-	Hint     string `json:"hint,omitempty"`
+	OK        bool   `json:"ok"`
+	Domain    string `json:"domain,omitempty"`
+	Server    string `json:"server,omitempty"`
+	Identity  string `json:"identity,omitempty"`
+	Kind      string `json:"kind,omitempty"` // ad, samba, freeipa, demo
+	Provider  string `json:"provider,omitempty"`
+	Transport string `json:"transport,omitempty"` // how the session is protected
+	Encrypted bool   `json:"encrypted,omitempty"`
+	SmbConf   string `json:"smbconf,omitempty"` // local configuration that will be included
+	Error     string `json:"error,omitempty"`
+	Hint      string `json:"hint,omitempty"`
 }
 
 func (s *Server) connect(w http.ResponseWriter, r *http.Request) {
@@ -286,7 +288,10 @@ func (s *Server) connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t := provider.Target{UseLDAPS: q.Security != "starttls", StartTLS: q.Security == "starttls", PinSHA256: q.Pin}
+	t := provider.Target{TLS: q.Security, PinSHA256: q.Pin, InsecurePlaintext: q.Security == "none"}
+	if t.TLS == "" || t.TLS == "none" {
+		t.TLS = "auto"
+	}
 	switch q.Mode {
 	case "auto":
 		d := Detect(r.Context())
@@ -294,7 +299,7 @@ func (s *Server) connect(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 200, connectResp{Error: "no domain was detected on this computer", Hint: "choose “Enter domain and credentials”"})
 			return
 		}
-		t.Domain, t.Server, t.UseLDAPS, t.StartTLS = d.Domain, d.Server, true, false
+		t.Domain, t.Server = d.Domain, d.Server
 	case "manual":
 		t.Domain, t.Server, t.BindUser, t.BindPassword = strings.TrimSpace(q.Domain), strings.TrimSpace(q.Server), strings.TrimSpace(q.User), q.Password
 		if t.Server == "" && t.Domain != "" {
@@ -326,7 +331,8 @@ func (s *Server) connect(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, connectResp{Error: err.Error(), Hint: hint})
 		return
 	}
-	resp := connectResp{OK: true, Domain: firstNonEmpty(t.Domain, res.Domain), Server: t.Server, Identity: res.Identity, Kind: res.Dialect, Provider: p.Name()}
+	resp := connectResp{OK: true, Domain: firstNonEmpty(t.Domain, res.Domain), Server: t.Server, Identity: res.Identity, Kind: res.Dialect, Provider: p.Name(),
+		Transport: res.Transport, Encrypted: res.Encrypted}
 	if q.SmbConf {
 		resp.SmbConf = smbconf.Detect("")
 	}

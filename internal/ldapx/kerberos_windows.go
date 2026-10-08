@@ -2,33 +2,23 @@
 
 package ldapx
 
-import (
-	"fmt"
-	"os/user"
+// newGSSContext builds the Kerberos context through SSPI: the logon session's
+// tickets, or explicit credentials (DOMAIN\user, user@domain) that the
+// Kerberos package turns into a ticket at the domain's KDC.
+func newGSSContext(spn string, channelBinding []byte, account, password, domainHint, _ string) (gssContext, error) {
+	if account != "" && !containsAny(account, "\\@") && domainHint != "" {
+		account = account + "@" + domainHint
+	}
+	return newSSPIContext(spn, channelBinding, account, password)
+}
 
-	"github.com/go-ldap/ldap/v3/gssapi"
-)
-
-func bindCurrentUser(c *Conn, spn string) (string, error) {
-	var (
-		cl  *gssapi.SSPIClient
-		err error
-	)
-	if cert, cerr := c.peerCertificate(); cerr == nil {
-		cl, err = gssapi.NewSSPIClientWithChannelBinding(cert)
-	} else {
-		cl, err = gssapi.NewSSPIClient()
+func containsAny(s, chars string) bool {
+	for _, c := range chars {
+		for _, r := range s {
+			if r == c {
+				return true
+			}
+		}
 	}
-	if err != nil {
-		return "", fmt.Errorf("ldapx: no Kerberos credentials for the current logon: %w", err)
-	}
-	defer cl.Close()
-	if err := c.c.GSSAPIBind(cl, spn, ""); err != nil {
-		return "", fmt.Errorf("ldapx: Kerberos bind to %s as the current logon failed: %w (is this machine domain-joined and the DC name correct?)", spn, err)
-	}
-	who := "current logon"
-	if u, err := user.Current(); err == nil {
-		who = u.Username
-	}
-	return who, nil
+	return false
 }

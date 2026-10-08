@@ -49,16 +49,18 @@ type CheckResult struct {
 // Inventory is what the engine learned about the directory independent of any
 // check: how much was collected, what could not be, and who is Tier 0 and why.
 type Inventory struct {
-	Objects    int                `json:"objects"`
-	Collected  time.Time          `json:"collected_at"`
-	Identity   string             `json:"identity,omitempty"`
-	Domain     string             `json:"domain,omitempty"`
-	BaseDN     string             `json:"base_dn,omitempty"`
-	Tier0      []Tier0Entry       `json:"tier0"`
-	Unresolved []string           `json:"tier0_unresolved,omitempty"`
-	NotRead    []snapshot.Skipped `json:"not_collected,omitempty"`
-	Duration   string             `json:"collection_duration,omitempty"`
-	Searches   int                `json:"searches"`
+	Objects     int                `json:"objects"`
+	Collected   time.Time          `json:"collected_at"`
+	Identity    string             `json:"identity,omitempty"`
+	Domain      string             `json:"domain,omitempty"`
+	BaseDN      string             `json:"base_dn,omitempty"`
+	Tier0       []Tier0Entry       `json:"tier0"`
+	Unresolved  []string           `json:"tier0_unresolved,omitempty"`
+	NotRead     []snapshot.Skipped `json:"not_collected,omitempty"`
+	Duration    string             `json:"collection_duration,omitempty"`
+	Searches    int                `json:"searches"`
+	Transport   string             `json:"transport,omitempty"`   // how the session was protected
+	Unencrypted bool               `json:"unencrypted,omitempty"` // directory data crossed the network in clear (lab mode)
 }
 
 // Tier0Entry is one Tier-0 principal or object with the path that makes it so.
@@ -229,6 +231,7 @@ func EvaluateWith(snap *snapshot.Snapshot, packs []Pack, opts EvalOptions) (*Res
 	defer func() { currentTier0, currentIndex, currentBase = nil, nil, "" }()
 	now := snap.Collected.Unix()
 	inv := Inventory{Objects: len(snap.Objects), Collected: snap.Collected, Identity: snap.Meta.Identity,
+		Transport: snap.Meta.Extra["transport"], Unencrypted: snap.Meta.Extra["encrypted"] == "false",
 		Domain: snap.Meta.Domain, BaseDN: snap.Meta.BaseDN, Unresolved: t0.Unresolved, NotRead: snap.Skipped,
 		Duration: snap.Meta.Duration, Searches: snap.Meta.QueryCount, Tier0: []Tier0Entry{}}
 	for _, o := range snap.Objects {

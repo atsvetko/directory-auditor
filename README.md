@@ -58,10 +58,21 @@ Attach it to bug reports.
 
 Build from source: `go build ./cmd/dirauditor` (Go 1.25+, no CGO).
 
-Kerberos with the current logon works from Windows (SSPI, with channel binding) against any DC,
-and from Linux against Windows DCs at the default channel-binding setting. Samba DCs require
-channel binding by default (`ldap server require strong auth = yes`), which the Linux Kerberos
-client cannot provide yet — use `--user` there (simple bind over LDAPS, password prompted once).
+### Connecting
+
+`--tls auto` (the default) tries **LDAPS**, then **StartTLS**, then **plain LDAP with a Kerberos
+SASL security layer** — the session is GSSAPI-*sealed* (encrypted and signed) on port 389, so a DC
+with no usable certificate, or one that requires signing (`ldap server require strong auth = yes`,
+the Samba default; `LDAPEnforceChannelBinding` on Windows), is still reached over an encrypted
+session. Force one transport with `--tls ldaps|starttls|none`; a certificate that isn't trusted
+hard-fails only when LDAPS or StartTLS is forced (in `auto` it falls through to sealing — pin it
+with `--pin` to keep LDAPS).
+
+Authentication is Kerberos first: the current logon (Windows SSPI with TLS channel binding, or the
+Linux `kinit` cache) when no account is given, otherwise `--user` with a password, which is turned
+into a ticket at the DC's KDC so the password never crosses the network. A simple bind is the
+fallback, and is refused on an unencrypted connection unless `--insecure-plaintext` is set (labs).
+The report and `run.log` record how each session was protected.
 Self-generated Samba certificates (before 4.24.0) often carry a negative serial number, which Go
 rejects by default; the binary accepts them (`//go:debug x509negativeserial=1` in `cmd/dirauditor`),
 since chain verification and `--pin` still apply.

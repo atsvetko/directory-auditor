@@ -71,7 +71,7 @@ func (p Provider) Check(ctx context.Context, t provider.Target) (provider.CheckR
 		return provider.CheckResult{}, fmt.Errorf("ad: rootDSE: %w", err)
 	}
 	return provider.CheckResult{Identity: id, Dialect: Fingerprint(root), BaseDN: root["defaultNamingContext"],
-		Domain: DomainFromDN(root["defaultNamingContext"])}, nil
+		Domain: DomainFromDN(root["defaultNamingContext"]), Transport: c.Transport(), Encrypted: c.Encrypted()}, nil
 }
 
 // DomainFromDN turns DC=corp,DC=example,DC=com into corp.example.com.
@@ -107,23 +107,32 @@ func (p Provider) Collect(ctx context.Context, t provider.Target, progress func(
 		Identity: identity,
 		Tier:     t.Tier,
 		Tool:     "dirauditor " + buildinfo.Version,
+		Extra:    map[string]string{"transport": c.Transport(), "encrypted": fmt.Sprint(c.Encrypted())},
 	}, progress)
 }
 
-// bind authenticates with an explicit identity when one is given; otherwise it
-// uses the current logon via Kerberos.
+// bind authenticates. Kerberos is preferred: the current logon when no
+// account is given, otherwise a ticket obtained with the password at the DC's
+// KDC — so the password never crosses the network and an unencrypted
+// connection still ends up sealed. A simple bind is the fallback for an
+// account Kerberos cannot serve (and is refused without TLS unless the lab
+// flag is set). The identity string says which path was taken.
 func bind(c *ldapx.Conn, t provider.Target) (string, error) {
-	if t.BindUser != "" {
-		if err := c.BindSimple(t.BindUser, t.BindPassword); err != nil {
-			return "", fmt.Errorf("ad: bind as %s: %w", t.BindUser, err)
+	if t.BindUser == "" {
+		id, err := c.BindCurrentUser()
+		if err != nil {
+			return "", fmt.Errorf("ad: %w", err)
 		}
-		return t.BindUser, nil
+		return id + " (Kerberos)", nil
 	}
-	id, err := c.BindCurrentUser()
-	if err != nil {
-		return "", fmt.Errorf("ad: %w", err)
+	id, kerr := c.BindKerberos(t.BindUser, t.BindPassword)
+	if kerr == nil {
+		return id + " (Kerberos)", nil
 	}
-	return id + " (Kerberos)", nil
+	if err := c.BindSimple(t.BindUser, t.BindPassword); err != nil {
+		return "", fmt.Errorf("ad: bind as %s: %w (Kerberos was tried first: %v)", t.BindUser, err, kerr)
+	}
+	return t.BindUser + " (simple bind)", nil
 }
 
 func dial(ctx context.Context, t provider.Target) (*ldapx.Conn, error) {
@@ -132,10 +141,10 @@ func dial(ctx context.Context, t provider.Target) (*ldapx.Conn, error) {
 	}
 	return ldapx.Dial(ctx, ldapx.Options{
 		Server:            t.Server,
-		UseLDAPS:          t.UseLDAPS,
-		StartTLS:          t.StartTLS,
+		TLS:               ldapx.TLSMode(t.TLS),
 		InsecurePlaintext: t.InsecurePlaintext,
 		PinSHA256:         t.PinSHA256,
 		MaxQPS:            t.MaxQPS,
+		Domain:            t.Domain,
 	})
 }

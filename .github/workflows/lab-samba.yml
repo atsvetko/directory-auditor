@@ -54,6 +54,19 @@ jobs:
           sudo chown -R "$USER" lab-out
           go run ./tools/lab/verify -report lab-out/report.json -expect testdata/lab/samba-expect.yaml
 
+      - name: scan over plain LDAP with Kerberos SASL sealing (no TLS)
+        run: |
+          # The DC requires signing or sealing on 389 (ldap server require
+          # strong auth = yes); the password is turned into a Kerberos ticket
+          # at the DC's KDC, and the session is GSSAPI-sealed on a plaintext
+          # socket. The same objects must be collected and the same findings fire.
+          echo 'Lab-User-Pass-2026!' | sudo -E ./dirauditor scan             --server dc1.lab.example --domain lab.example             --user audit@lab.example --password-stdin --tls none             --local --catalogue catalogue --packs "" --out lab-seal --lang en
+      - name: verify sealed scan
+        run: |
+          sudo chown -R "$USER" lab-seal
+          grep -q '"transport":"LDAP, Kerberos-sealed (no TLS)"' lab-seal/report.json || (echo "session was not Kerberos-sealed"; python3 -c "import json;print(json.load(open('lab-seal/report.json'))['inventory'].get('transport'))"; exit 1)
+          go run ./tools/lab/verify -report lab-seal/report.json -expect testdata/lab/samba-expect.yaml
+
       - name: samba log on failure
         if: failure()
         run: sudo tail -50 /var/log/samba-lab.log || true
