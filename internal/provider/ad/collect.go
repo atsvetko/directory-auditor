@@ -70,6 +70,9 @@ var Plan = []Query{
 	{Name: "dc-ou", Base: "OU=Domain Controllers", Scope: ldapx.ScopeBase, Filter: "(objectClass=*)", SD: true,
 		Attrs:   []string{"objectClass", "gPLink", "whenChanged"},
 		Purpose: "Tier-0 object ACL (DSA-0015)"},
+	{Name: "ds-heuristics", Base: "CN=Directory Service,CN=Windows NT,CN=Services,<config>", Scope: ldapx.ScopeBase, Filter: "(objectClass=*)", Classes: []string{"nTDSService"},
+		Attrs:   []string{"objectClass", "dSHeuristics", "tombstoneLifetime", "whenChanged"},
+		Purpose: "directory-wide switches such as anonymous LDAP operations (DSA-0025)"},
 	{Name: "protected-sd", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(adminCount=1)", SD: true,
 		Attrs:   []string{"objectClass"},
 		Purpose: "ACLs and inheritance state of protected objects (DSA-0015, DSA-0019)"},
@@ -113,6 +116,7 @@ func collect(ctx context.Context, c searcher, meta snapshot.Meta, progress func(
 	meta.BaseDN = base
 	meta.RootDSE = root
 	snap := &snapshot.Snapshot{Schema: snapshot.SchemaVersion, Collected: start.UTC(), Meta: meta}
+	snap.Objects = append(snap.Objects, snapshot.RootDSEObject(meta.RootDSE))
 
 	// Objects are merged by DN: later queries add attributes (descriptors) to
 	// objects an earlier query already returned.
@@ -134,9 +138,10 @@ func collect(ctx context.Context, c searcher, meta snapshot.Meta, progress func(
 	}
 	sdSeen := map[string]bool{}
 
+	configNC := root["configurationNamingContext"]
 	for _, q := range Plan {
 		progress("reading " + q.Name)
-		entries, err := run(ctx, c, q, resolveBase(q.Base, base))
+		entries, err := run(ctx, c, q, resolveBase(q.Base, base, configNC))
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil, err
@@ -216,12 +221,17 @@ func run(ctx context.Context, c searcher, q Query, base string) ([]ldapx.Entry, 
 	return c.SearchWith(ctx, base, q.Scope, q.Filter, attrs, opts)
 }
 
-func resolveBase(b, defaultNC string) string {
-	switch b {
-	case "default":
+func resolveBase(b, defaultNC, configNC string) string {
+	switch {
+	case b == "default":
 		return defaultNC
-	case "":
+	case b == "":
 		return ""
+	case strings.HasSuffix(b, "<config>"):
+		if configNC == "" {
+			configNC = "CN=Configuration," + defaultNC
+		}
+		return strings.TrimSuffix(b, "<config>") + configNC
 	}
 	return b + "," + defaultNC
 }

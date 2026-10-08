@@ -65,7 +65,7 @@ var (
 	attackRe = regexp.MustCompile(`^T[0-9]{4}(\.[0-9]{3})?$`)
 	sev      = map[string]bool{"critical": true, "high": true, "medium": true, "low": true, "info": true}
 	status   = map[string]bool{"draft": true, "verified": true, "retired": true}
-	domains  = map[string]bool{"directory-core": true, "dns": true, "gpo": true, "pki": true, "kerberos": true, "credentials": true, "replication": true, "integrated-apps": true, "host": true, "freeipa": true}
+	domains  = map[string]bool{"directory-core": true, "dns": true, "gpo": true, "pki": true, "kerberos": true, "credentials": true, "replication": true, "integrated-apps": true, "host": true, "freeipa": true, "samba": true}
 	// Sources that may never be cited as a reference (docs/clean-room.md rule 2).
 	forbiddenRef = []string{"pingcastle", "purple-knight", "purpleknight", "semperis.com", "netwrix.com"}
 )

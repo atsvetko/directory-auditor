@@ -107,6 +107,7 @@ func connSearcher(c *ldapx.Conn) searcher {
 func collect(ctx context.Context, c searcher, meta snapshot.Meta, progress func(string)) (*snapshot.Snapshot, error) {
 	start := time.Now()
 	snap := &snapshot.Snapshot{Schema: snapshot.SchemaVersion, Collected: start.UTC(), Meta: meta}
+	snap.Objects = append(snap.Objects, snapshot.RootDSEObject(meta.RootDSE))
 	for _, q := range Plan {
 		progress("reading " + q.Name)
 		base := meta.BaseDN

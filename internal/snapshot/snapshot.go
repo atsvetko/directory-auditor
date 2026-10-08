@@ -56,6 +56,9 @@ type Meta struct {
 	Requests   int               `json:"requests,omitempty"` // wire requests (pages, range chunks)
 	DomainSID  string            `json:"domain_sid,omitempty"`
 	Duration   string            `json:"duration,omitempty"` // collection wall time
+	// Extra carries provider- or collector-specific facts about the run
+	// (e.g. smbconf path and source, samba_version). Never secrets.
+	Extra map[string]string `json:"extra,omitempty"`
 }
 
 // Object is one directory entry with the attributes the collector requested.
@@ -162,4 +165,22 @@ func checkSchema(v string) error {
 		return fmt.Errorf("snapshot: schema %s is not compatible with this build (%s)", v, SchemaVersion)
 	}
 	return nil
+}
+
+// RootDSE object: the rootDSE is also stored as an ordinary object so packs can
+// match it with a filter (objectClass=dirauditorRootDSE) — vendorVersion,
+// functional levels, supported controls.
+const (
+	RootDSEDN    = "cn=rootdse,cn=dirauditor"
+	RootDSEClass = "dirauditorRootDSE"
+)
+
+// RootDSEObject builds that object from the collected rootDSE attributes
+// (multi-valued attributes were joined with ';' by the collector).
+func RootDSEObject(root map[string]string) Object {
+	o := Object{DN: RootDSEDN, Class: []string{RootDSEClass}, Attrs: map[string][]string{"objectClass": {RootDSEClass}}}
+	for k, v := range root {
+		o.Attrs[k] = strings.Split(v, ";")
+	}
+	return o
 }

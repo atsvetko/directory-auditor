@@ -24,6 +24,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	for name, fn := range map[string]func(string) error{"testdata/synthetic-samba.json.zst": writeSamba, "testdata/synthetic-samba-hardened.json.zst": writeSambaHardened} {
+		if err := fn(name); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
 
 	base := "DC=lab,DC=example"
 	dom := "S-1-5-21-1111111111-2222222222-3333333333"
@@ -37,17 +43,24 @@ func main() {
 		Meta: snapshot.Meta{
 			Provider: "ad", Dialect: "ad", Target: "dc01.lab.example", Domain: "lab.example", BaseDN: base,
 			Identity: "audit@lab.example", Tier: 0, Tool: "mksynth", QueryCount: 9, DomainSID: dom,
-			RootDSE: map[string]string{"defaultNamingContext": base, "forestFunctionality": "7", "domainControllerFunctionality": "7"},
 		},
 	}
 	add := func(dn string, class []string, attrs map[string][]string) {
 		s.Objects = append(s.Objects, snapshot.Object{DN: dn, Class: class, Attrs: attrs})
 	}
 	user := []string{"top", "person", "organizationalPerson", "user"}
+	root := map[string]string{"defaultNamingContext": base, "configurationNamingContext": "CN=Configuration," + base,
+		"forestFunctionality": "7", "domainFunctionality": "7", "domainControllerFunctionality": "7", "dnsHostName": "dc01.lab.example"}
+	s.Meta.RootDSE = root
+	s.Objects = append(s.Objects, snapshot.RootDSEObject(root))
 	add(base, []string{"top", "domain", "domainDNS"}, map[string][]string{
 		"name": {"lab"}, "objectSid": {dom}, "ms-DS-MachineAccountQuota": {"10"}, "minPwdLength": {"7"}, "lockoutThreshold": {"0"},
+		"pwdProperties": {"1"}, "pwdHistoryLength": {"24"}, "maxPwdAge": {"-36288000000000"}, "minPwdAge": {"-864000000000"},
+		"lockoutDuration": {"-18000000000"}, "lockOutObservationWindow": {"-18000000000"}, "msDS-Behavior-Version": {"7"},
 		"nTSecurityDescriptor": {sd(false, ace{"S-1-5-18", 0x000F01FF}, ace{dom + "-512", 0x000F01FF})},
 	})
+	add("CN=Directory Service,CN=Windows NT,CN=Services,CN=Configuration,"+base, []string{"top", "nTDSService"},
+		map[string][]string{"dSHeuristics": {"0000000"}, "tombstoneLifetime": {"180"}})
 	users := []struct {
 		name, desc, uac, rid string
 		pwdAge               int

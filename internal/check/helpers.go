@@ -39,6 +39,9 @@ import (
 //	                                              is the base DN of the snapshot
 //	objattrs(dn, "attr")                          all values of that attribute
 //	objexists(dn)                                 the object was collected
+//	smbbool(obj, "server schannel", true)         Samba boolean (yes/true/1/on) with a default for absent
+//	version_lt("4.17.3", "4.17.4")                dotted-numeric version compare; "" is never less
+//	intval("0x1c")                                decimal or 0x-hex string to int; 0 when not numeric
 func helperOptions() []cel.EnvOption {
 	mapT := cel.MapType(cel.StringType, cel.DynType)
 	aceList := cel.ListType(cel.MapType(cel.StringType, cel.DynType))
@@ -139,6 +142,32 @@ func helperOptions() []cel.EnvOption {
 				cel.UnaryBinding(func(dn ref.Val) ref.Val {
 					_, ok := lookupObject(string(dn.(types.String)))
 					return types.Bool(ok)
+				}))),
+		cel.Function("smbbool",
+			cel.Overload("smbbool_map_string_bool", []*cel.Type{mapT, cel.StringType, cel.BoolType}, cel.BoolType,
+				cel.FunctionBinding(func(a ...ref.Val) ref.Val {
+					v := strings.ToLower(strings.TrimSpace(firstAttr(a[0], string(a[1].(types.String)))))
+					switch v {
+					case "":
+						return a[2]
+					case "yes", "true", "1", "on":
+						return types.True
+					}
+					return types.False
+				}))),
+		cel.Function("intval",
+			cel.Overload("intval_string", []*cel.Type{cel.StringType}, cel.IntType,
+				cel.UnaryBinding(func(a ref.Val) ref.Val {
+					v := strings.TrimSpace(string(a.(types.String)))
+					if n, err := strconv.ParseInt(v, 0, 64); err == nil {
+						return types.Int(n)
+					}
+					return types.Int(0)
+				}))),
+		cel.Function("version_lt",
+			cel.Overload("version_lt_string_string", []*cel.Type{cel.StringType, cel.StringType}, cel.BoolType,
+				cel.BinaryBinding(func(a, b ref.Val) ref.Val {
+					return types.Bool(versionLess(string(a.(types.String)), string(b.(types.String))))
 				}))),
 		cel.Function("aces",
 			cel.Overload("aces_map", []*cel.Type{mapT}, aceList,
@@ -272,4 +301,48 @@ func lookupAttr(dn, name string) []string {
 		}
 	}
 	return nil
+}
+
+// versionLess compares dotted numeric prefixes ("4.21.3-Debian" < "4.22.0").
+// An empty or non-numeric a is never less, so unknown versions do not fire checks.
+func versionLess(a, b string) bool {
+	pa, pb := versionParts(a), versionParts(b)
+	if pa == nil || pb == nil {
+		return false
+	}
+	for i := 0; i < len(pa) || i < len(pb); i++ {
+		var x, y int
+		if i < len(pa) {
+			x = pa[i]
+		}
+		if i < len(pb) {
+			y = pb[i]
+		}
+		if x != y {
+			return x < y
+		}
+	}
+	return false
+}
+
+func versionParts(s string) []int {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexAny(s, "-+ _"); i >= 0 {
+		s = s[:i]
+	}
+	if s == "" {
+		return nil
+	}
+	var out []int
+	for _, p := range strings.Split(s, ".") {
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			if len(out) == 0 {
+				return nil
+			}
+			break
+		}
+		out = append(out, n)
+	}
+	return out
 }

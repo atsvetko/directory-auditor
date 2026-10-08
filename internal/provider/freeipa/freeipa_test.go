@@ -86,7 +86,7 @@ func TestCollectHonestStates(t *testing.T) {
 	if reasons["dnszones"].Reason != "absent" || reasons["permissions"].Reason != "permission" {
 		t.Errorf("skips: %+v", snap.Skipped)
 	}
-	if len(snap.Objects) != 2 || snap.Objects[1].Class[0] != "ipahbacrule" {
+	if len(snap.Objects) != 3 || snap.Objects[0].DN != snapshot.RootDSEDN || snap.Objects[2].Class[0] != "ipahbacrule" {
 		t.Errorf("objects = %+v", snap.Objects)
 	}
 

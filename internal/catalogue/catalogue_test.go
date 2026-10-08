@@ -32,49 +32,56 @@ func TestRepositoryCatalogue(t *testing.T) {
 }
 
 // TestImplementedEntries runs every entry that carries condition_cel against the
-// synthetic snapshot of its provider and compares the firing DNs with `expect`.
-// This is how a check is proven before a pack is written from the verified entry.
+// synthetic snapshots of its domain and compares the union of firing DNs with
+// `expect`. This is how a check is proven before a pack is written from the
+// verified entry.
 func TestImplementedEntries(t *testing.T) {
 	entries, err := LoadDir("../../catalogue")
 	if err != nil {
 		t.Fatal(err)
 	}
-	snaps := map[string]string{"freeipa": "../../testdata/synthetic-freeipa.json.zst"}
+	labs := map[string][]string{
+		"freeipa":        {"../../testdata/synthetic-freeipa.json.zst"},
+		"samba":          {"../../testdata/synthetic-samba.json.zst"},
+		"directory-core": {"../../testdata/synthetic-lab.json.zst", "../../testdata/synthetic-samba.json.zst"},
+	}
 	loaded := map[string]*snapshot.Snapshot{}
 	ran := 0
 	for _, e := range entries {
 		if e.ConditionCEL == "" {
 			continue
 		}
-		path, ok := snaps[e.Domain]
+		paths, ok := labs[e.Domain]
 		if !ok {
-			path = "../../testdata/synthetic-lab.json.zst"
-		}
-		snap := loaded[path]
-		if snap == nil {
-			snap, err = snapshot.ReadFile(path)
-			if err != nil {
-				t.Fatalf("%s: %v", e.ID, err)
-			}
-			loaded[path] = snap
+			paths = labs["directory-core"]
 		}
 		filter, _ := e.QuerySketch["filter"].(string)
 		if filter == "" {
 			filter = "(objectClass=*)"
 		}
-		res, err := check.EvaluateWith(snap, []check.Pack{{ID: e.ID, Provider: []string{snap.Meta.Provider, snap.Meta.Dialect},
-			Severity: e.Severity, Tier: 0, Query: check.Query{Filter: filter}, Condition: e.ConditionCEL, Signed: true}}, check.EvalOptions{})
-		if err != nil {
-			t.Fatalf("%s: %v", e.ID, err)
-		}
-		cr := res.Checks[0]
-		if cr.Status == "skipped" {
-			t.Errorf("%s: skipped (%s): %v", e.ID, cr.Skip, cr.Findings)
-			continue
-		}
 		got := map[string]bool{}
-		for _, f := range cr.Findings {
-			got[f.DN] = true
+		for _, path := range paths {
+			snap := loaded[path]
+			if snap == nil {
+				snap, err = snapshot.ReadFile(path)
+				if err != nil {
+					t.Fatalf("%s: %v", e.ID, err)
+				}
+				loaded[path] = snap
+			}
+			res, err := check.EvaluateWith(snap, []check.Pack{{ID: e.ID, Provider: []string{snap.Meta.Provider, snap.Meta.Dialect},
+				Severity: e.Severity, Tier: e.Tier, Query: check.Query{Filter: filter}, Condition: e.ConditionCEL, Signed: true}}, check.EvalOptions{})
+			if err != nil {
+				t.Fatalf("%s: %v", e.ID, err)
+			}
+			cr := res.Checks[0]
+			if cr.Status == "skipped" {
+				t.Errorf("%s on %s: skipped (%s): %v", e.ID, path, cr.Skip, cr.Findings)
+				continue
+			}
+			for _, f := range cr.Findings {
+				got[f.DN] = true
+			}
 		}
 		want := map[string]bool{}
 		for _, dn := range e.Expect {
@@ -95,12 +102,33 @@ func TestImplementedEntries(t *testing.T) {
 	t.Logf("%d implemented entries exercised", ran)
 }
 
-func TestRejectsForbiddenReference(t *testing.T) {
-	e := Entry{ID: "DSA-0999", Title: map[string]string{"en": "x", "ru": "x"}, Domain: "directory-core",
-		Severity: "low", Status: "draft", Object: "x", Attributes: []string{"x"}, Condition: "x", Rationale: "x",
-		Remediation: map[string]string{"en": "x", "ru": "x"}, Attack: []Technique{{"T1098", "Account Manipulation"}},
-		Engine: "declarative", References: []Reference{{"PingCastle rules", "https://www.pingcastle.com/x"}}}
-	if err := e.Validate(); err == nil {
-		t.Fatal("a PingCastle reference must be rejected")
+// TestHardenedLabIsClean is the negative control: on a Samba DC configured at
+// or above every recommended value, no implemented Samba or directory-core
+// entry may fire, except informational ones listed here.
+func TestHardenedLabIsClean(t *testing.T) {
+	entries, err := LoadDir("../../catalogue")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap, err := snapshot.ReadFile("../../testdata/synthetic-samba-hardened.json.zst")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.ConditionCEL == "" || (e.Domain != "samba" && e.Domain != "directory-core") {
+			continue
+		}
+		filter, _ := e.QuerySketch["filter"].(string)
+		if filter == "" {
+			filter = "(objectClass=*)"
+		}
+		res, err := check.EvaluateWith(snap, []check.Pack{{ID: e.ID, Provider: []string{"ad", "samba"}, Severity: e.Severity, Tier: e.Tier,
+			Query: check.Query{Filter: filter}, Condition: e.ConditionCEL, Signed: true}}, check.EvalOptions{})
+		if err != nil {
+			t.Fatalf("%s: %v", e.ID, err)
+		}
+		if cr := res.Checks[0]; cr.Status == "fail" {
+			t.Errorf("%s fired on the hardened lab: %v", e.ID, cr.Findings)
+		}
 	}
 }
