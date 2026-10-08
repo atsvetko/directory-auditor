@@ -30,6 +30,13 @@ jobs:
       - name: build
         run: CGO_ENABLED=0 go build -trimpath -o dirauditor ./cmd/dirauditor
 
+      - name: enable docker userns-remap (systemd in the container, as the freeipa-container CI does)
+        run: |
+          echo -e "dockremap:$(id -u):1\ndockremap:200001:65535" | sudo tee -a /etc/subuid >/dev/null
+          echo -e "dockremap:$(id -g):1\ndockremap:200001:65535" | sudo tee -a /etc/subgid >/dev/null
+          echo '{ "userns-remap": "default" }' | sudo tee /etc/docker/daemon.json >/dev/null
+          sudo systemctl restart docker
+          docker info --format '{{.SecurityOptions}}'
       - name: start FreeIPA
         run: tools/lab/freeipa/run.sh
       - name: populate lab objects
@@ -59,7 +66,10 @@ jobs:
 
       - name: container log on failure
         if: failure()
-        run: docker logs --tail 80 dirauditor-ipa || true
+        run: |
+          docker logs --tail 80 dirauditor-ipa || true
+          sudo tail -80 ipa-data/var/log/ipaserver-install.log || true
+          sudo tail -40 ipa-data/var/log/ipa-server-run.log || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
