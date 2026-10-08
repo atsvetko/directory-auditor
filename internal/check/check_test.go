@@ -75,8 +75,19 @@ func TestLoadValidateEvaluate(t *testing.T) {
 	if c.Status != "fail" || c.Matched != 1 || len(c.Findings) != 1 || c.Findings[0].DN != "CN=a,DC=lab" {
 		t.Fatalf("unexpected result: %+v", c)
 	}
-	if res.Counts.Checked != 1 || res.Counts.Failed != 1 || !res.Unsigned {
-		t.Fatalf("counts: %+v unsigned=%v", res.Counts, res.Unsigned)
+	if res.Counts.Checked != 1 || res.Counts.Failed != 1 || !res.Unsigned || res.Preview != 0 {
+		t.Fatalf("counts: %+v unsigned=%v preview=%d", res.Counts, res.Unsigned, res.Preview)
+	}
+
+	// The same pack marked Preview is counted as a preview check, not as a
+	// development-mode unsigned pack, and the result carries the mark.
+	packs[0].Preview = true
+	res, err = Evaluate(synthetic(), packs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Unsigned || res.Preview != 1 || !res.Checks[0].Preview || res.Checks[0].Status != "fail" {
+		t.Fatalf("preview: unsigned=%v preview=%d check=%+v", res.Unsigned, res.Preview, res.Checks[0])
 	}
 }
 

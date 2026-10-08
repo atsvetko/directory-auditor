@@ -23,6 +23,7 @@ import (
 	"github.com/atsvetko/directory-auditor/internal/doctor"
 	"github.com/atsvetko/directory-auditor/internal/ldapx"
 	"github.com/atsvetko/directory-auditor/internal/local/smbconf"
+	"github.com/atsvetko/directory-auditor/internal/packset"
 	"github.com/atsvetko/directory-auditor/internal/provider"
 	"github.com/atsvetko/directory-auditor/internal/provider/ad" // registers the AD / Samba provider
 	"github.com/atsvetko/directory-auditor/internal/provider/freeipa"
@@ -36,9 +37,9 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	var t provider.Target
-	var packsDir, outDir, lang, providerName string
-	var allowUnsigned, quick bool
-	fs.BoolVar(&quick, "quick", false, "quick scan: run only checks marked quick")
+	var o analyseOptions
+	var providerName string
+	checkFlags(fs, &o, "packs")
 	fs.StringVar(&providerName, "provider", "auto", "directory type: auto, "+strings.Join(provider.Names(), ", "))
 	fs.StringVar(&t.Server, "server", "", "domain controller host[:port]")
 	fs.StringVar(&t.Domain, "domain", "", "DNS domain name")
@@ -49,13 +50,9 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 	fs.StringVar(&t.PinSHA256, "pin", "", "hex SHA-256 of the server certificate to pin")
 	fs.IntVar(&t.Tier, "tier", 0, "privilege tier to use: 0 user LDAP, 1 +SYSVOL/probes, 2 admin")
 	fs.IntVar(&t.MaxQPS, "max-qps", 0, "throttle LDAP queries per second (0 = unlimited)")
-	fs.StringVar(&packsDir, "packs", "packs", "directory with check packs")
-	fs.StringVar(&outDir, "out", "dirauditor-out", "output directory")
-	fs.StringVar(&lang, "lang", "en", "report language: en or ru")
-	fs.BoolVar(&allowUnsigned, "allow-unsigned", false, "load unsigned packs (development only)")
-	var smbConf, catalogueDir string
+	fs.StringVar(&o.OutDir, "out", "dirauditor-out", "output directory")
+	var smbConf string
 	var local, pwStdin bool
-	fs.StringVar(&catalogueDir, "catalogue", "", "dry run: also evaluate implemented catalogue entries from this directory (unsigned, for verification)")
 	fs.BoolVar(&pwStdin, "password-stdin", false, "read the bind password from the first line of stdin instead of the terminal (CI, pipes)")
 	fs.StringVar(&smbConf, "smbconf", "", "also audit this Samba AD DC configuration file (run on the DC; tier 2)")
 	fs.BoolVar(&local, "local", false, "auto-detect "+smbconf.DefaultPath+" on this machine and include it")
@@ -85,7 +82,7 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 		if !collectLocal(ctx, snap, smbConf, errw) {
 			return 1
 		}
-		return finish(snap, outDir, packsDir, catalogueDir, lang, allowUnsigned, quick, out, errw)
+		return finish(snap, o, out, errw)
 	}
 	if t.BindUser != "" {
 		var pw string
@@ -126,7 +123,7 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 			return 1
 		}
 	}
-	return finish(snap, outDir, packsDir, catalogueDir, lang, allowUnsigned, quick, out, errw)
+	return finish(snap, o, out, errw)
 }
 
 // readPasswordLine reads one line (the password) from r. Used with
@@ -167,8 +164,27 @@ func orUnknown(s string) string {
 	return s
 }
 
+// analyseOptions are the flags scan and analyse share.
+type analyseOptions struct {
+	packset.Options
+	OutDir string
+	Lang   string
+	Quick  bool
+}
+
+// checkFlags registers the flags that choose which checks run.
+func checkFlags(fs *flag.FlagSet, o *analyseOptions, defaultPacks string) {
+	fs.StringVar(&o.PacksDir, "packs", defaultPacks, "directory with signed check packs")
+	fs.BoolVar(&o.AllowUnsigned, "allow-unsigned", false, "load unsigned packs (development only)")
+	fs.BoolVar(&o.NoPreview, "no-preview", false, "do not evaluate the preview checks built into this binary (unverified catalogue entries); signed packs only")
+	fs.StringVar(&o.CatalogueDir, "catalogue", "", "take preview checks from this catalogue working tree instead of the built-in copy (for verifying entries)")
+	fs.BoolVar(&o.Quick, "quick", false, "quick scan: run only checks marked quick")
+	fs.StringVar(&o.Lang, "lang", "en", "report language: en or ru")
+}
+
 // finish writes the snapshot and analyses it.
-func finish(snap *snapshot.Snapshot, outDir, packsDir, catalogueDir, lang string, allowUnsigned, quick bool, out, errw io.Writer) int {
+func finish(snap *snapshot.Snapshot, o analyseOptions, out, errw io.Writer) int {
+	outDir := o.OutDir
 	if err := os.MkdirAll(outDir, 0o750); err != nil {
 		fmt.Fprintln(errw, "error:", err)
 		return 1
@@ -182,7 +198,7 @@ func finish(snap *snapshot.Snapshot, outDir, packsDir, catalogueDir, lang string
 	for _, sk := range snap.Skipped {
 		fmt.Fprintf(errw, "  not collected: %s (%s) %s\n", sk.Query, sk.Reason, sk.Detail)
 	}
-	return analyse(snap, packsDir, catalogueDir, outDir, lang, allowUnsigned, quick, out, errw)
+	return analyse(snap, o, out, errw)
 }
 
 // Wizard starts the local web UI. With no arguments (double-click) it opens the
@@ -190,20 +206,20 @@ func finish(snap *snapshot.Snapshot, outDir, packsDir, catalogueDir, lang string
 func Wizard(ctx context.Context, args []string, errw io.Writer) int {
 	fs := flag.NewFlagSet("ui", flag.ContinueOnError)
 	fs.SetOutput(errw)
-	var packsDir, outDir string
-	var allowUnsigned, noBrowser bool
-	fs.StringVar(&packsDir, "packs", "", "directory with check packs (default: packs next to the binary, then ./packs)")
-	fs.StringVar(&outDir, "out", "dirauditor-out", "output directory for snapshots and reports")
-	fs.BoolVar(&allowUnsigned, "allow-unsigned", false, "load unsigned packs (development only)")
+	var o analyseOptions
+	var noBrowser bool
+	checkFlags(fs, &o, "")
+	fs.Lookup("packs").Usage = "directory with signed check packs (default: packs next to the binary, then ./packs)"
+	fs.StringVar(&o.OutDir, "out", "dirauditor-out", "output directory for snapshots and reports")
 	fs.BoolVar(&noBrowser, "no-browser", false, "do not open a browser; print the address only")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if packsDir == "" {
-		packsDir = defaultPacksDir()
+	if o.PacksDir == "" {
+		o.PacksDir = defaultPacksDir()
 	}
 	err := web.Run(ctx, web.Options{
-		PacksDir: packsDir, OutDir: outDir, AllowUnsigned: allowUnsigned, Version: buildinfo.Version,
+		Checks: o.Options, OutDir: o.OutDir, Version: buildinfo.Version,
 		Demo: demo.Snapshot, OpenBrowser: !noBrowser, Log: errw,
 	})
 	if err != nil {
@@ -229,15 +245,11 @@ func defaultPacksDir() string {
 func Analyse(ctx context.Context, args []string, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("analyse", flag.ContinueOnError)
 	fs.SetOutput(errw)
-	var snapPath, packsDir, outDir, lang, catalogueDir string
-	var allowUnsigned, quick bool
-	fs.BoolVar(&quick, "quick", false, "quick scan: run only checks marked quick")
-	fs.StringVar(&catalogueDir, "catalogue", "", "dry run: also evaluate implemented catalogue entries from this directory (unsigned, for verification)")
+	var snapPath string
+	var o analyseOptions
+	checkFlags(fs, &o, "packs")
 	fs.StringVar(&snapPath, "snapshot", "", "snapshot file (.json.zst)")
-	fs.StringVar(&packsDir, "packs", "packs", "directory with check packs")
-	fs.StringVar(&outDir, "out", "dirauditor-out", "output directory")
-	fs.StringVar(&lang, "lang", "en", "report language: en or ru")
-	fs.BoolVar(&allowUnsigned, "allow-unsigned", false, "load unsigned packs (development only)")
+	fs.StringVar(&o.OutDir, "out", "dirauditor-out", "output directory")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -250,58 +262,43 @@ func Analyse(ctx context.Context, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(errw, "error:", err)
 		return 1
 	}
-	if err := os.MkdirAll(outDir, 0o750); err != nil {
+	if err := os.MkdirAll(o.OutDir, 0o750); err != nil {
 		fmt.Fprintln(errw, "error:", err)
 		return 1
 	}
-	return analyse(snap, packsDir, catalogueDir, outDir, lang, allowUnsigned, quick, out, errw)
+	return analyse(snap, o, out, errw)
 }
 
-func analyse(snap *snapshot.Snapshot, packsDir, catalogueDir, outDir, lang string, allowUnsigned, quick bool, out, errw io.Writer) int {
-	var packs []check.Pack
-	if packsDir != "" {
-		if st, err := os.Stat(packsDir); err == nil && st.IsDir() {
-			loaded, err := check.LoadDir(packsDir, check.LoadOptions{AllowUnsigned: allowUnsigned})
-			if err != nil {
-				fmt.Fprintln(errw, "error:", err)
-				return 1
-			}
-			packs = loaded
-		} else if catalogueDir == "" {
-			fmt.Fprintf(errw, "error: packs directory %s not found\n", packsDir)
-			return 1
-		}
-	}
-	if allowUnsigned {
-		fmt.Fprintln(errw, "WARNING: --allow-unsigned is set; packs were not verified (development mode)")
-	}
-	if catalogueDir != "" {
-		cp, err := catalogue.Packs(catalogueDir)
-		if err != nil {
-			fmt.Fprintln(errw, "error:", err)
-			return 1
-		}
-		fmt.Fprintf(errw, "WARNING: catalogue dry run — %d implemented entries evaluated as unsigned, unverified checks\n", len(cp))
-		packs = append(packs, cp...)
-	}
-	res, err := check.EvaluateWith(snap, packs, check.EvalOptions{Quick: quick})
+func analyse(snap *snapshot.Snapshot, o analyseOptions, out, errw io.Writer) int {
+	set, err := packset.Load(o.Options)
 	if err != nil {
 		fmt.Fprintln(errw, "error:", err)
 		return 1
 	}
-	jsonPath := filepath.Join(outDir, "report.json")
-	htmlPath := filepath.Join(outDir, "report.html")
+	for _, n := range set.Notes {
+		fmt.Fprintln(errw, "NOTE:", n)
+	}
+	res, err := check.EvaluateWith(snap, set.Packs, check.EvalOptions{Quick: o.Quick})
+	if err != nil {
+		fmt.Fprintln(errw, "error:", err)
+		return 1
+	}
+	jsonPath := filepath.Join(o.OutDir, "report.json")
+	htmlPath := filepath.Join(o.OutDir, "report.html")
 	if err := writeFile(jsonPath, func(w io.Writer) error { return report.WriteJSON(w, res) }); err != nil {
 		fmt.Fprintln(errw, "error:", err)
 		return 1
 	}
-	if err := writeFile(htmlPath, func(w io.Writer) error { return report.WriteHTML(w, res, lang) }); err != nil {
+	if err := writeFile(htmlPath, func(w io.Writer) error { return report.WriteHTML(w, res, o.Lang) }); err != nil {
 		fmt.Fprintln(errw, "error:", err)
 		return 1
 	}
 	c := res.Counts
 	fmt.Fprintf(out, "score %d/100 — %d checked, %d passed, %d with findings (%d findings), %d skipped\n",
 		res.Score, c.Checked, c.Passed, c.Failed, c.Findings, c.Skipped)
+	if res.Preview > 0 {
+		fmt.Fprintf(out, "  preview checks: %d (unverified catalogue entries — confirm findings before acting)\n", res.Preview)
+	}
 	for reason, n := range c.BySkip {
 		fmt.Fprintf(out, "  skipped because of %s: %d\n", reason, n)
 	}
@@ -391,9 +388,20 @@ Behaviours of this binary:
   directory   : read-only — no LDAP modify/add/delete code is linked (scripts/readonly-check.sh)
   credentials : prompted on the terminal (or piped with --password-stdin), used once, never written to
                 disk, the command line or the environment
-  packs       : loaded only with a valid Ed25519 signature unless --allow-unsigned is given
+  checks      : signed packs (Ed25519) from --packs, plus the preview checks built into this binary —
+                implemented catalogue entries, unsigned and not yet verified by a human; reports label
+                them. --no-preview evaluates signed packs only; the preview set is listed below.
   providers   : %s
 `, buildinfo.String(), strings.Join(provider.Names(), ", "))
+	pv, err := catalogue.Embedded()
+	if err != nil {
+		fmt.Fprintf(w, "\nPreview checks: unavailable (%v)\n", err)
+		return
+	}
+	fmt.Fprintf(w, "\nPreview checks built in (%d; unsigned, catalogue status draft, not yet verified by a human):\n", len(pv))
+	for _, p := range pv {
+		fmt.Fprintf(w, "  %s  %-8s tier %d  %s  [%s]\n", p.ID, p.Severity, p.Tier, p.Title.EN, strings.Join(p.Provider, ","))
+	}
 }
 
 func writeFile(path string, fn func(io.Writer) error) error {

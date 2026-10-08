@@ -7,9 +7,11 @@ services around them: Active Directory, Samba AD DC (and therefore РЕД АДМ
 FreeIPA / ALD Pro, OpenLDAP and Microsoft Entra ID — plus DNS, Group Policy, PKI, Kerberos,
 credential management and integrated applications.
 
-> **Status: engine skeleton (pre-alpha).** Nothing here audits anything yet. The catalogue of
-> checks is written *before* any check code, on purpose — see [docs/clean-room.md](docs/clean-room.md).
-> The requirements, plan and design decisions are complete and live in `docs/`.
+> **Status: prototype (pre-alpha).** The binary evaluates 68 *preview checks* — the implemented
+> catalogue entries, built in, unsigned and not yet verified by a human (status `draft`). Reports
+> label them; treat findings as leads to confirm. Signed packs replace them one by one as entries
+> are verified. The catalogue is written *before* any check code, on purpose — see
+> [docs/clean-room.md](docs/clean-room.md). Requirements, plan and design decisions live in `docs/`.
 
 ## Why is it free?
 
@@ -66,17 +68,24 @@ admin. `tools/lab/verify` compares `report.json` with `testdata/lab/*-expect.yam
 finding must fire on the expected object, nothing else may, and containers the account cannot
 read must show as "not collected". The lab scripts refuse to run without `DIRAUDITOR_LAB=1`.
 
-To try an implemented catalogue entry against your own directory before it becomes a signed pack:
-`dirauditor scan … --catalogue catalogue` (clearly marked as an unsigned dry run in the report).
+## Preview checks and signed packs
 
-Checks are written only from catalogue entries a human has verified, so today the only pack is a
-format fixture (`TEST-0001`); the Tier-0 inventory ("who controls the domain, and why") is
-already complete. The engine detects Active Directory, Samba AD DC and FreeIPA / Red Hat IdM
-(`--provider auto`). The FreeIPA (23 entries) and Samba (19 entries, plus 6 domain-policy entries
-shared with AD) catalogues ship with their conditions implemented and tested against synthetic
-labs. On a Samba DC, `dirauditor scan --local` (or the wizard, automatically) also audits
-`smb.conf` through Samba's own `testparm`: NetLogon secure channel, NTLMv1, SMB signing, LDAP
-strong auth, DNS updates, RC4, audit logging and more.
+Signed packs are written only from catalogue entries a human has verified, so today there are
+none. Until there are, every build carries the implemented catalogue entries as **preview checks**
+(`catalogue/embed.go`): 25 directory-core, 23 FreeIPA and 20 Samba entries, each tested against
+the synthetic labs and, for Samba and FreeIPA, against the real labs above. The wizard, the HTML
+report and `report.json` (`preview_checks`, per-check `preview: true`) all say so; the Tier-0
+inventory ("who controls the domain, and why") does not depend on any check.
+
+- `--no-preview` evaluates signed packs only (the production behaviour once packs exist);
+- `--catalogue DIR` takes the preview checks from a working tree instead of the built-in copy, to
+  verify an entry you are editing — this is what the CI labs run;
+- `dirauditor manifest` lists the built-in preview set.
+
+The engine detects Active Directory, Samba AD DC and FreeIPA / Red Hat IdM (`--provider auto`).
+On a Samba DC, `dirauditor scan --local` (or the wizard, automatically) also audits `smb.conf`
+through Samba's own `testparm`: NetLogon secure channel, NTLMv1, SMB signing, LDAP strong auth,
+DNS updates, RC4, audit logging and more.
 
 ## Documents
 

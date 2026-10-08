@@ -30,3 +30,9 @@ verification). All 68 carry `condition_cel` and are exercised by `go test ./inte
 against `testdata/synthetic-*.json.zst` (`synthetic-samba-hardened` is the negative control on
 which no entry may fire) and, in CI, against a live Samba AD DC on every push and a live FreeIPA
 server nightly (`testdata/lab/*-expect.yaml`, `tools/lab/`).
+
+Every entry with `condition_cel` is also built into the binary (`embed.go` in this directory,
+`go:embed */*.yaml`) and evaluated as a **preview check** — unsigned, labelled in every report,
+switched off with `--no-preview`. `TestEmbeddedMatchesWorkingTree` fails the build when the
+embedded copy and the working tree diverge. Verifying an entry (`status: verified`, `verified_by`)
+and signing its pack is what turns a preview into a real check; nothing else changes.

@@ -75,6 +75,12 @@ jobs:
           ./dist/dirauditor-linux-amd64 manifest
           ./dist/dirauditor-linux-amd64 analyse --snapshot testdata/synthetic-lab.json.zst --packs testdata/packs --allow-unsigned --out out
           test -s out/report.html && test -s out/report.json
+          # prototype layout: binary alone, no packs directory → built-in preview checks
+          mkdir -p proto && cp dist/dirauditor-linux-amd64 proto/dirauditor && cd proto
+          ./dirauditor analyse --snapshot ../testdata/synthetic-lab.json.zst --out out
+          python3 -c "import json; r=json.load(open('out/report.json')); assert r['preview_checks']==68 and not r['unsigned_packs'], r['preview_checks']"
+          grep -q 'Preview checks' out/report.html
+          ! ./dirauditor analyse --snapshot ../testdata/synthetic-lab.json.zst --out out2 --no-preview
       - uses: actions/upload-artifact@v4
         with:
           name: dirauditor-${{ matrix.goos }}-${{ matrix.goarch }}

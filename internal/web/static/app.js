@@ -6,7 +6,7 @@
 const TOKEN = new URLSearchParams(location.search).get("t") || "";
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-let lang = "en", mode = "auto", scanMode = "fast", detected = null, result = null, conn = null, polling = null;
+let lang = "en", mode = "auto", scanMode = "fast", detected = null, result = null, conn = null, polling = null, info = null;
 
 async function api(path, body) {
   const opt = {method: body === undefined ? "GET" : "POST", headers: {"X-DA-Token": TOKEN}, cache: "no-store"};
@@ -48,6 +48,9 @@ const T = {
  r_target:["Target","Цель"], pdf_sub:["Directory security assessment","Оценка защищённости каталога"],
  unsigned:["Unsigned check packs were loaded (development mode). Do not rely on this report.","Загружены неподписанные пакеты проверок (режим разработки). Не полагайтесь на этот отчёт."],
  nopacks:["No check packs are loaded yet: catalogue entries become checks only after human verification. The Tier-0 inventory below is complete.","Пакеты проверок пока не загружены: записи каталога становятся проверками только после проверки человеком. Инвентаризация нулевого уровня ниже — полная."],
+ preview:["Preview checks: {n} catalogue entries were evaluated as checks. They are unsigned and not yet verified by a human (status draft). Treat their findings as leads to confirm, not as verified results.","Предварительные проверки: {n} записей каталога оценены как проверки. Они не подписаны и ещё не проверены человеком (статус «черновик»). Считайте их находки поводом для проверки, а не подтверждённым результатом."],
+ checksinfo:["This run evaluates {p} signed check packs and {n} preview checks (unverified catalogue entries, unsigned). Start with --no-preview to run signed packs only.","Будут выполнены подписанные пакеты проверок: {p}, и предварительные проверки: {n} (записи каталога без подписи и без проверки человеком). Запуск с --no-preview выполняет только подписанные пакеты."],
+ previewtag:["preview","preview"],
  c_checked:["checked","проверено"], c_passed:["passed","пройдено"], c_find:["with findings","с находками"], c_findings:["findings","находок"], c_skip:["skipped","пропущено"],
  dl_pdf:["Download PDF report","Скачать отчёт PDF"], dl_html:["HTML","HTML"], dl_json:["JSON","JSON"], rescan:["New scan","Новое сканирование"],
  s_findings:["Findings","Находки"], nofind:["No findings from the checks that ran.","Выполненные проверки ничего не нашли."],
@@ -68,7 +71,13 @@ function applyLang() {
   document.querySelectorAll("[data-t]").forEach(el => { if (T[el.dataset.t]) el.textContent = t(el.dataset.t); });
   $("lang").textContent = lang === "ru" ? "EN" : "RU";
   document.documentElement.lang = lang;
-  renderDetect(); if (conn) renderConn(); if (result) renderResult();
+  renderDetect(); renderInfo(); if (conn) renderConn(); if (result) renderResult();
+}
+function renderInfo() {
+  if (!info) return;
+  const n = info.preview || 0, p = info.packs || 0;
+  $("checksinfo").classList.toggle("hidden", !(n > 0 || p > 0));
+  $("checksinfo_t").textContent = t("checksinfo", {n: n, p: p});
 }
 
 /* ---------- navigation ---------- */
@@ -184,6 +193,8 @@ function renderResult() {
   $("pc_meta").innerHTML = esc(inv.domain || r.target) + "<br>" + esc(when) + "<br>" + esc(inv.identity || "");
   $("unsigned").classList.toggle("hidden", !r.unsigned_packs);
   $("nopacks").classList.toggle("hidden", (r.checks || []).length > 0);
+  $("preview").classList.toggle("hidden", !(r.preview_checks > 0));
+  $("preview_t").textContent = t("preview", {n: r.preview_checks || 0});
   $("n_checked").textContent = c.checked || 0; $("n_passed").textContent = c.passed || 0; $("n_failed").textContent = c.failed || 0;
   $("n_findings").textContent = c.findings || 0; $("n_skipped").textContent = c.skipped || 0;
   $("dlhtml").href = "/api/report.html?lang=" + lang + "&t=" + encodeURIComponent(TOKEN);
@@ -198,7 +209,7 @@ function renderResult() {
     const items = (f.findings || []).map(x => `<li><span>${esc(x.dn)}</span><span class="ev">${esc(Object.entries(x.evidence || {}).map(([k, v]) => k + ": " + v).join(" · "))}</span></li>`).join("");
     const sec = (k, v) => v ? `<h4>${esc(t(k))}</h4><p>${esc(v)}</p>` : "";
     const d = document.createElement("details"); d.className = "finding";
-    d.innerHTML = `<summary><span class="sev ${esc(f.severity)}">${esc(f.severity)}</span><span class="fid">${esc(f.id)}</span>
+    d.innerHTML = `<summary><span class="sev ${esc(f.severity)}">${esc(f.severity)}</span><span class="fid">${esc(f.id)}${f.preview ? `<span class="ptag">${esc(t("previewtag"))}</span>` : ""}</span>
       <span class="ftitle">${esc(title)}</span><span class="fcount">${(f.findings || []).length} ${esc(t("objs"))} · ${esc(f.domain)}</span><span class="chev">▸</span></summary>
       <div class="fbody"><h4>${esc(t("aff"))}</h4><ul class="affected">${items}</ul>
       ${sec("why", rem.why)}${sec("abuse", rem.abuse)}${sec("fix", rem.fix)}${sec("verify", rem.verify)}
@@ -239,6 +250,10 @@ $("quit").addEventListener("click", async () => {
 let savedLang = null;
 try { const th = localStorage.getItem("da-theme"); if (th) root.setAttribute("data-theme", th); savedLang = localStorage.getItem("da-lang"); } catch (e) {}
 lang = savedLang || (/^ru\b/i.test(navigator.language || "") ? "ru" : "en");
-api("/api/info").then(i => { $("ver").textContent = i.version || ""; });
+api("/api/info").then(i => {
+  $("ver").textContent = i.version || "";
+  info = i;
+  renderInfo();
+});
 applyLang(); detect();
 })();

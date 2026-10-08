@@ -11,9 +11,11 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 
+	embedded "github.com/atsvetko/directory-auditor/catalogue"
 	"github.com/atsvetko/directory-auditor/internal/check"
 )
 
@@ -144,35 +146,43 @@ func (e *Entry) Validate() error {
 
 // LoadDir loads every entry under dir, validates each, and checks ID uniqueness.
 func LoadDir(dir string) ([]Entry, error) {
+	return LoadFS(os.DirFS(dir), dir)
+}
+
+// LoadFS loads every *.yaml entry in fsys. display is prefixed to each
+// entry's Path for messages (the directory on disk, or "catalogue" for the
+// embedded copy).
+func LoadFS(fsys fs.FS, display string) ([]Entry, error) {
 	var out []Entry
 	seen := map[string]string{}
 	var errs []string
-	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() || !strings.HasSuffix(p, ".yaml") {
 			return nil
 		}
-		b, err := os.ReadFile(p)
+		b, err := fs.ReadFile(fsys, p)
 		if err != nil {
 			return err
 		}
+		shown := filepath.Join(display, filepath.FromSlash(p))
 		var e Entry
 		dec := yaml.NewDecoder(strings.NewReader(string(b)))
 		dec.KnownFields(true)
 		if err := dec.Decode(&e); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", p, err))
+			errs = append(errs, fmt.Sprintf("%s: %v", shown, err))
 			return nil
 		}
-		e.Path = p
+		e.Path = shown
 		if err := e.Validate(); err != nil {
 			errs = append(errs, err.Error())
 		}
 		if prev, dup := seen[e.ID]; dup {
-			errs = append(errs, fmt.Sprintf("duplicate id %s in %s and %s", e.ID, prev, p))
+			errs = append(errs, fmt.Sprintf("duplicate id %s in %s and %s", e.ID, prev, shown))
 		}
-		seen[e.ID] = p
+		seen[e.ID] = shown
 		out = append(out, e)
 		return nil
 	})
@@ -186,11 +196,11 @@ func LoadDir(dir string) ([]Entry, error) {
 	return out, nil
 }
 
-// Pack converts an implemented entry (one with condition_cel) into an unsigned
-// check pack for a catalogue dry run (`dirauditor analyse --catalogue DIR`):
-// the engine evaluates the entry exactly as a pack would be, so an entry can be
-// tried against a real directory before anyone signs off on it. ok is false
-// for entries without a condition.
+// Pack converts an implemented entry (one with condition_cel) into a preview
+// check: an unsigned pack the engine evaluates exactly as a signed one, so an
+// entry can be tried against a real directory before anyone signs off on it.
+// The result is marked Preview so reports label it. ok is false for entries
+// without a condition.
 func (e Entry) Pack() (check.Pack, bool) {
 	if strings.TrimSpace(e.ConditionCEL) == "" {
 		return check.Pack{}, false
@@ -206,7 +216,7 @@ func (e Entry) Pack() (check.Pack, bool) {
 	p := check.Pack{
 		ID: e.ID, Title: check.Text{EN: e.Title["en"], RU: e.Title["ru"]}, Provider: providers, Domain: e.Domain,
 		Tier: e.Tier, Severity: e.Severity, Quick: e.Quick, Query: check.Query{Filter: filter}, Condition: e.ConditionCEL,
-		Evidence: e.Attributes, Source: "catalogue:" + e.Path, Signed: false,
+		Evidence: e.Attributes, Source: "catalogue:" + e.Path, Signed: false, Preview: true,
 		Remediation: map[string]check.Remediation{
 			"en": {Why: strings.TrimSpace(e.Rationale), Fix: strings.TrimSpace(e.Remediation["en"])},
 			"ru": {Why: strings.TrimSpace(e.Rationale), Fix: strings.TrimSpace(e.Remediation["ru"])},
@@ -221,17 +231,46 @@ func (e Entry) Pack() (check.Pack, bool) {
 	return p, true
 }
 
-// Packs converts every implemented entry under dir.
+// Packs converts every implemented entry under dir (a working tree, for
+// verifying entries before they are built in).
 func Packs(dir string) ([]check.Pack, error) {
 	entries, err := LoadDir(dir)
 	if err != nil {
 		return nil, err
 	}
+	return toPacks(entries), nil
+}
+
+// EmbeddedSource names the preview source in reports and logs.
+const EmbeddedSource = "built-in catalogue"
+
+var (
+	embeddedOnce  sync.Once
+	embeddedPacks []check.Pack
+	embeddedErr   error
+)
+
+// Embedded returns the preview checks built into this binary: the implemented
+// entries of the catalogue embedded at build time (see catalogue/embed.go).
+// The copy is parsed once; a parse error is a build defect, caught by tests.
+func Embedded() ([]check.Pack, error) {
+	embeddedOnce.Do(func() {
+		entries, err := LoadFS(embedded.Files, "catalogue")
+		if err != nil {
+			embeddedErr = fmt.Errorf("embedded catalogue: %w", err)
+			return
+		}
+		embeddedPacks = toPacks(entries)
+	})
+	return append([]check.Pack(nil), embeddedPacks...), embeddedErr
+}
+
+func toPacks(entries []Entry) []check.Pack {
 	var out []check.Pack
 	for _, e := range entries {
 		if p, ok := e.Pack(); ok {
 			out = append(out, p)
 		}
 	}
-	return out, nil
+	return out
 }

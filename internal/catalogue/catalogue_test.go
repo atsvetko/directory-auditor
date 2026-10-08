@@ -1,6 +1,7 @@
 package catalogue
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/atsvetko/directory-auditor/internal/check"
@@ -130,5 +131,29 @@ func TestHardenedLabIsClean(t *testing.T) {
 		if cr := res.Checks[0]; cr.Status == "fail" {
 			t.Errorf("%s fired on the hardened lab: %v", e.ID, cr.Findings)
 		}
+	}
+}
+
+// TestEmbeddedMatchesWorkingTree guards the go:embed pattern: every entry on
+// disk is in the binary, and every embedded entry still parses and validates.
+func TestEmbeddedMatchesWorkingTree(t *testing.T) {
+	disk, err := Packs("../../catalogue")
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, err := Embedded()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(disk) == 0 || len(disk) != len(built) {
+		t.Fatalf("working tree has %d implemented entries, binary has %d", len(disk), len(built))
+	}
+	for i := range disk {
+		if disk[i].ID != built[i].ID || disk[i].Condition != built[i].Condition || !built[i].Preview || built[i].Signed {
+			t.Errorf("%s: embedded copy differs (preview=%v signed=%v)", disk[i].ID, built[i].Preview, built[i].Signed)
+		}
+	}
+	if !strings.HasPrefix(built[0].Source, "catalogue:catalogue/") {
+		t.Errorf("source = %q", built[0].Source)
 	}
 }

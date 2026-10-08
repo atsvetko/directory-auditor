@@ -35,6 +35,7 @@ import (
 	"github.com/atsvetko/directory-auditor/internal/check"
 	"github.com/atsvetko/directory-auditor/internal/doctor"
 	"github.com/atsvetko/directory-auditor/internal/local/smbconf"
+	"github.com/atsvetko/directory-auditor/internal/packset"
 	"github.com/atsvetko/directory-auditor/internal/provider"
 	"github.com/atsvetko/directory-auditor/internal/report"
 	"github.com/atsvetko/directory-auditor/internal/snapshot"
@@ -45,14 +46,13 @@ var static embed.FS
 
 // Options configure the wizard.
 type Options struct {
-	PacksDir      string
-	OutDir        string
-	AllowUnsigned bool
-	Version       string
-	Demo          []byte // zstd snapshot used by "Try with demo data"
-	OpenBrowser   bool
-	Log           io.Writer
-	IdleTimeout   time.Duration // stop after this long without any request (0 = 2h)
+	Checks      packset.Options // which checks run: signed packs and/or built-in preview checks
+	OutDir      string
+	Version     string
+	Demo        []byte // zstd snapshot used by "Try with demo data"
+	OpenBrowser bool
+	Log         io.Writer
+	IdleTimeout time.Duration // stop after this long without any request (0 = 2h)
 }
 
 // Server is one wizard session.
@@ -224,8 +224,9 @@ func (s *Server) tokenOK(r *http.Request) bool {
 }
 
 func (s *Server) info(w http.ResponseWriter, _ *http.Request) {
-	packs, err := check.LoadDir(s.opts.PacksDir, check.LoadOptions{AllowUnsigned: s.opts.AllowUnsigned})
-	resp := map[string]any{"ok": true, "version": s.opts.Version, "packs": len(packs), "packs_dir": s.opts.PacksDir, "demo": len(s.opts.Demo) > 0}
+	set, err := packset.Load(s.opts.Checks)
+	resp := map[string]any{"ok": true, "version": s.opts.Version, "packs": set.FromDir, "packs_dir": s.opts.Checks.PacksDir,
+		"preview": set.Preview, "preview_source": set.PreviewSource, "notes": set.Notes, "demo": len(s.opts.Demo) > 0}
 	if err != nil {
 		resp["packs_error"] = err.Error()
 	}
@@ -440,12 +441,15 @@ func (s *Server) runJob(ctx context.Context, j *job, t provider.Target, demo, qu
 		return
 	}
 	progress("evaluating checks")
-	packs, err := check.LoadDir(s.opts.PacksDir, check.LoadOptions{AllowUnsigned: s.opts.AllowUnsigned})
+	set, err := packset.Load(s.opts.Checks)
 	if err != nil {
 		fail("error", err)
 		return
 	}
-	res, err := check.EvaluateWith(snap, packs, check.EvalOptions{Quick: quick})
+	for _, n := range set.Notes {
+		progress(n)
+	}
+	res, err := check.EvaluateWith(snap, set.Packs, check.EvalOptions{Quick: quick})
 	if err != nil {
 		fail("error", err)
 		return

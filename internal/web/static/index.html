@@ -49,6 +49,7 @@
       <label class="wide"><span data-t="f_pin">Certificate fingerprint (only if the DC certificate is not trusted here)</span><input class="inp mono" id="m_pin" placeholder="SHA-256, from `dirauditor doctor`" spellcheck="false"></label>
     </form>
     <div class="infobar"><span class="ii">i</span><span data-t="f_hint">A normal user account covers ~80% of checks. The password is used once in memory and never saved.</span></div>
+    <div class="infobar hidden" id="checksinfo"><span class="ii">i</span><span id="checksinfo_t"></span></div>
 
     <div class="okbar hidden" id="connok"></div>
     <div class="err hidden" id="connerr"><div><b id="connerr_msg"></b><div class="fix" id="connerr_fix"></div></div></div>
@@ -87,6 +88,7 @@
     </div>
     <div class="infobar notice hidden" id="unsigned"><span class="ii">!</span><span data-t="unsigned">Unsigned check packs were loaded (development mode). Do not rely on this report.</span></div>
     <div class="infobar notice hidden" id="nopacks"><span class="ii">i</span><span data-t="nopacks">No check packs are loaded yet: catalogue entries become checks only after human verification. The Tier-0 inventory below is complete.</span></div>
+    <div class="infobar hidden" id="preview"><span class="ii">i</span><span id="preview_t"></span></div>
 
     <div class="counts">
       <div class="cnt"><b id="n_checked">0</b><span data-t="c_checked">checked</span></div>

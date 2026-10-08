@@ -38,6 +38,7 @@ type CheckResult struct {
 	Matched  int       `json:"objects_matched"`
 	Findings []Finding `json:"findings,omitempty"`
 	Signed   bool      `json:"signed"`
+	Preview  bool      `json:"preview,omitempty"` // from an unverified catalogue entry (see Pack.Preview)
 	Duration string    `json:"duration"`
 
 	Attack      []string               `json:"attack,omitempty"`
@@ -77,7 +78,8 @@ type Result struct {
 	Counts       Counts        `json:"counts"`
 	Score        int           `json:"score"` // 0–100, 100 = nothing found
 	AnalysedAt   time.Time     `json:"analysed_at"`
-	Unsigned     bool          `json:"unsigned_packs"` // true when any loaded pack was unsigned
+	Unsigned     bool          `json:"unsigned_packs"` // true when any loaded pack (other than previews) was unsigned
+	Preview      int           `json:"preview_checks"` // number of preview checks evaluated (unverified catalogue entries)
 	Inventory    Inventory     `json:"inventory"`
 }
 
@@ -251,9 +253,12 @@ func EvaluateWith(snap *snapshot.Snapshot, packs []Pack, opts EvalOptions) (*Res
 	}
 	for _, p := range packs {
 		start := time.Now()
-		cr := CheckResult{ID: p.ID, Title: p.Title, Domain: p.Domain, Tier: p.Tier, Severity: p.Severity, Signed: p.Signed,
+		cr := CheckResult{ID: p.ID, Title: p.Title, Domain: p.Domain, Tier: p.Tier, Severity: p.Severity, Signed: p.Signed, Preview: p.Preview,
 			Attack: p.Attack, Remediation: p.Remediation, References: p.References}
-		if !p.Signed {
+		switch {
+		case p.Preview:
+			res.Preview++
+		case !p.Signed:
 			res.Unsigned = true
 		}
 		switch {

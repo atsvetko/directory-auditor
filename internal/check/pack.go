@@ -39,6 +39,10 @@ type Pack struct {
 	// Source is the file the pack was loaded from; Signed reports whether a valid signature was present.
 	Source string `yaml:"-"`
 	Signed bool   `yaml:"-"`
+	// Preview marks a check generated from a catalogue entry that has not been
+	// verified and signed yet (status draft). Reports label such checks and
+	// their findings; they never count as development-mode unsigned packs.
+	Preview bool `yaml:"-"`
 }
 
 // Text is a bilingual string.

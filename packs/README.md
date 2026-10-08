@@ -1,7 +1,9 @@
 # Check packs
 
 Empty on purpose. The catalogue (`../catalogue/`) is written and committed **before** the
-first pack, as required by `docs/clean-room.md` (rule 5) and milestone K1 of the plan.
+first pack, as required by `docs/clean-room.md` (rule 5) and milestone K1 of the plan. Until
+packs exist, the binary evaluates the implemented catalogue entries as labelled, unsigned
+*preview checks* (see `../catalogue/README.md`); `--no-preview` restricts a run to this directory.
 
 Layout once packs exist: `packs/<domain>/DSA-NNNN.yaml` with a `.sig` sidecar signed by the
 maintainers at release. The format fixture used by engine tests lives in
