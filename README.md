@@ -66,6 +66,16 @@ Self-generated Samba certificates (before 4.24.0) often carry a negative serial 
 rejects by default; the binary accepts them (`//go:debug x509negativeserial=1` in `cmd/dirauditor`),
 since chain verification and `--pin` still apply.
 
+## Releases
+
+`scripts/tag-release.sh v0.1.0-rc1` (or `scripts\tag-release.ps1` on Windows) tags `origin/main`
+and pushes the tag; `.github/workflows/release.yml` then builds the four static binaries
+reproducibly (`-trimpath -buildid=`, build date = commit date), runs the read-only gate, packs one
+zip per OS/arch (binary, LICENSE, README, `STAND-RU.md`, `manifest.txt`), and publishes a GitHub
+Release with `SHA256SUMS`, the CycloneDX SBOM and the manifest. A tag with a suffix (`-rc1`) is
+a pre-release. `workflow_dispatch` builds the same artifacts without publishing. Not code-signed
+yet. The test-stand handout (Russian) is [docs/STAND-RU.md](docs/STAND-RU.md).
+
 ## Labs in CI
 
 Every push runs the engine against a **real Samba AD DC** provisioned on the runner with

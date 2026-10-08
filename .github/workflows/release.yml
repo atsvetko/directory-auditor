@@ -171,10 +171,16 @@ jobs:
           Behaviour manifest: \`manifest.txt\`. SBOM: \`sbom.cdx.json\`. Built reproducibly from
           \`${GITHUB_SHA}\` (\`-trimpath -buildid=\`, date = commit date).
           EOF
-      - name: create release
+      - name: create or update release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" $pre --verify-tag --title "Directory Auditor $GITHUB_REF_NAME" --notes-file notes.md \
-            assets/dirauditor-* assets/SHA256SUMS assets/sbom.cdx.json assets/manifest.txt
+          files="assets/dirauditor-* assets/SHA256SUMS assets/sbom.cdx.json assets/manifest.txt"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            # the release was drafted by hand (tag created in the GitHub UI): attach assets and notes to it
+            gh release upload "$GITHUB_REF_NAME" --clobber $files
+            gh release edit "$GITHUB_REF_NAME" $pre --title "Directory Auditor $GITHUB_REF_NAME" --notes-file notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" $pre --verify-tag --title "Directory Auditor $GITHUB_REF_NAME" --notes-file notes.md $files
+          fi
           gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name'
