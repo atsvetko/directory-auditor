@@ -21,6 +21,7 @@ import (
 	"github.com/atsvetko/directory-auditor/internal/demo"
 	"github.com/atsvetko/directory-auditor/internal/doctor"
 	"github.com/atsvetko/directory-auditor/internal/ldapx"
+	"github.com/atsvetko/directory-auditor/internal/local/smbconf"
 	"github.com/atsvetko/directory-auditor/internal/provider"
 	"github.com/atsvetko/directory-auditor/internal/provider/ad" // registers the AD / Samba provider
 	"github.com/atsvetko/directory-auditor/internal/provider/freeipa"
@@ -51,15 +52,37 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 	fs.StringVar(&outDir, "out", "dirauditor-out", "output directory")
 	fs.StringVar(&lang, "lang", "en", "report language: en or ru")
 	fs.BoolVar(&allowUnsigned, "allow-unsigned", false, "load unsigned packs (development only)")
+	var smbConf string
+	var local bool
+	fs.StringVar(&smbConf, "smbconf", "", "also audit this Samba AD DC configuration file (run on the DC; tier 2)")
+	fs.BoolVar(&local, "local", false, "auto-detect "+smbconf.DefaultPath+" on this machine and include it")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if t.StartTLS {
 		t.UseLDAPS = false
 	}
-	if t.Tier != 0 {
-		fmt.Fprintln(errw, "tier 1 and 2 collection is not implemented yet; running tier 0")
-		t.Tier = 0
+	if local && smbConf == "" {
+		if smbConf = smbconf.Detect(""); smbConf == "" {
+			fmt.Fprintln(errw, "error: --local: no readable Samba AD DC configuration at "+smbconf.DefaultPath)
+			return 1
+		}
+	}
+	if t.Tier > 1 && smbConf == "" {
+		fmt.Fprintln(errw, "tier 2 currently means the local smb.conf audit (--smbconf / --local); other tier-2 probes are not implemented yet")
+	}
+	if t.Tier == 1 && providerName != "freeipa" {
+		fmt.Fprintln(errw, "note: tier-1 probes exist for FreeIPA only so far; AD collection runs at tier 0")
+	}
+
+	// Configuration-only audit: no directory target, just the local smb.conf.
+	if t.Server == "" && t.Domain == "" && smbConf != "" {
+		snap := &snapshot.Snapshot{Schema: snapshot.SchemaVersion, Collected: time.Now().UTC(),
+			Meta: snapshot.Meta{Provider: "ad", Dialect: "samba", Target: "local smb.conf", Tool: "dirauditor " + buildinfo.Version}}
+		if !collectLocal(ctx, snap, smbConf, errw) {
+			return 1
+		}
+		return finish(snap, outDir, packsDir, lang, allowUnsigned, quick, out, errw)
 	}
 	if t.BindUser != "" {
 		pw, err := promptPassword(errw, "Password for "+t.BindUser+": ")
@@ -86,6 +109,42 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(errw, "hint: run `dirauditor doctor --domain <domain> --server <dc>` to see why")
 		return 1
 	}
+	if smbConf != "" {
+		if snap.Meta.Dialect != "samba" {
+			fmt.Fprintf(errw, "warning: --smbconf given but the directory is %s/%s, not Samba; smb.conf checks still run\n", snap.Meta.Provider, snap.Meta.Dialect)
+		}
+		if !collectLocal(ctx, snap, smbConf, errw) {
+			return 1
+		}
+	}
+	return finish(snap, outDir, packsDir, lang, allowUnsigned, quick, out, errw)
+}
+
+// collectLocal adds the local Samba configuration to the snapshot.
+func collectLocal(ctx context.Context, snap *snapshot.Snapshot, path string, errw io.Writer) bool {
+	fmt.Fprintf(errw, "reading local Samba configuration %s (testparm, samba -V)…\n", path)
+	r, err := smbconf.Collect(ctx, smbconf.Options{Path: path})
+	if err != nil {
+		fmt.Fprintln(errw, "error:", err)
+		return false
+	}
+	if !strings.Contains(strings.ToLower(r.Role), "domain controller") {
+		fmt.Fprintf(errw, "warning: server role is %q — not an AD DC; DC-specific findings may not apply\n", r.Role)
+	}
+	smbconf.Augment(snap, r)
+	fmt.Fprintf(errw, "  · Samba %s, %d shares, values from %s\n", orUnknown(r.Version), len(r.Objects)-2, r.Source)
+	return true
+}
+
+func orUnknown(s string) string {
+	if s == "" {
+		return "(version unknown)"
+	}
+	return s
+}
+
+// finish writes the snapshot and analyses it.
+func finish(snap *snapshot.Snapshot, outDir, packsDir, lang string, allowUnsigned, quick bool, out, errw io.Writer) int {
 	if err := os.MkdirAll(outDir, 0o750); err != nil {
 		fmt.Fprintln(errw, "error:", err)
 		return 1
@@ -261,7 +320,7 @@ func PrintQueries(w io.Writer) {
 	fmt.Fprintln(w, "\nLDAP searches (AD / Samba provider, tier 0 — ordinary user):")
 	for _, q := range append(ad.Plan, ad.SDBaseQuery) {
 		b := q.Base
-		if b != "default" && b != "<each Tier-0 DN>" {
+		if b != "default" && b != "<each Tier-0 DN>" && !strings.HasSuffix(b, "<config>") {
 			b += ",<default>"
 		}
 		sd := ""
@@ -281,7 +340,10 @@ Behaviours of this binary:
                 through the OS resolver). No other hosts are contacted. No update checks. No telemetry.
   listeners   : wizard only (no arguments or 'ui'): 127.0.0.1, random port, one-time token in the URL;
                 CLI commands open no listener
-  processes   : the wizard asks the OS to open the default browser once (rundll32 / open / xdg-open)
+  processes   : the wizard asks the OS to open the default browser once (rundll32 / open / xdg-open);
+                with --smbconf/--local (or when the wizard finds a Samba DC configuration on this machine)
+                it runs 'testparm -s -v --suppress-prompt <smb.conf>' and 'samba -V' / 'smbd -V',
+                both read-only, and reads smb.conf. Secret-looking values are redacted.
   writes      : output directory only (snapshot, report.json, report.html)
   directory   : read-only — no LDAP modify/add/delete code is linked (scripts/readonly-check.sh)
   credentials : prompted on the terminal, used once, never written to disk or environment

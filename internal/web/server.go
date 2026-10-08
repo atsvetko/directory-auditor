@@ -34,6 +34,7 @@ import (
 
 	"github.com/atsvetko/directory-auditor/internal/check"
 	"github.com/atsvetko/directory-auditor/internal/doctor"
+	"github.com/atsvetko/directory-auditor/internal/local/smbconf"
 	"github.com/atsvetko/directory-auditor/internal/provider"
 	"github.com/atsvetko/directory-auditor/internal/report"
 	"github.com/atsvetko/directory-auditor/internal/snapshot"
@@ -243,6 +244,7 @@ type connectReq struct {
 	Password string `json:"password"`
 	Security string `json:"security"` // ldaps, starttls
 	Pin      string `json:"pin"`
+	SmbConf  bool   `json:"smbconf"` // include the local Samba DC configuration (when detected)
 }
 
 type connectResp struct {
@@ -252,6 +254,7 @@ type connectResp struct {
 	Identity string `json:"identity,omitempty"`
 	Kind     string `json:"kind,omitempty"` // ad, samba, freeipa, demo
 	Provider string `json:"provider,omitempty"`
+	SmbConf  string `json:"smbconf,omitempty"` // local configuration that will be included
 	Error    string `json:"error,omitempty"`
 	Hint     string `json:"hint,omitempty"`
 }
@@ -320,6 +323,9 @@ func (s *Server) connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := connectResp{OK: true, Domain: firstNonEmpty(t.Domain, res.Domain), Server: t.Server, Identity: res.Identity, Kind: res.Dialect, Provider: p.Name()}
+	if q.SmbConf {
+		resp.SmbConf = smbconf.Detect("")
+	}
 	s.setTarget(&t, false, resp)
 	writeJSON(w, 200, resp)
 }
@@ -375,9 +381,9 @@ func (s *Server) scan(w http.ResponseWriter, r *http.Request) {
 	if s.target != nil {
 		t = *s.target
 	}
-	demo, pname := s.demo, s.providerName
+	demo, pname, conf := s.demo, s.providerName, s.conn
 	s.mu.Unlock()
-	go s.runJob(ctx, j, t, demo, q.Quick, pname)
+	go s.runJob(ctx, j, t, demo, q.Quick, pname, conf)
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
@@ -385,7 +391,7 @@ func (s *Server) scan(w http.ResponseWriter, r *http.Request) {
 // it only drives the progress bar.
 const planSteps = 11
 
-func (s *Server) runJob(ctx context.Context, j *job, t provider.Target, demo, quick bool, pname string) {
+func (s *Server) runJob(ctx context.Context, j *job, t provider.Target, demo, quick bool, pname string, conf connectResp) {
 	defer j.cancel()
 	defer s.clearSecret() // the password is not needed after collection
 	progress := func(msg string) {
@@ -416,6 +422,14 @@ func (s *Server) runJob(ctx context.Context, j *job, t provider.Target, demo, qu
 			p, _ = provider.Get("ad")
 		}
 		snap, err = p.Collect(ctx, t, progress)
+		if err == nil && conf.SmbConf != "" {
+			progress("reading local Samba configuration " + conf.SmbConf)
+			if r, lerr := smbconf.Collect(ctx, smbconf.Options{Path: conf.SmbConf}); lerr != nil {
+				snap.Skipped = append(snap.Skipped, snapshot.Skipped{Query: "smb.conf", Reason: "error", Detail: lerr.Error()})
+			} else {
+				smbconf.Augment(snap, r)
+			}
+		}
 	}
 	if err != nil {
 		if errors.Is(err, context.Canceled) {

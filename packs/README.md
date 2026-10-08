@@ -21,6 +21,15 @@ Conditions are CEL expressions over `obj`. Besides `attr`, `attrs`, `intattr` an
 | `tier0(obj)`, `tier0_sid(s)` | Tier-0 status per `catalogue/TIER0.md` (nested groups, primaryGroupID, FSPs) |
 | `sd_readable(obj)`, `sd_protected(obj)` | descriptor collected; DACL inheritance disabled |
 | `aces(obj)`, `aces_of(obj, "attr")` | DACL entries as maps: `trustee`, `mask`, `allow`, `inherited`, `effective`, `object_type`, `inherited_object_type`, `trustee_tier0` |
+| `objattr(dn, "attr")`, `objattrs(dn, "attr")`, `objexists(dn)` | read another snapshot object; `<default>` in the DN is the base DN |
+| `smbbool(obj, "param", default)` | Samba boolean (yes/true/1/on), with a value for an absent parameter |
+| `version_lt(a, b)`, `intval(s)` | dotted-version compare (unknown is never less); decimal or 0x-hex to int |
+
+Synthetic objects the collectors add, so packs can match them with a filter: `cn=rootdse,cn=dirauditor`
+(`dirauditorRootDSE`), and on a Samba DC `cn=global,cn=smb.conf,cn=dirauditor` (`dirauditorSmbConf`,
+parameter names lower-cased, `_explicit` = set in the file, `_source` = testparm or file),
+`cn=<share>,cn=shares,cn=smb.conf,cn=dirauditor` (`dirauditorSmbShare`) and `cn=samba,cn=dirauditor`
+(`dirauditorSamba`, `version`).
 
 Time is measured against the snapshot's collection time, so re-analysing an old
 snapshot gives the same answer. Use `sd_readable(obj)` in ACL conditions so a

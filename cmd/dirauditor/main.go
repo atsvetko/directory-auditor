@@ -67,6 +67,8 @@ Usage:
   dirauditor                                   # start the wizard in your browser (double-click)
   dirauditor ui       [--no-browser] [--packs DIR] [--out DIR]
   dirauditor scan     --server HOST [--domain DOMAIN] [--packs DIR] [--out DIR] [--insecure-plaintext]
+                      [--smbconf /etc/samba/smb.conf | --local]   # on a Samba DC: include its configuration
+  dirauditor scan     --smbconf /etc/samba/smb.conf              # configuration-only audit, no LDAP
   dirauditor analyse  --snapshot FILE [--packs DIR] [--out DIR]
   dirauditor doctor   --domain DOMAIN [--server HOST]
   dirauditor manifest [--queries]   # behaviours; --queries lists every LDAP search

@@ -30,6 +30,8 @@ const T = {
  auto_nokrb:["{d} found, but there is no Kerberos ticket for the current logon — use an account below.","Найден домен {d}, но для текущего входа нет билета Kerberos — укажите учётную запись ниже."],
  d_dom:["Domain","Домен"], d_dc:["Domain controller","Контроллер домена"], d_dc_sub:["found via DNS SRV · LDAPS","найден через DNS SRV · LDAPS"],
  d_id:["Identity","Учётная запись"], d_id_sub:["your current logon · Kerberos (no password needed)","ваш текущий вход · Kerberos (пароль не нужен)"],
+ d_smb:["This computer","Этот компьютер"], d_smb_v:["Samba AD DC — its configuration","Контроллер домена Samba — его конфигурация"], d_smb_sub:["will be audited too (tier 2)","тоже будет проверена (уровень 2)"],
+ connok_smb:["Local smb.conf included.","Локальный smb.conf включён."],
  c_man:["Enter domain and credentials","Указать домен и учётные данные"],
  c_man_d:["Another domain, a non-joined machine, Samba AD DC, or a dedicated audit account.","Другой домен, компьютер вне домена, Samba AD DC или отдельная учётная запись для аудита."],
  f_dom:["Domain","Домен"], f_dc:["Domain controller (optional)","Контроллер домена (необязательно)"], f_user:["User","Пользователь"], f_pw:["Password","Пароль"],
@@ -94,12 +96,14 @@ function renderDetect() {
   $("d_domain").textContent = detected.domain || "";
   $("d_server").textContent = detected.server || "—";
   $("d_identity").textContent = detected.identity || "—";
+  $("smbrow").classList.toggle("hidden", !detected.smbconf);
+  $("d_smbconf").textContent = detected.smbconf || "";
 }
 async function detect() {
   detected = await api("/api/detect");
   renderDetect();
   if (detected.domain && detected.kerberos && detected.server) { $("detectbox").classList.remove("hidden"); }
-  else { selectMode("manual"); if (detected.domain) $("m_domain").value = detected.domain; }
+  else { selectMode("manual"); if (detected.domain) $("m_domain").value = detected.domain; if (detected.server) $("m_server").value = detected.server; }
 }
 function showErr(prefix, msg, fix) {
   $(prefix).classList.toggle("hidden", !msg);
@@ -108,16 +112,16 @@ function showErr(prefix, msg, fix) {
 }
 function renderConn() {
   const k = {samba: "Samba AD DC", demo: "demo", freeipa: "FreeIPA / IdM", "389ds": "389 Directory Server"}[conn.kind] || "Active Directory";
-  $("connok").textContent = "✓ " + t("connok", {s: conn.server, i: conn.identity, k: k});
+  $("connok").textContent = "✓ " + t("connok", {s: conn.server, i: conn.identity, k: k}) + (conn.smbconf ? " " + t("connok_smb") : "");
   $("scantarget").textContent = conn.domain + " · " + conn.identity;
 }
 async function connect(kind) {
   showErr("connerr"); $("connok").classList.add("hidden");
   const btn = $("connect"); btn.disabled = true; $("demo").disabled = true; btn.textContent = t("connecting");
-  let body = {mode: kind};
+  let body = {mode: kind, smbconf: !!(detected && detected.smbconf)};
   if (kind === "manual") {
     body = {mode: "manual", domain: $("m_domain").value.trim(), server: $("m_server").value.trim(), user: $("m_user").value.trim(),
-      password: $("m_password").value, security: $("m_security").value, pin: $("m_pin").value.trim()};
+      password: $("m_password").value, security: $("m_security").value, pin: $("m_pin").value.trim(), smbconf: !!(detected && detected.smbconf)};
   }
   const r = await api("/api/connect", body);
   $("m_password").value = "";   // the server holds it in memory until the scan ends; the page never keeps it

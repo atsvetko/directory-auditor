@@ -1,6 +1,8 @@
 package web
 
 import (
+	"github.com/atsvetko/directory-auditor/internal/local/smbconf"
+
 	"bufio"
 	"context"
 	"net"
@@ -20,6 +22,8 @@ type Detection struct {
 	Identity string `json:"identity,omitempty"`
 	Kerberos bool   `json:"kerberos"` // a current-logon Kerberos bind is plausible
 	Source   string `json:"source,omitempty"`
+	// SmbConf is the readable Samba AD DC configuration on this machine, if any.
+	SmbConf string `json:"smbconf,omitempty"`
 }
 
 // Detect finds the domain this computer belongs to and a DC for it, using only
@@ -53,6 +57,13 @@ func Detect(ctx context.Context) Detection {
 	}
 	if d.Domain != "" {
 		d.Server = findDC(ctx, d.Domain)
+	}
+	d.SmbConf = smbconf.Detect("")
+	if d.Server == "" && d.SmbConf != "" {
+		// On the DC itself the DC is this host.
+		if h, err := os.Hostname(); err == nil {
+			d.Server = h
+		}
 	}
 	return d
 }
