@@ -1,0 +1,75 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0028
+title:
+  en: Passwords or secrets left in readable account attributes
+  ru: Пароли и секреты в читаемых атрибутах учётных записей
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Account attributes any authenticated user can read (description, info, comment, userPassword, unixUserPassword)
+attributes:
+- description
+- info
+- comment
+- userPassword
+- unixUserPassword
+condition: >-
+  An account's description, info (notes) or comment attribute contains a credential keyword (password,
+  passwd, pwd, secret), or the account exposes a userPassword or unixUserPassword value. These attributes
+  are readable by any authenticated user, so a secret written into one is a domain-wide credential
+  disclosure. The keyword match is a lead to confirm — some matches are benign ("password change
+  pending") — but every hit should be read.
+threshold: any occurrence
+rationale: >-
+  Administrators and scripts park passwords in the description field because it is convenient and
+  editable, and some provisioning writes the initial password there. Unlike the password hash, these
+  attributes carry no special protection and are returned to any authenticated LDAP query, so one such
+  entry hands every domain user a working credential with no attack required. userPassword and
+  unixUserPassword, used by some integrations, can hold the password in clear or near-clear form.
+remediation:
+  en: >-
+    Remove the secret from the attribute immediately and rotate the exposed password. Store secrets in a
+    privileged access management or secrets vault, never in a directory attribute. Audit description, info
+    and comment across all accounts for credential keywords, and alert on new occurrences. Where
+    userPassword/unixUserPassword are populated by an integration, confirm the value is not sensitive and
+    restrict who can read it.
+  ru: >-
+    Немедленно удалите секрет из атрибута и смените раскрытый пароль. Храните секреты в системе управления
+    привилегированным доступом или в хранилище секретов, а не в атрибуте каталога. Проверьте description,
+    info и comment во всех учётных записях на ключевые слова паролей и настройте оповещение о новых
+    случаях. Если userPassword/unixUserPassword заполняются интеграцией, убедитесь, что значение не
+    чувствительно, и ограничьте круг тех, кто может его читать.
+attack:
+- id: T1552.001
+  name: 'Unsecured Credentials: Credentials In Files'
+- id: T1087.002
+  name: 'Account Discovery: Domain Account'
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (sAMAccountType=805306368)
+  notes: User accounts; the condition inspects their readable free-text and credential attributes.
+references:
+- title: Microsoft Learn — description attribute
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-description
+- title: Microsoft Learn — userPassword attribute
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-userpassword
+- title: "MITRE ATT&CK — T1552.001 Unsecured Credentials: Credentials In Files"
+  url: https://attack.mitre.org/techniques/T1552/001/
+notes: >-
+  The keyword set is deliberately small to limit false positives; it is matched case-insensitively on the
+  lower-cased value. This is a preview-quality heuristic — a human confirms each hit — so the controlled
+  vocabulary matters less than catching the obvious cases. A future revision could add entropy-based
+  detection of secret-looking tokens.
+condition_cel: '["description", "info", "comment"].exists(f, attr(obj, f).lowerAscii().contains("password")
+  || attr(obj, f).lowerAscii().contains("passwd") || attr(obj, f).lowerAscii().contains("pwd") || attr(obj,
+  f).lowerAscii().contains("secret")) || hasattr(obj, "userpassword") || hasattr(obj, "unixuserpassword")'
+expect:
+- CN=svc_backup,CN=Users,DC=lab,DC=example
+- CN=t.contractor,CN=Users,DC=lab,DC=example

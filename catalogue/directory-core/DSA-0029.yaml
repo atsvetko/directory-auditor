@@ -1,0 +1,77 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0029
+title:
+  en: Non-Tier-0 principals with control rights over protected (adminCount) objects
+  ru: Субъекты вне нулевого уровня с правами управления над защищёнными объектами (adminCount)
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Security descriptor (DACL) of objects marked adminCount=1 that are not themselves Tier 0
+attributes:
+- nTSecurityDescriptor
+- adminCount
+- objectSid
+condition: >-
+  An object marked adminCount=1 — that is, an account or group that is or was protected by the
+  AdminSDHolder process — is not itself a resolved Tier-0 principal, is not the domain head, the Domain
+  Controllers OU or AdminSDHolder (which DSA-0014, DSA-0015 and DSA-0016 cover), and its DACL grants an
+  allow right of GenericAll, GenericWrite, WriteDacl, WriteOwner or WriteProperty to a trustee that is not
+  Tier 0 and is not SELF (S-1-5-10) or CREATOR OWNER (S-1-3-0). Such control over a still-protected object
+  is a privilege-escalation path that the obvious shadow-admin checks miss, because the target is not a
+  current Tier-0 principal.
+threshold: any occurrence
+rationale: >-
+  Objects carry adminCount=1 because they are, or once were, members of a protected group, so they tend
+  to hold residual privilege or to be restored to it. A non-privileged principal that can rewrite the
+  DACL, take ownership or fully control such an object can grant itself that privilege on demand. These
+  grants come from delegation that was scoped too widely, from tools that set broad rights, and from
+  manual troubleshooting, and they persist long after the reason for them is gone.
+remediation:
+  en: >-
+    Review the DACL of every protected object and remove control rights (GenericAll, WriteDacl,
+    WriteOwner, GenericWrite) held by principals that are not Tier 0. Where delegation is needed, scope it
+    to the specific attributes required rather than full control, and grant it to a managed group. For
+    objects that no longer need protection, clear adminCount and restore inheritance once they are out of
+    every protected group.
+  ru: >-
+    Проверьте DACL каждого защищённого объекта и уберите права управления (GenericAll, WriteDacl,
+    WriteOwner, GenericWrite) у субъектов вне нулевого уровня. Где делегирование нужно, ограничьте его
+    конкретными атрибутами, а не полным управлением, и выдавайте управляемой группе. Для объектов, которым
+    защита больше не нужна, снимите adminCount и восстановите наследование после вывода из всех защищённых
+    групп.
+attack:
+- id: T1098
+  name: Account Manipulation
+- id: T1222.001
+  name: 'Permission Groups Discovery: Domain Groups'
+engine: complex:tier0_acl
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (adminCount=1)
+  notes: Read nTSecurityDescriptor (DACL only) of adminCount=1 objects; the condition excludes Tier-0 objects and the three container cases covered elsewhere.
+references:
+- title: Microsoft Learn — Protected accounts and groups in Active Directory (AdminSDHolder, adminCount)
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory
+- title: Microsoft Learn — Active Directory access rights (ADS_RIGHTS_ENUM)
+  url: https://learn.microsoft.com/en-us/windows/win32/api/iads/ne-iads-ads_rights_enum
+- title: MITRE ATT&CK — T1098 Account Manipulation
+  url: https://attack.mitre.org/techniques/T1098/
+notes: >-
+  Complements DSA-0015 (control over Tier-0 objects) and DSA-0016 (over AdminSDHolder) by covering
+  adminCount=1 objects that are not currently Tier 0 — orphaned or delegated admins. The masks mirror
+  DSA-0015: GenericAll 0x10000000 and 0xF01FF, WriteDacl 0x40000, WriteOwner 0x80000, GenericWrite
+  0x40000000, plus WriteProperty 0x20 unconstrained by an object type. SELF and CREATOR OWNER are ignored.
+condition_cel: 'intattr(obj, "adminCount") == 1 && !tier0(obj) && obj.dn.lowerAscii() != obj.base.lowerAscii()
+  && !obj.dn.lowerAscii().startsWith("ou=domain controllers,") && !obj.dn.lowerAscii().startsWith("cn=adminsdholder,")
+  && sd_readable(obj) && aces(obj).exists(a, a.allow && a.effective && !a.trustee_tier0 && !(a.trustee in
+  ["S-1-5-10", "S-1-3-0"]) && (mask_has(a.mask, 0x10000000) || mask_has(a.mask, 0xF01FF) || mask_has(a.mask,
+  0x40000) || mask_has(a.mask, 0x80000) || mask_has(a.mask, 0x40000000) || (mask_has(a.mask, 0x20) && a.object_type
+  == "")))'
+expect:
+- CN=old.admin,CN=Users,DC=lab,DC=example

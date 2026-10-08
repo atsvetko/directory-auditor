@@ -72,7 +72,7 @@ func main() {
 		{"svc_backup", "backup service; password in wiki", "66048", "1104", 2400, map[string][]string{"servicePrincipalName": {"backup/fs01.lab.example"}, "adminCount": {"1"}}},
 		{"j.doe", "", "512", "1105", 40, nil},
 		{"m.smith", "", "514", "1106", 400, nil},
-		{"old.admin", "", "512", "1107", 700, map[string][]string{"adminCount": {"1"}, "nTSecurityDescriptor": {sd(true, ace{"S-1-5-18", 0x000F01FF, ""})}}},
+		{"old.admin", "", "512", "1107", 700, map[string][]string{"adminCount": {"1"}, "nTSecurityDescriptor": {sd(true, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-1201", 0x000F01FF, ""})}}}, // DSA-0019 (orphaned adminCount) + DSA-0029 (Helpdesk GenericAll over a protected, non-Tier-0 object)
 		{"krbtgt", "Key Distribution Center Service Account", "514", "502", 1900, nil},
 		// One object per directory-core entry that needs a positive case:
 		{"j.legacy", "", "4194816", "1108", 30, nil}, // DSA-0001 DONT_REQ_PREAUTH
@@ -83,6 +83,7 @@ func main() {
 		{"svc_legacy", "", "640", "1113", 100, nil},                                                     // DSA-0011 reversible (0x80)
 		{"mig.user", "", "512", "1114", 60, map[string][]string{"sIDHistory": {"S-1-5-21-9-8-7-1055"}}}, // DSA-0017
 		{"des.user", "", "2097664", "1115", 60, nil},                                                    // DSA-0012 USE_DES_KEY_ONLY
+		{"t.contractor", "temp account, password=Welcome1!", "512", "1116", 30, nil},                    // DSA-0028 cleartext secret in description
 	}
 	for _, u := range users {
 		attrs := map[string][]string{"sAMAccountName": {u.name}, "userAccountControl": {u.uac}, "pwdLastSet": {ft(u.pwdAge)},
@@ -108,6 +109,7 @@ func main() {
 		{"Helpdesk", dom + "-1201", []string{"CN=j.doe,CN=Users," + base}, ""},
 		{"Domain Controllers", dom + "-516", nil, ""},
 		{"Backup Operators", "S-1-5-32-551", nil, ""},
+		{"DnsAdmins", dom + "-1101", []string{"CN=j.doe,CN=Users," + base}, ""}, // DSA-0027: DLL-load to SYSTEM on the DC
 	}
 	for _, g := range groups {
 		attrs := map[string][]string{"sAMAccountName": {g.name}, "objectSid": {g.sid}, "description": {g.name + " (synthetic)"}}

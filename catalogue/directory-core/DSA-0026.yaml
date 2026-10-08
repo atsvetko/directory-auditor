@@ -1,0 +1,71 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0026
+title:
+  en: Kerberoastable accounts — any user with a service principal name
+  ru: Учётные записи, уязвимые к Kerberoasting, — любой пользователь с именем участника-службы (SPN)
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Enabled user accounts (not computers) that have a servicePrincipalName
+attributes:
+- servicePrincipalName
+- sAMAccountName
+- userAccountControl
+- objectSid
+- msDS-SupportedEncryptionTypes
+- pwdLastSet
+condition: >-
+  An enabled user account (sAMAccountType = 805306368, not ACCOUNTDISABLE) other than krbtgt (RID 502)
+  has at least one servicePrincipalName. Such an account is Kerberoastable: any authenticated user can
+  request a service ticket for it and attack the ticket offline to recover the account's password. This
+  reports the whole Kerberoastable surface, not only Tier-0 accounts (which DSA-0002 covers); the risk
+  rises with a weak or old password (DSA-0003) and with RC4 allowed (DSA-0012).
+threshold: any occurrence
+rationale: >-
+  A service ticket for any account with an SPN is encrypted with a key derived from that account's
+  password, and any domain user can ask for one. The ticket is then attacked offline at no risk to the
+  attacker and with no lockout, so a service account with a human-set or legacy password is a reliable
+  foothold. SPNs accumulate on ordinary accounts through SQL Server, IIS, custom services and past
+  testing, and each one is an account whose password strength now matters as much as a domain admin's.
+remediation:
+  en: >-
+    Inventory every account with an SPN. For each, confirm the SPN is still needed and remove it
+    otherwise; give the account a long random password (25+ characters) or migrate it to a group managed
+    service account (gMSA), which rotates the password automatically; and disable RC4 for it. Treat any
+    account with an SPN that is a member of a privileged group as Tier 0 and prioritise it.
+  ru: >-
+    Соберите список всех учётных записей с SPN. Для каждой убедитесь, что SPN ещё нужен, иначе удалите
+    его; задайте длинный случайный пароль (от 25 знаков) или переведите учётную запись на групповую
+    управляемую служебную учётную запись (gMSA) с автоматической сменой пароля; отключите для неё RC4.
+    Учётные записи с SPN, входящие в привилегированные группы, относите к нулевому уровню и правьте в
+    первую очередь.
+attack:
+- id: T1558.003
+  name: 'Steal or Forge Kerberos Tickets: Kerberoasting'
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (&(sAMAccountType=805306368)(servicePrincipalName=*))
+  notes: Enabled user accounts with an SPN; the condition excludes disabled accounts and krbtgt.
+references:
+- title: Microsoft Learn — Service principal names
+  url: https://learn.microsoft.com/en-us/windows/win32/ad/service-principal-names
+- title: Microsoft Learn — Group Managed Service Accounts overview
+  url: https://learn.microsoft.com/en-us/windows-server/security/group-managed-service-accounts/group-managed-service-accounts-overview
+- title: MITRE ATT&CK — T1558.003 Kerberoasting
+  url: https://attack.mitre.org/techniques/T1558/003/
+notes: >-
+  Machines are excluded by sAMAccountType (805306368 is normal user accounts, not 805306369 computers),
+  so computer SPNs — whose 120-character random passwords are not Kerberoastable in practice — do not
+  fire. krbtgt (RID 502) is excluded. Disabled accounts are excluded via the ACCOUNTDISABLE flag.
+condition_cel: hasattr(obj, "serviceprincipalname") && !flags(obj, "userAccountControl", 2) && sid_rid(attr(obj,
+  "objectsid")) != 502
+expect:
+- CN=svc_backup,CN=Users,DC=lab,DC=example
+- CN=svc_sql,CN=Users,DC=lab,DC=example

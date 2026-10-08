@@ -1,0 +1,67 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0027
+title:
+  en: DnsAdmins group has members — a path to code execution on the DNS server
+  ru: В группе DnsAdmins есть участники — путь к выполнению кода на DNS-сервере
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The DnsAdmins group and its membership
+attributes:
+- sAMAccountName
+- member
+condition: >-
+  The group DnsAdmins (sAMAccountName = "DnsAdmins") has at least one member. Membership of DnsAdmins
+  lets a principal reconfigure the DNS service, which on a domain controller runs as SYSTEM, to load a
+  plugin library of the member's choosing — in effect code execution as SYSTEM on the DC. Because the DNS
+  service usually runs on the DCs, this is a direct escalation to domain control from a group that is not
+  one of the obvious Tier-0 groups and is often delegated to help-desk or networking staff.
+threshold: any occurrence
+rationale: >-
+  The DNS Server service reads a server-level plugin DLL path from its configuration, and a member of
+  DnsAdmins can set that path and restart the service. On a domain controller the service is SYSTEM, so
+  the DLL runs as SYSTEM on a Tier-0 host. The group is frequently handed out for routine DNS record
+  management without anyone realising it is equivalent to local administrator on every DC that serves
+  DNS. Any membership therefore deserves review, and non-service members are rarely justified.
+remediation:
+  en: >-
+    Treat DnsAdmins as a Tier-0 group. Remove every member that does not strictly need to manage the DNS
+    service itself; delegate ordinary DNS record changes through a scoped permission or a request process
+    instead. Where DNS management must be delegated, run it from a privileged access workstation and audit
+    the group's membership and the DNS service's plugin configuration.
+  ru: >-
+    Относите DnsAdmins к группам нулевого уровня. Удалите всех участников, кому не нужно управлять самой
+    службой DNS; обычные изменения записей DNS делегируйте через ограниченное право или процесс заявок.
+    Если делегирование управления DNS необходимо, выполняйте его с защищённой рабочей станции и ведите
+    аудит состава группы и конфигурации плагинов службы DNS.
+attack:
+- id: T1574.001
+  name: 'Hijack Execution Flow: DLL'
+- id: T1098
+  name: Account Manipulation
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (&(objectClass=group)(sAMAccountName=DnsAdmins))
+  notes: The DnsAdmins group; the condition fires when it has any member.
+references:
+- title: Microsoft Learn — dnscmd /config (ServerLevelPluginDll server-level plugin)
+  url: https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/dnscmd
+- title: Microsoft Learn — Active Directory security groups (DnsAdmins)
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups
+- title: "MITRE ATT&CK — T1574.001 Hijack Execution Flow: DLL"
+  url: https://attack.mitre.org/techniques/T1574/001/
+notes: >-
+  DnsAdmins is a domain-local group created when the DNS Server role is installed; it has no fixed RID,
+  so it is matched by name. On a domain where DNS is not installed the group may be absent, in which case
+  the check does not fire. A future revision could extend this to other easily-overlooked privileged
+  groups (Cert Publishers, Group Policy Creator Owners, DHCP Administrators).
+condition_cel: attr(obj, "samaccountname").lowerAscii() == "dnsadmins" && hasattr(obj, "member")
+expect:
+- CN=DnsAdmins,CN=Users,DC=lab,DC=example

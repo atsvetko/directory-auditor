@@ -36,6 +36,10 @@ must:
 allow:
   - DSA-0201   # upstream version check; the runner's distribution package may be older than 4.23 but patched
   - DSA-0220   # RC4 default inferred from version < 4.24.0
+  - DSA-0026   # kerberoastable accounts: svc-backup carries an SPN in the live lab
+  - DSA-0027   # DnsAdmins membership (fires only if the live lab populates the group)
+  - DSA-0028   # secrets in readable attributes (depends on the live lab's descriptions)
+  - DSA-0029   # control over protected non-Tier-0 objects (depends on the live lab's ACLs)
 tier0_must_include:
   - "CN=svc-backup,CN=Users,DC=lab,DC=example"      # nested: Domain Admins > Tier0 Ops > svc-backup
   - "CN=Tier0 Ops,CN=Users,DC=lab,DC=example"

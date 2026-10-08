@@ -43,6 +43,9 @@ var accountAttrs = []string{
 	"adminCount", "primaryGroupID", "memberOf", "servicePrincipalName",
 	"msDS-SupportedEncryptionTypes", "msDS-AllowedToDelegateTo",
 	"msDS-AllowedToActOnBehalfOfOtherIdentity", "msDS-KrbTgtLinkBl",
+	// Readable free-text and credential-bearing attributes (DSA-0028): secrets
+	// are routinely parked in these where any authenticated user can read them.
+	"description", "info", "comment", "userPassword", "unixUserPassword", "ms-Mcs-AdmPwd",
 }
 
 // Plan is the tier-0 (ordinary user) collection plan.
