@@ -58,6 +58,9 @@ Kerberos with the current logon works from Windows (SSPI, with channel binding) 
 and from Linux against Windows DCs at the default channel-binding setting. Samba DCs require
 channel binding by default (`ldap server require strong auth = yes`), which the Linux Kerberos
 client cannot provide yet — use `--user` there (simple bind over LDAPS, password prompted once).
+Self-generated Samba certificates (before 4.24.0) often carry a negative serial number, which Go
+rejects by default; the binary accepts them (`//go:debug x509negativeserial=1` in `cmd/dirauditor`),
+since chain verification and `--pin` still apply.
 
 ## Labs in CI
 

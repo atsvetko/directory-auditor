@@ -9,6 +9,15 @@
 //	dirauditor doctor  ...     # diagnose connectivity: DNS SRV, LDAP, TLS
 //	dirauditor manifest        # print every behaviour of this binary
 //	dirauditor version
+//
+// Samba before 4.24.0 writes the serial of its self-generated TLS certificate
+// as a host-endian uint32 of time(NULL) (source4/lib/tls/tlscert.c; 4.24.0
+// switched to PUSH_BE_U64), so on x86 the DER INTEGER is negative about half
+// the time, and Go 1.23+ refuses such certificates ("x509: negative serial
+// number"). A negative serial is an encoding defect, not a trust decision —
+// chain verification and --pin still apply — so this binary accepts it.
+//
+//go:debug x509negativeserial=1
 package main
 
 import (
