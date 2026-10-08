@@ -29,7 +29,7 @@ func bindCurrentUser(c *Conn, spn string) (string, error) {
 	if err := c.c.GSSAPIBind(cl, spn, ""); err != nil {
 		hint := ""
 		if _, cerr := c.peerCertificate(); cerr == nil {
-			hint = " If the DC enforces LDAP channel binding, Kerberos from Linux cannot satisfy it yet; use --user for this run."
+			hint = " Samba DCs ('ldap server require strong auth = yes', the default) and Windows DCs with LdapEnforceChannelBinding=2 require TLS channel binding, which the Linux Kerberos client cannot send yet; use --user (simple bind over LDAPS) for this run."
 		}
 		return "", fmt.Errorf("ldapx: Kerberos bind to %s as %s failed: %w.%s", spn, who, err, hint)
 	}

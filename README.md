@@ -52,6 +52,23 @@ dirauditor manifest --queries                           # every behaviour and ev
 
 Build from source: `go build ./cmd/dirauditor` (Go 1.25+, no CGO).
 
+Kerberos with the current logon works from Windows (SSPI, with channel binding) against any DC,
+and from Linux against Windows DCs at the default channel-binding setting. Samba DCs require
+channel binding by default (`ldap server require strong auth = yes`), which the Linux Kerberos
+client cannot provide yet — use `--user` there (simple bind over LDAPS, password prompted once).
+
+## Labs in CI
+
+Every push runs the engine against a **real Samba AD DC** provisioned on the runner with
+deliberately weak settings (`tools/lab/samba`, ~3 min); nightly and on demand it runs against a
+**real FreeIPA server** in a container (`tools/lab/freeipa`, ~6 min), as an ordinary user and as
+admin. `tools/lab/verify` compares `report.json` with `testdata/lab/*-expect.yaml`: every expected
+finding must fire on the expected object, nothing else may, and containers the account cannot
+read must show as "not collected". The lab scripts refuse to run without `DIRAUDITOR_LAB=1`.
+
+To try an implemented catalogue entry against your own directory before it becomes a signed pack:
+`dirauditor scan … --catalogue catalogue` (clearly marked as an unsigned dry run in the report).
+
 Checks are written only from catalogue entries a human has verified, so today the only pack is a
 format fixture (`TEST-0001`); the Tier-0 inventory ("who controls the domain, and why") is
 already complete. The engine detects Active Directory, Samba AD DC and FreeIPA / Red Hat IdM
