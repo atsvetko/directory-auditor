@@ -47,6 +47,9 @@ remediation:
 attack:
 - id: T1078.002
   name: 'Valid Accounts: Domain Accounts'
+anssi:
+- vuln_dont_expire_priv
+- vuln_password_change_priv
 engine: complex:tier0_membership
 query_sketch:
   base: default

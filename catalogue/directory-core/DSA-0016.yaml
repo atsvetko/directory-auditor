@@ -45,6 +45,8 @@ attack:
   name: Account Manipulation
 - id: T1222.001
   name: 'File and Directory Permissions Modification: Windows'
+anssi:
+- vuln_permissions_adminsdholder
 engine: complex:tier0_acl
 query_sketch:
   base: CN=AdminSDHolder,CN=System,<default>

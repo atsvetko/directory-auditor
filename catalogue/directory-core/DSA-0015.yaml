@@ -58,6 +58,10 @@ attack:
   name: 'File and Directory Permissions Modification: Windows'
 - id: T1484
   name: Domain or Tenant Policy Modification
+anssi:
+- vuln_permissions_naming_context
+- vuln_permissions_dc
+- vuln_privileged_members_perm
 engine: complex:tier0_acl
 query_sketch:
   base: default

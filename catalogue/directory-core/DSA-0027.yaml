@@ -44,6 +44,8 @@ attack:
   name: 'Hijack Execution Flow: DLL'
 - id: T1098
   name: Account Manipulation
+anssi:
+- vuln_dnsadmins
 engine: declarative
 query_sketch:
   base: default

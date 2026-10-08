@@ -1,0 +1,76 @@
+# Directory Auditor — build plan against the ANSSI control points (frameworks/anssi.yaml).
+#
+# Coverage is NOT recorded here: a point counts as covered when a catalogue entry declares it in its
+# `anssi:` field. This file only holds what the entries cannot express — a point that is mapped but only
+# partly implemented, and the wave in which each remaining gap is scheduled. ANSSI-COVERAGE.md is
+# generated from both (go run ./tools/anssimatrix).
+#
+# status: partial  — mapped by an entry that covers part of the point; the wave completes it
+#         gap      — not implemented yet; buildable on LDAP
+#         collect  — needs a collection area the engine does not read yet (named in `needs`)
+# wave:   build order. Waves follow the ANSSI level first (1 before 2 before 3), then effort.
+#   1  level-1/2 gaps detectable from the objects already collected (users, computers, groups, domain head)
+#   2  remaining level-1/2 points needing a targeted read (group/GPO/key-object ACLs, PSOs, MSAs, RODC)
+#   3  level-3/4 points
+#   4  AD CS (PKI containers and certificate templates in the configuration partition)
+#   5  DNS (zones and server objects in the DNS application partitions)
+plan:
+# --- wave 1 -------------------------------------------------------------------------------------------
+- {id: vuln_dc_inconsistent_uac,             status: gap,     wave: 1, note: "DC computer accounts whose UAC, primaryGroupID or location disagree"}
+- {id: vuln_dc_obsolete,                     status: gap,     wave: 1, note: "DC operatingSystem out of vendor support"}
+- {id: vuln_password_change_dc_no_change,    status: gap,     wave: 1, note: "DC machine password older than 45 days"}
+- {id: vuln_password_change_inactive_dc,     status: gap,     wave: 1, note: "DC without a recent logon (lastLogonTimestamp)"}
+- {id: vuln_primary_group_id_1000,           status: gap,     wave: 1, note: "primaryGroupID below 1000 hides membership of a built-in privileged group"}
+- {id: vuln_privileged_members,              status: gap,     wave: 1, note: "privileged group with an unusually large direct membership"}
+- {id: vuln_user_accounts_dormant,           status: gap,     wave: 1, note: "enabled accounts with no logon for a long time"}
+- {id: vuln_critical_objects,                status: gap,     wave: 1, note: "krbtgt, AdminSDHolder or Domain Admins missing from the read"}
+- {id: vuln_compatible_2000_anonymous,       status: gap,     wave: 1, note: "Pre-Windows 2000 Compatible Access contains Anonymous or Everyone"}
+- {id: vuln_compatible_2000_not_default,     status: gap,     wave: 1, note: "Pre-Windows 2000 Compatible Access has any member beyond the default"}
+- {id: vuln_dont_expire,                     status: gap,     wave: 1, note: "enabled accounts set never to expire their password"}
+- {id: vuln_guest,                           status: gap,     wave: 1, note: "built-in Guest account enabled"}
+- {id: vuln_password_change_server_no_change_90, status: gap, wave: 1, note: "server machine password older than 90 days"}
+- {id: vuln_privileged_members_no_admincount, status: gap,    wave: 1, note: "Tier-0 member without adminCount=1 (AdminSDHolder not applied)"}
+- {id: vuln_primary_group_id_nochange,       status: gap,     wave: 1, note: "primaryGroupID changed from the default for the account type"}
+# --- wave 2 -------------------------------------------------------------------------------------------
+- {id: vuln_dnsadmins,                       status: partial, wave: 2, note: "DSA-0027 covers membership; ANSSI also checks who can change the group (its ACL)"}
+- {id: vuln_dsheuristics_bad,                status: partial, wave: 2, note: "DSA-0025 covers anonymous operations; other dangerous dSHeuristics flags to add (MS-ADTS)"}
+- {id: vuln_functional_level,                status: partial, wave: 2, note: "DSA-0024 covers the domain level; forest level to add from rootDSE"}
+- {id: vuln_display_specifier,               status: collect, wave: 2, needs: "CN=DisplaySpecifiers in the configuration partition"}
+- {id: vuln_permissions_gpo_priv,            status: collect, wave: 2, needs: "groupPolicyContainer objects and their DACLs"}
+- {id: vuln_permissions_gpo_container_priv,  status: collect, wave: 2, needs: "DACLs of OUs and containers holding privileged objects"}
+- {id: vuln_permissions_dpapi,               status: collect, wave: 2, needs: "DPAPI backup-key objects (CN=BCKUPKEY_*,CN=System) and their DACLs"}
+- {id: vuln_permissions_gmsa_keys,           status: collect, wave: 2, needs: "KDS root keys (Group Key Distribution Service, configuration partition)"}
+- {id: vuln_dc_crypto,                       status: gap,     wave: 2, note: "msDS-SupportedEncryptionTypes on DC accounts (extends DSA-0012)"}
+- {id: vuln_privileged_members_password,     status: collect, wave: 2, needs: "fine-grained password policies (msDS-PasswordSettings) and their targets"}
+- {id: vuln_password_change_msa_no_change_90, status: collect, wave: 2, needs: "managed service accounts (msDS-ManagedServiceAccount / msDS-GroupManagedServiceAccount)"}
+- {id: vuln_password_change_cluster_no_change_3years, status: gap, wave: 2, note: "cluster name objects identified by their SPNs"}
+- {id: vuln_trusts_accounts,                 status: gap,     wave: 2, note: "interdomain trust accounts (TRUSTDOMAIN$) password age"}
+- {id: vuln_rodc_priv_revealed,              status: collect, wave: 2, needs: "RODC revealed lists (msDS-RevealedList)"}
+- {id: vuln_sysvol_ntfrs,                    status: collect, wave: 2, needs: "DFSR migration state / NTFRS replica set objects"}
+- {id: vuln_adupdate_bad,                    status: collect, wave: 2, needs: "schema and forest/domain preparation versions"}
+# --- wave 3 -------------------------------------------------------------------------------------------
+- {id: vuln_protected_users,                 status: partial, wave: 3, note: "DSA-0007 covers delegation protection; ANSSI checks Protected Users membership itself"}
+- {id: vuln_kerberos_properties_encryption,  status: partial, wave: 3, note: "DSA-0003/0012 cover weak types; ANSSI checks service accounts' declared types"}
+- {id: vuln_owner,                           status: collect, wave: 3, needs: "owner part of security descriptors (SD_FLAGS owner)"}
+- {id: vuln_password_change_inactive_servers, status: gap,    wave: 3, note: "server accounts with no recent logon"}
+- {id: vuln_password_change_server_no_change_45, status: gap, wave: 3, note: "server machine password older than 45 days (stricter level-3 threshold)"}
+- {id: vuln_reversible_password_priv_namingcontext, status: gap, wave: 3, note: "domain pwdProperties DOMAIN_PASSWORD_STORE_CLEARTEXT"}
+- {id: vuln_rodc_never_reveal,               status: collect, wave: 3, needs: "RODC password replication policy attributes"}
+- {id: vuln_rodc_reveal,                     status: collect, wave: 3, needs: "RODC password replication policy attributes"}
+- {id: vuln_rodc_allowed_group,              status: collect, wave: 3, needs: "Allowed RODC Password Replication Group membership"}
+- {id: vuln_rodc_denied_group,               status: collect, wave: 3, needs: "Denied RODC Password Replication Group membership"}
+- {id: vuln_rodc_orphan_krbtgt,              status: collect, wave: 3, needs: "krbtgt_NNNNN accounts and their RODC links"}
+- {id: vuln_sd_failed_sd_read_on_priv,       status: gap,     wave: 3, note: "privileged objects whose security descriptor could not be read"}
+- {id: vuln_group_loop,                      status: gap,     wave: 3, note: "cycles in the group membership graph"}
+- {id: vuln_silo_priv,                       status: collect, wave: 3, needs: "authentication policy silos (msDS-AssignedAuthNPolicySilo)"}
+- {id: vuln_smartcard_expire_passwords,      status: gap,     wave: 3, note: "SMARTCARD_REQUIRED accounts whose password never expires"}
+# --- wave 4: AD CS ------------------------------------------------------------------------------------
+- {id: vuln_adcs_control,                    status: collect, wave: 4, needs: "Public Key Services containers (configuration partition) and their DACLs"}
+- {id: vuln_adcs_template_control,           status: collect, wave: 4, needs: "certificate template objects and their DACLs"}
+- {id: vuln_adcs_template_auth_enroll_with_name, status: collect, wave: 4, needs: "certificate template flags, EKUs and enrolment rights"}
+- {id: vuln_certificates_vuln,               status: collect, wave: 4, needs: "certificate parsing (CA and NTAuth certificates: key size, signature algorithm)"}
+- {id: vuln_permissions_schema,              status: collect, wave: 4, needs: "schema partition objects and their DACLs"}
+- {id: vuln_permissions_dfsr_sysvol,         status: collect, wave: 4, needs: "DFSR settings objects of the SYSVOL replication group"}
+# --- wave 5: DNS --------------------------------------------------------------------------------------
+- {id: vuln_dnszone_bad_prop,                status: collect, wave: 5, needs: "DNS application partitions (DomainDnsZones/ForestDnsZones) and dNSProperty decoding"}
+- {id: vuln_permissions_msdns,               status: collect, wave: 5, needs: "MicrosoftDNS server and zone objects and their DACLs"}

@@ -1,0 +1,320 @@
+# ANSSI / CERT-FR — « Points de contrôle Active Directory » (Active Directory control points).
+# Reference index only: identifier, levels and title of each published control point, used to map
+# Directory Auditor checks to ANSSI (see ../ANSSI-COVERAGE.md and the `anssi:` field of each entry).
+# Checks are written in our own words from primary sources; no ANSSI description text is reproduced.
+#
+# Source : CERT-FR, CERTFR-2020-DUR-001 — https://www.cert.ssi.gouv.fr/dur/CERTFR-2020-DUR-001/
+#          checklist https://www.cert.ssi.gouv.fr/uploads/ad_checklist.html
+# Version: 2024-04-17 (latest revision of CERTFR-2020-DUR-001); extracted 2026-10-08.
+# Levels : 1 critical · 2 serious · 3 baseline · 4 good · 5 state of the art. A point listed under several
+#          levels applies at each, with stricter criteria at higher levels. ANSSI publishes levels 1–3 (plus a
+#          few level-4 points) at this revision.
+# Licence: ANSSI publication — verify the reuse licence before a public release (see docs/clean-room.md).
+source: CERTFR-2020-DUR-001
+version: "2024-04-17"
+count: 76
+points:
+- id: vuln_adcs_control
+  levels: [1]
+  title_en: "Dangerous ACLs expose certificate containers (attack path)"
+  title_fr: "Permissions dangereuses sur les conteneurs de certificats (chemins de contrôle)"
+- id: vuln_adcs_template_control
+  levels: [1, 2]
+  title_en: "Dangerous ACLs expose certificate template objects (attack path)"
+  title_fr: "Permissions dangereuses sur les objets de modèles de certificats (chemins de contrôle)"
+- id: vuln_adcs_template_auth_enroll_with_name
+  levels: [1]
+  title_en: "Dangerous enrollment permission on authentication certificate templates"
+  title_fr: "Permissions d'enrôlement dangereuses sur des modèles de certificats permettant l'authentification"
+- id: vuln_certificates_vuln
+  levels: [1, 2, 3]
+  title_en: "Weak or vulnerable certificates"
+  title_fr: "Certificats faibles ou vulnérables"
+- id: vuln_critical_objects
+  levels: [1]
+  title_en: "Critical objects unavailable"
+  title_fr: "Objets critiques non disponibles"
+- id: vuln_dc_inconsistent_uac
+  levels: [1]
+  title_en: "Domain controllers in inconsistent state"
+  title_fr: "Contrôleurs de domaine incohérents"
+- id: vuln_dc_obsolete
+  levels: [1]
+  title_en: "DC/RODC with an obsolete operating system"
+  title_fr: "DC/RODC ayant un système d'exploitation obsolète"
+- id: vuln_delegation_a2d2
+  levels: [1]
+  title_en: "Constrained authentication delegation to privileged service"
+  title_fr: "Délégation d'authentification contrainte vers un service privilégié"
+- id: vuln_delegation_sourcedeleg
+  levels: [1]
+  title_en: "Resource-based constrained delegation on privileged services"
+  title_fr: "Délégation contrainte basée sur la ressource vers des services privilégiés"
+- id: vuln_delegation_t2a4d
+  levels: [1]
+  title_en: "Constrained delegation with protocol transition to a privileged service"
+  title_fr: "Délégation d'authentification contrainte avec transition de protocole vers un service privilégié"
+- id: vuln_delegation_t4d
+  levels: [1]
+  title_en: "Unconstrained authentication delegation"
+  title_fr: "Délégation d'authentification non contrainte"
+- id: vuln_display_specifier
+  levels: [1]
+  title_en: "Dangerous Display Specifiers"
+  title_fr: "Présence de Display Specifiers dangereux"
+- id: vuln_dnsadmins
+  levels: [1]
+  title_en: "Dangerous permissions on the DnsAdmins group"
+  title_fr: "Permissions dangereuses sur le groupe DnsAdmins"
+- id: vuln_dnszone_bad_prop
+  levels: [1, 3]
+  title_en: "Misconfigured DNS zones"
+  title_fr: "Zones DNS mal configurées"
+- id: vuln_dont_expire_priv
+  levels: [1]
+  title_en: "Privileged accounts with never-expiring passwords"
+  title_fr: "Comptes privilégiés dont le mot de passe n'expire jamais"
+- id: vuln_dsheuristics_bad
+  levels: [1, 2, 3]
+  title_en: "Dangerous dsHeuristics settings"
+  title_fr: "Paramètres dSHeuristics dangereux"
+- id: vuln_functional_level
+  levels: [1, 3, 4]
+  title_en: "Insufficient forest and domains functional levels"
+  title_fr: "Niveaux fonctionnels de la forêt et des domaines insuffisants"
+- id: vuln_kerberos_properties_preauth_priv
+  levels: [1]
+  title_en: "Kerberos preauthentication disabled for privileged accounts"
+  title_fr: "Comptes privilégiés sans préauthentification Kerberos"
+- id: vuln_password_change_dc_no_change
+  levels: [1]
+  title_en: "Domain controllers with passwords unchanged for more than 45 days"
+  title_fr: "Contrôleurs de domaine dont le mot de passe de compte d'ordinateur est inchangé depuis plus de 45 jours"
+- id: vuln_password_change_inactive_dc
+  levels: [1]
+  title_en: "Inactive domain controllers"
+  title_fr: "Contrôleurs de domaines inactifs"
+- id: vuln_password_change_priv
+  levels: [1]
+  title_en: "Privileged account passwords age too old"
+  title_fr: "Comptes privilégiés dont le mot de passe est inchangé depuis plus de 3 ans"
+- id: vuln_permissions_adminsdholder
+  levels: [1, 2]
+  title_en: "Dangerous permissions on the adminSDHolder object"
+  title_fr: "Permissions dangereuses sur l'objet adminSDHolder"
+- id: vuln_permissions_dc
+  levels: [1, 2]
+  title_en: "Dangerous ACLs expose domain controller objects (attack path)"
+  title_fr: "Permissions dangereuses sur les objets contrôleurs de domaine (chemins de contrôle)"
+- id: vuln_permissions_dfsr_sysvol
+  levels: [1, 2]
+  title_en: "Dangerous ACLs expose DFSR settings objects of the SYSVOL share (attack path)"
+  title_fr: "Permissions dangereuses sur les objets des paramètres DFSR du SYSVOL (chemins de contrôle)"
+- id: vuln_permissions_dpapi
+  levels: [1, 2]
+  title_en: "Dangerous ACLs expose DPAPI key objects (attack path)"
+  title_fr: "Permissions dangereuses sur les objets de clés DPAPI (chemins de contrôle)"
+- id: vuln_permissions_gmsa_keys
+  levels: [1, 2]
+  title_en: "Dangerous ACLs expose gMSA key objects (attack path)"
+  title_fr: "Permissions dangereuses vers les objets de clés gMSA (chemins de contrôle)"
+- id: vuln_permissions_naming_context
+  levels: [1, 2]
+  title_en: "Dangerous ACLs expose a naming context root (attack path)"
+  title_fr: "Permissions dangereuses sur la racine des naming contexts (chemins de contrôle)"
+- id: vuln_permissions_schema
+  levels: [1, 2]
+  title_en: "Dangerous ACLs expose schema objects (attack path)"
+  title_fr: "Permissions dangereuses sur les objets du schéma (chemins de contrôle)"
+- id: vuln_permissions_msdns
+  levels: [1]
+  title_en: "Dangerous ACLs expose MicrosoftDNS server objects (attack path)"
+  title_fr: "Permissions dangereuses sur les objets serveurs MicrosoftDNS (chemins de contrôle)"
+- id: vuln_permissions_gpo_priv
+  levels: [1]
+  title_en: "Dangerous ACLs expose GPOs applied to privileged group members (attack path)"
+  title_fr: "Permissions dangereuses sur les objets de GPO s'appliquant aux membres des groupes privilégiés (chemins de contrôle)"
+- id: vuln_primary_group_id_1000
+  levels: [1]
+  title_en: "Accounts with PrimaryGroupID lower than 1000"
+  title_fr: "Comptes avec un PrimaryGroupID inférieur à 1000"
+- id: vuln_privileged_members
+  levels: [1, 2]
+  title_en: "Large privileged group member count"
+  title_fr: "Nombre important de membres des groupes privilégiés"
+- id: vuln_privileged_members_perm
+  levels: [1, 2]
+  title_en: "Dangerous ACLs expose members of privileged groups (attack path)"
+  title_fr: "Permissions dangereuses sur des membres de groupes privilégiés (chemins de contrôle)"
+- id: vuln_spn_priv
+  levels: [1]
+  title_en: "Privileged accounts with SPN"
+  title_fr: "Comptes privilégiés avec SPN"
+- id: vuln_trusts_domain_notfiltered
+  levels: [1]
+  title_en: "Unfiltered outbound domain trust relationship"
+  title_fr: "Relations d'approbation sortante de type domaine non filtré"
+- id: vuln_trusts_forest_sidhistory
+  levels: [1]
+  title_en: "Outbound forest trust relationships with sID History enabled"
+  title_fr: "Relations d'approbation sortantes de type forêt avec sID History activé"
+- id: vuln_user_accounts_dormant
+  levels: [1]
+  title_en: "Dormant accounts"
+  title_fr: "Nombre important de comptes actifs inutilisés"
+- id: vuln_adupdate_bad
+  levels: [2]
+  title_en: "Bad Active Directory versions"
+  title_fr: "Mauvaises versions de l'Active Directory"
+- id: vuln_compatible_2000_anonymous
+  levels: [2]
+  title_en: "The \"Pre-Windows 2000 Compatible Access\" group includes \"Anonymous\""
+  title_fr: "Le groupe \"Pre-Windows 2000 Compatible Access\" contient \"Anonymous\""
+- id: vuln_dc_crypto
+  levels: [2, 3, 4]
+  title_en: "DC/RODC supported encryption algorithms"
+  title_fr: "Algorithmes de chiffrement supportés par les DC/RODC"
+- id: vuln_dont_expire
+  levels: [2]
+  title_en: "Accounts with never-expiring passwords"
+  title_fr: "Comptes dont le mot de passe n'expire jamais"
+- id: vuln_guest
+  levels: [2]
+  title_en: "Guest account enabled"
+  title_fr: "Compte Invité actif"
+- id: vuln_kerberos_properties_deskey
+  levels: [2]
+  title_en: "Use of Kerberos with weak encryption"
+  title_fr: "Comptes utilisateurs avec un chiffrement Kerberos faible"
+- id: vuln_kerberos_properties_preauth
+  levels: [2]
+  title_en: "Kerberos preauthentication disabled"
+  title_fr: "Comptes sans préauthentification Kerberos"
+- id: vuln_krbtgt
+  levels: [2]
+  title_en: "Krbtgt account password unchanged for more than a year"
+  title_fr: "Mot de passe du compte krbtgt inchangé depuis plus d'un an"
+- id: vuln_password_change_server_no_change_90
+  levels: [2]
+  title_en: "Servers with passwords unchanged for more than 90 days"
+  title_fr: "Serveurs dont le mot de passe de compte d'ordinateur est inchangé depuis plus de 90 jours"
+- id: vuln_password_change_cluster_no_change_3years
+  levels: [2]
+  title_en: "Windows server cluster accounts with passwords unchanged for more than 3 years"
+  title_fr: "Comptes utilisés dans un cluster de basculement Windows Server dont le mot de passe est inchangé depuis plus de 3 ans"
+- id: vuln_password_change_msa_no_change_90
+  levels: [2]
+  title_en: "Managed service accounts with passwords unchanged for more than 90 days"
+  title_fr: "Comptes de service managés dont le mot de passe de compte est inchangé depuis plus de 90 jours"
+- id: vuln_permissions_gpo_container_priv
+  levels: [2]
+  title_en: "Dangerous ACLs expose privileged object containers (attack path)"
+  title_fr: "Permissions dangereuses sur des conteneurs d'objets privilégiés (chemins de contrôle)"
+- id: vuln_privileged_members_password
+  levels: [2]
+  title_en: "Privileged group members with weak password policy"
+  title_fr: "Comptes membres de groupes privilégiés avec une mauvaise politique de mot de passe"
+- id: vuln_privileged_members_no_admincount
+  levels: [2]
+  title_en: "Privileged groups members having an adminCount attribute which is null or 0"
+  title_fr: "Comptes membres de groupes privilégiés ayant un attribut adminCount vide ou valant 0"
+- id: vuln_rodc_priv_revealed
+  levels: [2]
+  title_en: "Privileged users revealed on RODC"
+  title_fr: "Comptes ou groupes privilégiés révélés par des RODC"
+- id: vuln_sidhistory_dangerous
+  levels: [2]
+  title_en: "Accounts or groups with unexpected SID history"
+  title_fr: "Comptes ou groupes ayant un historique de SID d'apparence non conforme"
+- id: vuln_sysvol_ntfrs
+  levels: [2]
+  title_en: "SYSVOL replication through NTFRS"
+  title_fr: "Utilisation de NTFRS pour la réplication du SYSVOL"
+- id: vuln_trusts_accounts
+  levels: [2]
+  title_en: "Trust account passwords unchanged for more than a year"
+  title_fr: "Comptes de trust dont le mot de passe est inchangé depuis plus d'un an"
+- id: vuln_compatible_2000_not_default
+  levels: [3]
+  title_en: "Use of the \"Pre-Windows 2000 Compatible Access\" group"
+  title_fr: "Comptes ou groupes membres de \"Pre-Windows 2000 Compatible Access\""
+- id: vuln_kerberos_properties_encryption
+  levels: [3]
+  title_en: "Service accounts supported encryption algorithms"
+  title_fr: "Algorithmes de chiffrement supportés par les comptes de service"
+- id: vuln_owner
+  levels: [3]
+  title_en: "Incorrect object owners"
+  title_fr: "Objets ayant un propriétaire inadapté"
+- id: vuln_password_change_inactive_servers
+  levels: [3]
+  title_en: "Inactive servers"
+  title_fr: "Serveurs inactifs"
+- id: vuln_password_change_server_no_change_45
+  levels: [3]
+  title_en: "Servers with passwords unchanged for more than 45 days"
+  title_fr: "Serveurs dont le mot de passe de compte d'ordinateur est inchangé depuis plus de 45 jours"
+- id: vuln_primary_group_id_nochange
+  levels: [3]
+  title_en: "Accounts with modified PrimaryGroupID"
+  title_fr: "Comptes avec un PrimaryGroupID modifié"
+- id: vuln_protected_users
+  levels: [3]
+  title_en: "Privileged accounts outside of the Protected Users group"
+  title_fr: "Comptes privilégiés non membres du groupe Protected Users"
+- id: vuln_reversible_password_priv_uac
+  levels: [3]
+  title_en: "Privileged accounts with passwords stored using reversible encryption"
+  title_fr: "Comptes privilégiés ayant leur mot de passe stocké de manière réversible"
+- id: vuln_reversible_password_priv_namingcontext
+  levels: [3]
+  title_en: "[BETA] Passwords stored in cleartext because of a configuration at the naming context root"
+  title_fr: "[BETA] Mots de passe stockés en clair à cause d'un attribut à la racine du naming context"
+- id: vuln_rodc_never_reveal
+  levels: [3]
+  title_en: "Dangerous configuration of read-only domain controllers (RODC) (neverReveal)"
+  title_fr: "Configuration dangereuse des contrôleurs de domaine en lecture seule (RODC) (neverReveal)"
+- id: vuln_rodc_reveal
+  levels: [3]
+  title_en: "Dangerous configuration of read-only domain controllers (RODC) (reveal)"
+  title_fr: "Comptes ou groupes privilégiés présents dans les attributs de révélation des RODC"
+- id: vuln_rodc_allowed_group
+  levels: [3]
+  title_en: "Dangerous configuration of replication groups for read-only domain controllers (RODCs) (allow)"
+  title_fr: "Configuration dangereuse des groupes de réplication pour les contrôleurs de domaine en lecture seule (RODC) (allow)"
+- id: vuln_rodc_denied_group
+  levels: [3]
+  title_en: "Dangerous configuration of replication groups for read-only domain controllers (RODCs) (denied)"
+  title_fr: "Configuration dangereuse des groupes de réplication pour les contrôleurs de domaine en lecture seule (RODC) (denied)"
+- id: vuln_rodc_orphan_krbtgt
+  levels: [3]
+  title_en: "Orphan RODC krbtgt accounts"
+  title_fr: "Comptes krbtgt de RODC orphelins"
+- id: vuln_sd_failed_sd_read_on_priv
+  levels: [3]
+  title_en: "Critical information missing for privileged accounts"
+  title_fr: "Comptes privilégiés pour lesquels des informations critiques sont manquantes"
+- id: vuln_sidhistory_present
+  levels: [3]
+  title_en: "Accounts or groups with SID history set"
+  title_fr: "Comptes ou groupes ayant un historique de SID"
+- id: vuln_trusts_tgt_deleg
+  levels: [3]
+  title_en: "Inbound trust relationships with delegation"
+  title_fr: "Relations d'approbation entrante avec délégation"
+- id: vuln_group_loop
+  levels: [4]
+  title_en: "Loops in group memberships"
+  title_fr: "Présences de boucles d'imbrication de groupes"
+- id: vuln_silo_priv
+  levels: [4]
+  title_en: "Privileged group members not in an authentication silo"
+  title_fr: "Membres des groupes privilégiés hors silo d'authentification"
+- id: vuln_smartcard_expire_passwords
+  levels: [4]
+  title_en: "Missing password expiration for smart card users"
+  title_fr: "Comptes utilisateurs de carte à puce sans expiration de mot de passe"
+- id: vuln_user_accounts_machineaccountquota
+  levels: [4]
+  title_en: "Unrestricted domain join"
+  title_fr: "Ajout de machines au domaine non limité"

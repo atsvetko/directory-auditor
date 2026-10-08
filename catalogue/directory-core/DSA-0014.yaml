@@ -46,6 +46,8 @@ remediation:
 attack:
 - id: T1003.006
   name: 'OS Credential Dumping: DCSync'
+anssi:
+- vuln_permissions_naming_context
 engine: complex:tier0_acl
 query_sketch:
   base: default

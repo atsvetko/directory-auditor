@@ -59,6 +59,10 @@ attack:
   name: Domain Trust Discovery
 - id: T1134.005
   name: 'Access Token Manipulation: SID-History Injection'
+anssi:
+- vuln_trusts_domain_notfiltered
+- vuln_trusts_forest_sidhistory
+- vuln_trusts_tgt_deleg
 engine: declarative
 query_sketch:
   base: CN=System,<default>

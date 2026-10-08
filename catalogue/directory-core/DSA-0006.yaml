@@ -48,6 +48,8 @@ attack:
   name: 'Use Alternate Authentication Material: Pass the Ticket'
 - id: T1098
   name: Account Manipulation
+anssi:
+- vuln_delegation_sourcedeleg
 engine: complex:sd_trustees
 query_sketch:
   base: default

@@ -43,6 +43,8 @@ attack:
   name: Steal or Forge Kerberos Tickets
 - id: T1550.002
   name: 'Use Alternate Authentication Material: Pass the Hash'
+anssi:
+- vuln_functional_level
 engine: declarative
 query_sketch:
   base: cn=dirauditor

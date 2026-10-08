@@ -50,6 +50,8 @@ attack:
   name: 'OS Credential Dumping: DCSync'
 - id: T1003.003
   name: 'OS Credential Dumping: NTDS'
+anssi:
+- vuln_reversible_password_priv_uac
 engine: declarative
 query_sketch:
   base: default

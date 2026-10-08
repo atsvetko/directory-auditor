@@ -38,10 +38,14 @@ type Entry struct {
 	Rationale   string            `yaml:"rationale"`
 	Remediation map[string]string `yaml:"remediation"`
 	Attack      []Technique       `yaml:"attack"`
-	Engine      string            `yaml:"engine"`
-	QuerySketch map[string]any    `yaml:"query_sketch"`
-	References  []Reference       `yaml:"references"`
-	Notes       string            `yaml:"notes"`
+	// ANSSI lists the CERT-FR "Points de contrôle Active Directory" this entry
+	// implements (CERTFR-2020-DUR-001), by identifier (vuln_…). See
+	// frameworks/anssi.yaml and ANSSI-COVERAGE.md.
+	ANSSI       []string       `yaml:"anssi"`
+	Engine      string         `yaml:"engine"`
+	QuerySketch map[string]any `yaml:"query_sketch"`
+	References  []Reference    `yaml:"references"`
+	Notes       string         `yaml:"notes"`
 
 	// Implementation, written alongside the spec so the engine can run and test
 	// the check before a pack exists. ConditionCEL is the pack condition; Expect
@@ -68,6 +72,7 @@ type Reference struct {
 var (
 	idRe     = regexp.MustCompile(`^DSA-[0-9]{4}$`)
 	attackRe = regexp.MustCompile(`^T[0-9]{4}(\.[0-9]{3})?$`)
+	anssiRe  = regexp.MustCompile(`^vuln_[a-z0-9_]+$`)
 	sev      = map[string]bool{"critical": true, "high": true, "medium": true, "low": true, "info": true}
 	status   = map[string]bool{"draft": true, "verified": true, "retired": true}
 	domains  = map[string]bool{"directory-core": true, "dns": true, "gpo": true, "pki": true, "kerberos": true, "credentials": true, "replication": true, "integrated-apps": true, "host": true, "freeipa": true, "samba": true}
@@ -122,6 +127,11 @@ func (e *Entry) Validate() error {
 			add("attack entry %q/%q invalid (want T1234 or T1234.001 with a name)", t.ID, t.Name)
 		}
 	}
+	for _, a := range e.ANSSI {
+		if !anssiRe.MatchString(a) {
+			add("anssi entry %q invalid (want an ANSSI control identifier such as vuln_krbtgt)", a)
+		}
+	}
 	if e.Engine == "" || !(e.Engine == "declarative" || strings.HasPrefix(e.Engine, "complex:")) {
 		add("engine must be 'declarative' or 'complex:<name>'")
 	}
@@ -161,7 +171,9 @@ func LoadFS(fsys fs.FS, display string) ([]Entry, error) {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() || !strings.HasSuffix(p, ".yaml") {
+		// Only DSA-NNNN.yaml files are entries; reference data such as
+		// frameworks/anssi.yaml lives beside them and is loaded separately.
+		if d.IsDir() || !strings.HasSuffix(p, ".yaml") || !strings.HasPrefix(path.Base(p), "DSA-") {
 			return nil
 		}
 		b, err := fs.ReadFile(fsys, p)
@@ -228,6 +240,9 @@ func (e Entry) Pack() (check.Pack, bool) {
 	}
 	for _, r := range e.References {
 		p.References = append(p.References, check.Reference{Title: r.Title, URL: r.URL})
+	}
+	if len(e.ANSSI) > 0 {
+		p.Compliance = map[string][]string{"ANSSI": append([]string(nil), e.ANSSI...)}
 	}
 	return p, true
 }

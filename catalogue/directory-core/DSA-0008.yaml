@@ -48,6 +48,8 @@ remediation:
 attack:
 - id: T1558.001
   name: 'Steal or Forge Kerberos Tickets: Golden Ticket'
+anssi:
+- vuln_krbtgt
 engine: declarative
 query_sketch:
   base: default

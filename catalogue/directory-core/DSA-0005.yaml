@@ -48,6 +48,9 @@ attack:
   name: 'Use Alternate Authentication Material: Pass the Ticket'
 - id: T1558
   name: Steal or Forge Kerberos Tickets
+anssi:
+- vuln_delegation_a2d2
+- vuln_delegation_t2a4d
 engine: complex:dc_hosts
 query_sketch:
   base: default

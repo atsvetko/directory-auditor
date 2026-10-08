@@ -46,6 +46,9 @@ remediation:
 attack:
 - id: T1134.005
   name: 'Access Token Manipulation: SID-History Injection'
+anssi:
+- vuln_sidhistory_dangerous
+- vuln_sidhistory_present
 engine: complex:sid_classify
 query_sketch:
   base: default

@@ -36,3 +36,12 @@ Every entry with `condition_cel` is also built into the binary (`embed.go` in th
 switched off with `--no-preview`. `TestEmbeddedMatchesWorkingTree` fails the build when the
 embedded copy and the working tree diverge. Verifying an entry (`status: verified`, `verified_by`)
 and signing its pack is what turns a preview into a real check; nothing else changes.
+
+## ANSSI mapping
+
+Each entry declares the ANSSI / CERT-FR *Points de contrôle Active Directory* it implements in its
+`anssi:` field. `frameworks/anssi.yaml` is the official index (CERTFR-2020-DUR-001, 76 points, levels
+1–4); `frameworks/anssi-plan.yaml` schedules the points not yet covered. `ANSSI-COVERAGE.md` is
+generated from both by `go run ./tools/anssimatrix`; CI fails if it is stale, if a tag names a point
+that does not exist, or if a point is neither implemented nor planned. Only identifiers and titles are
+taken from ANSSI — every check is written in our own words from primary sources.

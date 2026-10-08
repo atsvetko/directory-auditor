@@ -39,6 +39,8 @@ attack:
   name: 'Account Discovery: Domain Account'
 - id: T1589.003
   name: 'Gather Victim Identity Information: Employee Names'
+anssi:
+- vuln_dsheuristics_bad
 engine: declarative
 query_sketch:
   base: CN=Directory Service,CN=Windows NT,CN=Services,<config>

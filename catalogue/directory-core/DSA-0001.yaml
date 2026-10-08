@@ -43,6 +43,9 @@ remediation:
 attack:
 - id: T1558.004
   name: 'Steal or Forge Kerberos Tickets: AS-REP Roasting'
+anssi:
+- vuln_kerberos_properties_preauth
+- vuln_kerberos_properties_preauth_priv
 engine: declarative
 query_sketch:
   base: default

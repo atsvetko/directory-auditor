@@ -44,6 +44,9 @@ remediation:
 attack:
 - id: T1558.003
   name: 'Steal or Forge Kerberos Tickets: Kerberoasting'
+anssi:
+- vuln_kerberos_properties_deskey
+- vuln_kerberos_properties_encryption
 engine: declarative
 query_sketch:
   base: default

@@ -50,6 +50,8 @@ attack:
   name: 'Use Alternate Authentication Material: Pass the Ticket'
 - id: T1187
   name: Forced Authentication
+anssi:
+- vuln_delegation_t4d
 engine: declarative
 query_sketch:
   base: default

@@ -35,6 +35,8 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
       - name: go mod tidy is clean
         run: go mod tidy && git diff --exit-code go.mod go.sum
+      - name: ANSSI coverage matrix is up to date
+        run: go run ./tools/anssimatrix -check
 
   build:
     name: build ${{ matrix.goos }}/${{ matrix.goarch }}

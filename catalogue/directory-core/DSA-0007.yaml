@@ -51,6 +51,8 @@ attack:
   name: 'Use Alternate Authentication Material: Pass the Ticket'
 - id: T1550.002
   name: 'Use Alternate Authentication Material: Pass the Hash'
+anssi:
+- vuln_protected_users
 engine: complex:tier0_membership
 query_sketch:
   base: default
