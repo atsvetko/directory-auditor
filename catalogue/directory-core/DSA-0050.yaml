@@ -56,6 +56,6 @@ notes: >-
   Reads only the control word of the descriptor already collected for DSA-0016. On Samba AD DC the object exists
   but no propagation process applies it (DSA-0221).
 condition_cel: >-
-  obj.dn.lowerAscii().startsWith("cn=adminsdholder,cn=system,") && sd_readable(obj) && !sd_protected(obj)
+  obj.dn.lowerAscii().startsWith("cn=adminsdholder,cn=system,") && sd_readable(obj) && !sd_protected(obj) && !objattr("cn=rootdse,cn=dirauditor", "vendorName").lowerAscii().contains("samba")
 expect:
 - CN=AdminSDHolder,CN=System,DC=lab,DC=example
