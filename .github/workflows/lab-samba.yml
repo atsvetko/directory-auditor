@@ -64,7 +64,7 @@ jobs:
       - name: verify sealed scan
         run: |
           sudo chown -R "$USER" lab-seal
-          grep -q '"transport":"LDAP, Kerberos-sealed (no TLS)"' lab-seal/report.json || (echo "session was not Kerberos-sealed"; python3 -c "import json;print(json.load(open('lab-seal/report.json'))['inventory'].get('transport'))"; exit 1)
+          python3 -c "import json,sys; t=json.load(open('lab-seal/report.json'))['inventory'].get('transport',''); print('transport:', t); sys.exit(0 if t=='LDAP, Kerberos-sealed (no TLS)' else 1)"
           go run ./tools/lab/verify -report lab-seal/report.json -expect testdata/lab/samba-expect.yaml
 
       - name: samba log on failure
