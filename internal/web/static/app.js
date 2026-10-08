@@ -6,7 +6,7 @@
 const TOKEN = new URLSearchParams(location.search).get("t") || "";
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-let lang = "en", mode = "auto", scanMode = "fast", detected = null, result = null, conn = null, polling = null, info = null;
+let lang = "en", mode = "auto", scanMode = "fast", detected = null, result = null, conn = null, polling = null, info = null, library = null;
 
 async function api(path, body) {
   const opt = {method: body === undefined ? "GET" : "POST", headers: {"X-DA-Token": TOKEN}, cache: "no-store"};
@@ -68,14 +68,27 @@ const T = {
  skip_quick:["are not part of the fast scan","не входят в быстрое сканирование"], skip_error:["could not be evaluated","не удалось вычислить"],
  notread:["Not collected","Не собрано"],
  foot:["Generated read-only on this machine; nothing was sent anywhere. {n} objects, {q} LDAP searches, {t}. Snapshot SHA-256 {h}.","Создано в режиме только чтения на этой машине; ничего никуда не отправлялось. Объектов: {n}, LDAP-запросов: {q}, {t}. SHA-256 снимка {h}."],
- bye:["Directory Auditor has stopped. You can close this tab.","Directory Auditor остановлен. Вкладку можно закрыть."]
+ bye:["Directory Auditor has stopped. You can close this tab.","Directory Auditor остановлен. Вкладку можно закрыть."],
+ library:["Library","Библиотека"],
+ lib_title:["Check library","Библиотека проверок"],
+ lib_sub:["{n} checks across {d} directory types, mapped to MITRE ATT&CK and ANSSI. Reference only — nothing is run.","{n} проверок для {d} типов каталогов с сопоставлением MITRE ATT&CK и ANSSI. Только справка — ничего не выполняется."],
+ lib_close:["Close","Закрыть"],
+ lib_search:["Search checks…","Поиск проверок…"],
+ lib_allsev:["All severities","Все уровни"], lib_alldom:["All areas","Все области"], lib_allfw:["All frameworks","Все матрицы"],
+ lib_count:["{n} of {all} checks","{n} из {all} проверок"],
+ lib_obj:["Looks at","Проверяет"], lib_fix:["Remediation","Как исправить"], lib_fw:["Framework mapping","Сопоставление с матрицами"],
+ lib_refs:["References","Источники"], lib_draft:["draft","черновик"], lib_planned:["planned","в плане"],
+ lib_quick:["fast scan","быстрое"], lib_none:["No checks match.","Нет подходящих проверок."],
+ sev_critical:["critical","критический"], sev_high:["high","высокий"], sev_medium:["medium","средний"], sev_low:["low","низкий"], sev_info:["info","инфо"]
 };
 const t = (k, v) => { let s = (T[k] || [k, k])[lang === "ru" ? 1 : 0]; for (const x in (v || {})) s = s.split("{" + x + "}").join(v[x]); return s; };
 function applyLang() {
   document.querySelectorAll("[data-t]").forEach(el => { if (T[el.dataset.t]) el.textContent = t(el.dataset.t); });
+  document.querySelectorAll("[data-ph]").forEach(el => { if (T[el.dataset.ph]) el.placeholder = t(el.dataset.ph); });
   $("lang").textContent = lang === "ru" ? "EN" : "RU";
   document.documentElement.lang = lang;
   renderDetect(); renderInfo(); if (conn) renderConn(); if (result) renderResult();
+  if (library) { buildLibFilters(); renderLibrary(); }
 }
 function renderInfo() {
   if (!info) return;
@@ -242,6 +255,76 @@ function renderResult() {
 function openAll() { document.querySelectorAll("details.finding").forEach(d => d.open = true); }
 window.addEventListener("beforeprint", openAll);
 $("pdfbtn").addEventListener("click", () => { openAll(); window.print(); });
+
+/* ---------- library ---------- */
+const SEVORD = {critical:0, high:1, medium:2, low:3, info:4};
+function openLibrary() {
+  $("library").classList.remove("hidden");
+  if (library) { renderLibrary(); return; }
+  $("lib_rows").innerHTML = `<p class="hint">…</p>`;
+  api("/api/library").then(r => {
+    library = (r && r.ok) ? r.items : [];
+    buildLibFilters();
+    renderLibrary();
+  });
+}
+function closeLibrary() { $("library").classList.add("hidden"); }
+function buildLibFilters() {
+  const doms = [...new Set(library.map(x => x.domain))].sort();
+  const fws = [...new Set(library.flatMap(x => Object.keys(x.frameworks || {})))].sort();
+  const opt = (v, label) => `<option value="${esc(v)}">${esc(label)}</option>`;
+  const fill = (id, html) => { const el = $(id), v = el.value; el.innerHTML = html; el.value = v; };
+  fill("lib_sev", opt("", t("lib_allsev")) + ["critical","high","medium","low","info"].map(s => opt(s, t("sev_" + s))).join(""));
+  fill("lib_dom", opt("", t("lib_alldom")) + doms.map(d => opt(d, d)).join(""));
+  fill("lib_fw", opt("", t("lib_allfw")) + fws.map(f => opt(f, f)).join(""));
+}
+function renderLibrary() {
+  if (!library) return;
+  const q = ($("lib_q").value || "").toLowerCase().trim();
+  const fsev = $("lib_sev").value, fdom = $("lib_dom").value, ffw = $("lib_fw").value;
+  const doms = new Set(library.map(x => x.domain));
+  $("lib_sub").textContent = t("lib_sub", {n: library.length, d: doms.size});
+  const rows = library.filter(x => {
+    if (fsev && x.severity !== fsev) return false;
+    if (fdom && x.domain !== fdom) return false;
+    if (ffw && !(x.frameworks && x.frameworks[ffw])) return false;
+    if (q) {
+      const hay = (x.id + " " + (x.title.en || "") + " " + (x.title.ru || "") + " " + x.object + " " +
+        Object.values(x.frameworks || {}).flat().map(m => m.id + " " + (m.title || "")).join(" ")).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }).sort((a, b) => SEVORD[a.severity] - SEVORD[b.severity] || a.id.localeCompare(b.id));
+  $("lib_count").textContent = t("lib_count", {n: rows.length, all: library.length});
+  if (!rows.length) { $("lib_rows").innerHTML = `<p class="hint">${esc(t("lib_none"))}</p>`; return; }
+  const L = lang === "ru" ? "ru" : "en";
+  $("lib_rows").innerHTML = rows.map(x => {
+    const title = esc(x.title[L] || x.title.en || x.id);
+    const tags = [];
+    if (x.quick) tags.push(`<span class="tag">${esc(t("lib_quick"))}</span>`);
+    if (x.status === "draft") tags.push(`<span class="tag">${esc(t("lib_draft"))}</span>`);
+    if (!x.implemented) tags.push(`<span class="tag">${esc(t("lib_planned"))}</span>`);
+    const fwchips = Object.entries(x.frameworks || {}).map(([name, ms]) =>
+      `<div class="fwrow"><span class="fwname">${esc(name)}</span>${ms.map(m =>
+        `<a class="chip" href="${esc(m.url || "#")}" target="_blank" rel="noreferrer noopener" title="${esc(m.title || "")}">${esc(m.id)}${m.title ? " · " + esc(m.title) : ""}</a>`).join("")}</div>`).join("");
+    const refs = (x.references || []).map(r =>
+      `<a href="${esc(r.url)}" target="_blank" rel="noreferrer noopener">${esc(r.title)}</a>`).join(" · ");
+    return `<details class="libitem sev-${esc(x.severity)}">
+      <summary><span class="sevdot"></span><code>${esc(x.id)}</code><span class="libttl">${title}</span>
+        <span class="sevlbl">${esc(t("sev_" + x.severity))}</span>${tags.join("")}</summary>
+      <div class="libdet">
+        <p><b>${esc(t("lib_obj"))}:</b> ${esc(x.object)}</p>
+        <p><b>${esc(t("lib_fix"))}:</b> ${esc(x.remediation[L] || x.remediation.en || "")}</p>
+        ${fwchips ? `<div class="fwbox"><div class="fwh">${esc(t("lib_fw"))}</div>${fwchips}</div>` : ""}
+        ${refs ? `<p class="librefs"><b>${esc(t("lib_refs"))}:</b> ${refs}</p>` : ""}
+      </div></details>`;
+  }).join("");
+}
+$("librarybtn").addEventListener("click", openLibrary);
+$("lib_close").addEventListener("click", closeLibrary);
+$("library").addEventListener("click", e => { if (e.target === $("library")) closeLibrary(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeLibrary(); });
+["lib_q","lib_sev","lib_dom","lib_fw"].forEach(id => $(id).addEventListener("input", renderLibrary));
 
 /* ---------- chrome ---------- */
 $("lang").addEventListener("click", () => { lang = lang === "ru" ? "en" : "ru"; try { localStorage.setItem("da-lang", lang); } catch (e) {} applyLang(); });

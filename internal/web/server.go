@@ -32,6 +32,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/atsvetko/directory-auditor/internal/catalogue"
 	"github.com/atsvetko/directory-auditor/internal/check"
 	"github.com/atsvetko/directory-auditor/internal/doctor"
 	"github.com/atsvetko/directory-auditor/internal/local/smbconf"
@@ -177,6 +178,7 @@ func (s *Server) routes() http.Handler {
 		})
 	}
 	api("GET /api/info", s.info)
+	api("GET /api/library", s.library)
 	api("GET /api/detect", s.detect)
 	api("POST /api/connect", s.connect)
 	api("POST /api/scan", s.scan)
@@ -224,6 +226,19 @@ func (s *Server) tokenOK(r *http.Request) bool {
 		got = r.URL.Query().Get("t")
 	}
 	return subtle.ConstantTimeCompare([]byte(got), []byte(s.token)) == 1
+}
+
+// library serves the full check catalogue as reference data for the UI's
+// Library view: every check with its severity, remediation and framework
+// mappings (MITRE ATT&CK, ANSSI). It describes what the product can do and runs
+// nothing.
+func (s *Server) library(w http.ResponseWriter, _ *http.Request) {
+	items, err := catalogue.Library()
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true, "count": len(items), "items": items})
 }
 
 func (s *Server) info(w http.ResponseWriter, _ *http.Request) {

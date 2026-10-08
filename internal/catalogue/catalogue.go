@@ -72,8 +72,8 @@ type Technique struct {
 
 // Reference is a primary source.
 type Reference struct {
-	Title string `yaml:"title"`
-	URL   string `yaml:"url"`
+	Title string `yaml:"title" json:"title"`
+	URL   string `yaml:"url" json:"url"`
 }
 
 var (
@@ -297,4 +297,76 @@ func toPacks(entries []Entry) []check.Pack {
 		}
 	}
 	return out
+}
+
+// --- Library: the full catalogue as reference data for the UI ---------------
+
+// Mapping is one framework reference: a control/technique identifier and its
+// human title (ANSSI point, MITRE ATT&CK technique, …).
+type Mapping struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	URL   string `json:"url,omitempty"`
+}
+
+// LibraryItem is one catalogue entry flattened for display: what the check
+// looks at, how severe it is, how to fix it, and how it maps to each framework.
+type LibraryItem struct {
+	ID          string               `json:"id"`
+	Title       map[string]string    `json:"title"`
+	Domain      string               `json:"domain"`
+	Providers   []string             `json:"providers"`
+	Tier        int                  `json:"tier"`
+	Severity    string               `json:"severity"`
+	Quick       bool                 `json:"quick"`
+	Status      string               `json:"status"`
+	Implemented bool                 `json:"implemented"`
+	Object      string               `json:"object"`
+	Remediation map[string]string    `json:"remediation"` // en, ru (the fix)
+	Rationale   string               `json:"rationale"`
+	Frameworks  map[string][]Mapping `json:"frameworks"` // "MITRE ATT&CK", "ANSSI", …
+	References  []Reference          `json:"references"`
+}
+
+// Library returns every embedded catalogue entry as reference data, with each
+// entry's framework mappings resolved to titles. It is the source for the UI's
+// Library view; it does not run anything.
+func Library() ([]LibraryItem, error) {
+	entries, err := LoadFS(embedded.Files, "catalogue")
+	if err != nil {
+		return nil, err
+	}
+	anssi, _ := EmbeddedANSSI()
+	points := anssi.Index()
+	out := make([]LibraryItem, 0, len(entries))
+	for _, e := range entries {
+		providers := map[string][]string{"freeipa": {"freeipa"}, "samba": {"samba"}}[e.Domain]
+		if providers == nil {
+			providers = []string{"ad", "samba"}
+		}
+		fw := map[string][]Mapping{}
+		for _, a := range e.Attack {
+			fw["MITRE ATT&CK"] = append(fw["MITRE ATT&CK"], Mapping{
+				ID: a.ID, Title: a.Name,
+				URL: "https://attack.mitre.org/techniques/" + strings.Replace(a.ID, ".", "/", 1) + "/",
+			})
+		}
+		for _, id := range e.ANSSI {
+			m := Mapping{ID: id, URL: "https://www.cert.ssi.gouv.fr/dur/CERTFR-2020-DUR-001/"}
+			if p, ok := points[id]; ok {
+				m.Title = p.TitleEN
+			}
+			fw["ANSSI"] = append(fw["ANSSI"], m)
+		}
+		out = append(out, LibraryItem{
+			ID: e.ID, Title: e.Title, Domain: e.Domain, Providers: providers, Tier: e.Tier,
+			Severity: e.Severity, Quick: e.Quick, Status: e.Status,
+			Implemented: strings.TrimSpace(e.ConditionCEL) != "",
+			Object:      strings.TrimSpace(e.Object),
+			Remediation: map[string]string{"en": strings.TrimSpace(e.Remediation["en"]), "ru": strings.TrimSpace(e.Remediation["ru"])},
+			Rationale:   strings.TrimSpace(e.Rationale),
+			Frameworks:  fw, References: e.References,
+		})
+	}
+	return out, nil
 }

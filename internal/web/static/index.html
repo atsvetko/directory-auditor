@@ -15,7 +15,7 @@
     <button class="ptab" role="tab" data-go="scan" disabled><span class="num">2</span><span data-t="st2">Scan</span></button>
     <button class="ptab" role="tab" data-go="report" disabled><span class="num">3</span><span data-t="st3">Results</span></button>
   </nav>
-  <div class="hright"><button class="toggle" id="lang">RU</button><button class="toggle" id="theme" data-t="theme">Theme</button><button class="toggle" id="quit" data-t="quit">Quit</button></div>
+  <div class="hright"><button class="toggle" id="librarybtn" data-t="library">Library</button><button class="toggle" id="lang">RU</button><button class="toggle" id="theme" data-t="theme">Theme</button><button class="toggle" id="quit" data-t="quit">Quit</button></div>
 </header>
 
 <div class="wrap">
@@ -122,6 +122,24 @@
   </section>
  </div>
 </div>
+
+<div class="modal hidden" id="library" role="dialog" aria-modal="true" aria-labelledby="lib_h">
+  <div class="modalbox">
+    <div class="modalhdr">
+      <div><h2 id="lib_h" data-t="lib_title">Check library</h2><div class="sub" id="lib_sub"></div></div>
+      <button class="toggle" id="lib_close" data-t="lib_close">Close</button>
+    </div>
+    <div class="libfilter">
+      <input class="inp" id="lib_q" type="search" autocomplete="off" data-ph="lib_search">
+      <select class="inp" id="lib_sev"></select>
+      <select class="inp" id="lib_dom"></select>
+      <select class="inp" id="lib_fw"></select>
+    </div>
+    <div class="libcount mono" id="lib_count"></div>
+    <div class="libbody" id="lib_rows"></div>
+  </div>
+</div>
+
 <script src="/app.js"></script>
 </body>
 </html>
