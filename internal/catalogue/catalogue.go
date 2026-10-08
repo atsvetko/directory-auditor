@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -146,12 +147,12 @@ func (e *Entry) Validate() error {
 
 // LoadDir loads every entry under dir, validates each, and checks ID uniqueness.
 func LoadDir(dir string) ([]Entry, error) {
-	return LoadFS(os.DirFS(dir), dir)
+	return LoadFS(os.DirFS(dir), filepath.ToSlash(dir))
 }
 
 // LoadFS loads every *.yaml entry in fsys. display is prefixed to each
 // entry's Path for messages (the directory on disk, or "catalogue" for the
-// embedded copy).
+// embedded copy). Paths are slash-separated on every OS, as fs.FS paths are.
 func LoadFS(fsys fs.FS, display string) ([]Entry, error) {
 	var out []Entry
 	seen := map[string]string{}
@@ -167,7 +168,7 @@ func LoadFS(fsys fs.FS, display string) ([]Entry, error) {
 		if err != nil {
 			return err
 		}
-		shown := filepath.Join(display, filepath.FromSlash(p))
+		shown := path.Join(display, p)
 		var e Entry
 		dec := yaml.NewDecoder(strings.NewReader(string(b)))
 		dec.KnownFields(true)
