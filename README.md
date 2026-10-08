@@ -7,7 +7,7 @@ services around them: Active Directory, Samba AD DC (and therefore РЕД АДМ
 FreeIPA / ALD Pro, OpenLDAP and Microsoft Entra ID — plus DNS, Group Policy, PKI, Kerberos,
 credential management and integrated applications.
 
-> **Status: prototype (pre-alpha).** The binary evaluates 88 *preview checks* — the implemented
+> **Status: prototype (pre-alpha).** The binary evaluates 104 *preview checks* — the implemented
 > catalogue entries, built in, unsigned and not yet verified by a human (status `draft`). Reports
 > label them; treat findings as leads to confirm. Signed packs replace them one by one as entries
 > are verified. The catalogue is written *before* any check code, on purpose — see
@@ -100,7 +100,7 @@ read must show as "not collected". The lab scripts refuse to run without `DIRAUD
 
 Signed packs are written only from catalogue entries a human has verified, so today there are
 none. Until there are, every build carries the implemented catalogue entries as **preview checks**
-(`catalogue/embed.go`): 44 directory-core, 23 FreeIPA and 21 Samba entries, each tested against
+(`catalogue/embed.go`): 60 directory-core, 23 FreeIPA and 21 Samba entries, each tested against
 the synthetic labs and, for Samba and FreeIPA, against the real labs above. The wizard, the HTML
 report and `report.json` (`preview_checks`, per-check `preview: true`) all say so; the Tier-0
 inventory ("who controls the domain, and why") does not depend on any check.

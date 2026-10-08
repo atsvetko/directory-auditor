@@ -12,13 +12,13 @@ sources; this page only maps identifiers. A point is **covered** when an entry d
 
 | ANSSI level | Points | Covered | Partial | Covered + partial |
 |---|---:|---:|---:|---:|
-| 1 | 37 | 22 | 3 | 68% |
-| 2 | 18 | 9 | 0 | 50% |
+| 1 | 37 | 23 | 2 | 68% |
+| 2 | 18 | 10 | 0 | 56% |
 | 3 | 17 | 5 | 2 | 41% |
 | 4 | 4 | 1 | 0 | 25% |
-| **All** | **76** | **37** | **5** | **55%** |
+| **All** | **76** | **39** | **4** | **57%** |
 
-Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 16 · wave 3 (level-3/4) 15 · wave 4 (AD CS) 6 · wave 5 (DNS) 2.
+Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 14 · wave 3 (level-3/4) 15 · wave 4 (AD CS) 6 · wave 5 (DNS) 2.
 
 ## Control points
 
@@ -36,7 +36,7 @@ Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 16 · wave 
 | 1 | `vuln_delegation_t2a4d` | Constrained delegation with protocol transition to a privileged service | ✅ covered | DSA-0005 |
 | 1 | `vuln_delegation_t4d` | Unconstrained authentication delegation | ✅ covered | DSA-0004 |
 | 1 | `vuln_display_specifier` | Dangerous Display Specifiers | ⬜ planned | wave 2 — needs CN=DisplaySpecifiers in the configuration partition |
-| 1 | `vuln_dnsadmins` | Dangerous permissions on the DnsAdmins group | 🟡 partial | DSA-0027 — wave 2: DSA-0027 covers membership; ANSSI also checks who can change the group (its ACL) |
+| 1 | `vuln_dnsadmins` | Dangerous permissions on the DnsAdmins group | ✅ covered | DSA-0027, DSA-0059 |
 | 1,3 | `vuln_dnszone_bad_prop` | Misconfigured DNS zones | ⬜ planned | wave 5 — needs DNS application partitions (DomainDnsZones/ForestDnsZones) and dNSProperty decoding |
 | 1 | `vuln_dont_expire_priv` | Privileged accounts with never-expiring passwords | ✅ covered | DSA-0009 |
 | 1,2,3 | `vuln_dsheuristics_bad` | Dangerous dsHeuristics settings | 🟡 partial | DSA-0025 — wave 2: DSA-0025 covers anonymous operations; other dangerous dSHeuristics flags to add (MS-ADTS) |
@@ -45,14 +45,14 @@ Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 16 · wave 
 | 1 | `vuln_password_change_dc_no_change` | Domain controllers with passwords unchanged for more than 45 days | ✅ covered | DSA-0032 |
 | 1 | `vuln_password_change_inactive_dc` | Inactive domain controllers | ✅ covered | DSA-0033 |
 | 1 | `vuln_password_change_priv` | Privileged account passwords age too old | ✅ covered | DSA-0009 |
-| 1,2 | `vuln_permissions_adminsdholder` | Dangerous permissions on the adminSDHolder object | ✅ covered | DSA-0016 |
+| 1,2 | `vuln_permissions_adminsdholder` | Dangerous permissions on the adminSDHolder object | ✅ covered | DSA-0016, DSA-0050 |
 | 1,2 | `vuln_permissions_dc` | Dangerous ACLs expose domain controller objects (attack path) | ✅ covered | DSA-0015 |
 | 1,2 | `vuln_permissions_dfsr_sysvol` | Dangerous ACLs expose DFSR settings objects of the SYSVOL share (attack path) | ⬜ planned | wave 4 — needs DFSR settings objects of the SYSVOL replication group |
 | 1,2 | `vuln_permissions_dpapi` | Dangerous ACLs expose DPAPI key objects (attack path) | ⬜ planned | wave 2 — needs DPAPI backup-key objects (CN=BCKUPKEY_*,CN=System) and their DACLs |
 | 1,2 | `vuln_permissions_gmsa_keys` | Dangerous ACLs expose gMSA key objects (attack path) | ⬜ planned | wave 2 — needs KDS root keys (Group Key Distribution Service, configuration partition) |
 | 1 | `vuln_permissions_gpo_priv` | Dangerous ACLs expose GPOs applied to privileged group members (attack path) | ⬜ planned | wave 2 — needs groupPolicyContainer objects and their DACLs |
 | 1 | `vuln_permissions_msdns` | Dangerous ACLs expose MicrosoftDNS server objects (attack path) | ⬜ planned | wave 5 — needs MicrosoftDNS server and zone objects and their DACLs |
-| 1,2 | `vuln_permissions_naming_context` | Dangerous ACLs expose a naming context root (attack path) | ✅ covered | DSA-0014, DSA-0015 |
+| 1,2 | `vuln_permissions_naming_context` | Dangerous ACLs expose a naming context root (attack path) | ✅ covered | DSA-0014, DSA-0015, DSA-0049 |
 | 1,2 | `vuln_permissions_schema` | Dangerous ACLs expose schema objects (attack path) | ⬜ planned | wave 4 — needs schema partition objects and their DACLs |
 | 1 | `vuln_primary_group_id_1000` | Accounts with PrimaryGroupID lower than 1000 | ✅ covered | DSA-0034 |
 | 1,2 | `vuln_privileged_members` | Large privileged group member count | ✅ covered | DSA-0035 |
@@ -72,7 +72,7 @@ Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 16 · wave 
 | 2 | `vuln_password_change_cluster_no_change_3years` | Windows server cluster accounts with passwords unchanged for more than 3 years | ⬜ planned | wave 2 — cluster name objects identified by their SPNs |
 | 2 | `vuln_password_change_msa_no_change_90` | Managed service accounts with passwords unchanged for more than 90 days | ⬜ planned | wave 2 — needs managed service accounts (msDS-ManagedServiceAccount / msDS-GroupManagedServiceAccount) |
 | 2 | `vuln_password_change_server_no_change_90` | Servers with passwords unchanged for more than 90 days | ✅ covered | DSA-0043 |
-| 2 | `vuln_permissions_gpo_container_priv` | Dangerous ACLs expose privileged object containers (attack path) | ⬜ planned | wave 2 — needs DACLs of OUs and containers holding privileged objects |
+| 2 | `vuln_permissions_gpo_container_priv` | Dangerous ACLs expose privileged object containers (attack path) | ✅ covered | DSA-0058 |
 | 2 | `vuln_privileged_members_no_admincount` | Privileged groups members having an adminCount attribute which is null or 0 | ✅ covered | DSA-0040, DSA-0221 |
 | 2 | `vuln_privileged_members_password` | Privileged group members with weak password policy | ⬜ planned | wave 2 — needs fine-grained password policies (msDS-PasswordSettings) and their targets |
 | 2 | `vuln_rodc_priv_revealed` | Privileged users revealed on RODC | ⬜ planned | wave 2 — needs RODC revealed lists (msDS-RevealedList) |

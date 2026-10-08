@@ -1,0 +1,53 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0053
+title:
+  en: Weak explicit certificate mappings
+  ru: Нестойкие явные сопоставления сертификатов
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'All accounts: altSecurityIdentities'
+attributes:
+- altSecurityIdentities
+- sAMAccountName
+condition: >-
+  An account has an X509: mapping in altSecurityIdentities that contains none of the strong forms <SR> (issuer and
+  serial number), <SKI> or <SHA1-PUKEY>; that is, it maps by issuer and subject, subject only, or RFC 822 e-mail
+  name.
+threshold: any occurrence
+rationale: >-
+  Weak mappings identify the certificate only by names that a certification authority can issue again to someone
+  else. Anyone able to obtain a certificate with the same subject or e-mail name — through an enrolment template
+  that lets requesters supply it, or a rename of their own account — can log on as the mapped account. Microsoft
+  classifies these formats as weak and is phasing out their acceptance under full enforcement mode.
+remediation:
+  en: >-
+    Replace each weak mapping with X509IssuerSerialNumber, X509SKI or X509SHA1PublicKey, or remove it if certificate
+    logon is not used for the account. Move domain controllers to full enforcement mode once no weak mapping remains.
+  ru: >-
+    Замените каждое нестойкое сопоставление форматом X509IssuerSerialNumber, X509SKI или X509SHA1PublicKey либо
+    удалите его, если вход по сертификату для учётной записи не используется. Когда нестойких сопоставлений не останется,
+    переведите контроллеры домена в режим полного применения.
+attack:
+- id: T1649
+  name: Steal or Forge Authentication Certificates
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=user)
+references:
+- title: >-
+    Microsoft Support — KB5014754: Certificate-based authentication changes on Windows domain controllers
+  url: https://support.microsoft.com/help/5014754
+notes: Severity applies to any account; the Tier-0 subset is also reported by DSA-0052.
+condition_cel: >-
+  attrs(obj, "altSecurityIdentities").exists(m, m.lowerAscii().startsWith("x509:") && !m.upperAscii().contains("<SR>")
+  && !m.upperAscii().contains("<SKI>") && !m.upperAscii().contains("<SHA1-PUKEY>"))
+expect:
+- CN=svc_backup,CN=Users,DC=lab,DC=example

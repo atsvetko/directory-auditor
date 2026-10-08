@@ -17,12 +17,10 @@
 plan:
 # --- wave 1 — done (DSA-0030…0044) -------------------------------------------------------------------
 # --- wave 2 -------------------------------------------------------------------------------------------
-- {id: vuln_dnsadmins,                       status: partial, wave: 2, note: "DSA-0027 covers membership; ANSSI also checks who can change the group (its ACL)"}
 - {id: vuln_dsheuristics_bad,                status: partial, wave: 2, note: "DSA-0025 covers anonymous operations; other dangerous dSHeuristics flags to add (MS-ADTS)"}
 - {id: vuln_functional_level,                status: partial, wave: 2, note: "DSA-0024 covers the domain level; forest level to add from rootDSE"}
 - {id: vuln_display_specifier,               status: collect, wave: 2, needs: "CN=DisplaySpecifiers in the configuration partition"}
 - {id: vuln_permissions_gpo_priv,            status: collect, wave: 2, needs: "groupPolicyContainer objects and their DACLs"}
-- {id: vuln_permissions_gpo_container_priv,  status: collect, wave: 2, needs: "DACLs of OUs and containers holding privileged objects"}
 - {id: vuln_permissions_dpapi,               status: collect, wave: 2, needs: "DPAPI backup-key objects (CN=BCKUPKEY_*,CN=System) and their DACLs"}
 - {id: vuln_permissions_gmsa_keys,           status: collect, wave: 2, needs: "KDS root keys (Group Key Distribution Service, configuration partition)"}
 - {id: vuln_dc_crypto,                       status: gap,     wave: 2, note: "msDS-SupportedEncryptionTypes on DC accounts (extends DSA-0012)"}

@@ -228,7 +228,11 @@ func EvaluateWith(snap *snapshot.Snapshot, packs []Pack, opts EvalOptions) (*Res
 	defer evalMu.Unlock()
 	t0 := tier0.ResolveFor(snap.Meta.Provider, snap.Objects, snap.Meta.DomainSID)
 	currentTier0, currentIndex, currentBase = t0, indexSnapshot(snap), snap.Meta.BaseDN
-	defer func() { currentTier0, currentIndex, currentSIDs, currentBase = nil, nil, nil, "" }()
+	currentT0Parents = tier0Parents(t0.DNs())
+	defer func() {
+		currentTier0, currentIndex, currentSIDs, currentBase = nil, nil, nil, ""
+		currentSchemaGUIDs, currentT0Parents, currentHosts, currentDNSDomain = nil, nil, nil, ""
+	}()
 	now := snap.Collected.Unix()
 	inv := Inventory{Objects: len(snap.Objects), Collected: snap.Collected, Identity: snap.Meta.Identity,
 		Transport: snap.Meta.Extra["transport"], Unencrypted: snap.Meta.Extra["encrypted"] == "false",

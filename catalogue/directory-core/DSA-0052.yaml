@@ -1,0 +1,56 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0052
+title:
+  en: Tier-0 accounts with explicit certificate mappings
+  ru: Учётные записи нулевого уровня с явным сопоставлением сертификатов
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'Tier-0 users and computers: altSecurityIdentities'
+attributes:
+- altSecurityIdentities
+- sAMAccountName
+condition: >-
+  A Tier-0 account has at least one X509: value in altSecurityIdentities, i.e. a certificate is explicitly mapped
+  to it for smart-card or PKINIT logon.
+threshold: any occurrence
+rationale: >-
+  An explicit mapping lets whoever holds the matching certificate authenticate as the account without its password,
+  and it survives password resets. On a privileged account it is a durable backdoor that most reviews never look
+  at; with a weak mapping format (DSA-0053) the attacker does not even need the original certificate, only one that
+  matches the mapped names.
+remediation:
+  en: >-
+    Confirm each mapping belongs to a documented smart-card deployment for that administrator. Remove any other
+    value, and convert legitimate ones to a strong format (issuer and serial number, SKI or SHA1 public key) per
+    KB5014754.
+  ru: >-
+    Убедитесь, что каждое сопоставление относится к задокументированному внедрению смарт-карт для этого администратора.
+    Удалите остальные значения, а законные переведите в стойкий формат (издатель и серийный номер, SKI или SHA1
+    открытого ключа) в соответствии с KB5014754.
+attack:
+- id: T1649
+  name: Steal or Forge Authentication Certificates
+- id: T1098
+  name: Account Manipulation
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=user)
+references:
+- title: >-
+    Microsoft Support — KB5014754: Certificate-based authentication changes on Windows domain controllers
+  url: https://support.microsoft.com/help/5014754
+- title: Microsoft Learn — Alt-Security-Identities attribute
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-altsecurityidentities
+notes: 'Kerberos: (non-certificate) mappings are not counted.'
+condition_cel: >-
+  tier0(obj) && attrs(obj, "altSecurityIdentities").exists(m, m.lowerAscii().startsWith("x509:"))
+expect:
+- CN=svc_backup,CN=Users,DC=lab,DC=example

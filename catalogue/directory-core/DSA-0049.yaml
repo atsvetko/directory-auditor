@@ -1,0 +1,55 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0049
+title:
+  en: Right to add domain controllers granted outside Tier 0
+  ru: Право добавлять контроллеры домена выдано за пределами нулевого уровня
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The domain naming-context head and its security descriptor
+attributes:
+- nTSecurityDescriptor
+condition: >-
+  An effective allow ACE on the domain head grants the extended right Add/Remove Replica In Domain (DS-Install-Replica,
+  rights GUID 9923a32a-3607-11d2-b9be-0000f87a36b2) to a principal that is not Tier 0. Grants of all extended rights
+  (empty object type) are reported by DSA-0014 and DSA-0015.
+threshold: any occurrence
+rationale: >-
+  This right is what allows a computer to be promoted to, or to act as, a replica of the domain. Combined with write
+  access to a computer account it lets the holder turn that account into a domain controller, which can then request
+  every secret through replication. It belongs only to the administrators who build domain controllers.
+remediation:
+  en: >-
+    Remove the ACE. Promote domain controllers with Tier-0 accounts, and for read-only domain controllers use staged
+    (pre-created) RODC accounts with a delegated installer instead of a standing permission on the domain head.
+  ru: >-
+    Удалите ACE. Повышайте серверы до контроллеров домена учётными записями нулевого уровня, а для контроллеров
+    домена только для чтения используйте заранее созданные учётные записи RODC с делегированным установщиком вместо
+    постоянного права на корне домена.
+attack:
+- id: T1207
+  name: Rogue Domain Controller
+anssi:
+- vuln_permissions_naming_context
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=domainDNS)
+references:
+- title: Microsoft Learn — DS-Install-Replica extended right (Add/Remove Replica In Domain)
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/r-ds-install-replica
+- title: MITRE ATT&CK — T1207 Rogue Domain Controller
+  url: https://attack.mitre.org/techniques/T1207/
+notes: >-
+  SELF and CREATOR OWNER trustees are ignored; Tier-0 trustees include SYSTEM and Enterprise Domain Controllers.
+condition_cel: >-
+  sd_readable(obj) && aces(obj).exists(a, a.allow && a.effective && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10",
+  "S-1-3-0"]) && mask_has(a.mask, 0x100) && a.object_type == "9923a32a-3607-11d2-b9be-0000f87a36b2")
+expect:
+- DC=lab,DC=example

@@ -37,12 +37,14 @@ func TestSyntheticLab(t *testing.T) {
 	for _, want := range []string{"CN=Administrator" + base, "CN=svc_backup" + base, "CN=krbtgt" + base, "CN=DC01" + dcs,
 		// ANSSI wave 1 objects, Tier 0 through their primary group: three DC
 		// accounts (Domain Controllers, 516) and hidden.da (Domain Admins, 512).
-		"CN=OLDDC" + dcs, "CN=STALEDC" + dcs, "CN=BADDC" + dcs, "CN=hidden.da" + base} {
+		"CN=OLDDC" + dcs, "CN=STALEDC" + dcs, "CN=BADDC" + dcs, "CN=hidden.da" + base,
+		// Wave 2a: a member server nested in Tier0 Ops (DSA-0047).
+		"CN=SQL01,OU=Servers,DC=lab,DC=example"} {
 		if !dns(0)[want] {
 			t.Errorf("T-1: %s not Tier 0; got %v", want, dns(0))
 		}
 	}
-	if len(dns(0)) != 8 {
+	if len(dns(0)) != 9 {
 		t.Errorf("T-1: unexpected Tier-0 users %v", dns(0))
 	}
 	if d := dns(1); len(d) != 1 || !d["CN=old.admin"+base] {

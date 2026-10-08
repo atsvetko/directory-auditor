@@ -1,0 +1,55 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0054
+title:
+  en: Constrained delegation to a service no account owns
+  ru: Ограниченное делегирование службе, которой не владеет ни одна учётная запись
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Accounts with msDS-AllowedToDelegateTo
+attributes:
+- msDS-AllowedToDelegateTo
+- sAMAccountName
+condition: >-
+  A value of msDS-AllowedToDelegateTo names a host in this domain's DNS namespace (or a short name) that matches
+  no collected account — no dNSHostName, no computer sAMAccountName and no servicePrincipalName host. Hosts in other
+  DNS domains are not judged.
+threshold: any occurrence
+rationale: >-
+  Constrained delegation lets the account obtain tickets to the listed services on behalf of any user. When the
+  target host no longer exists, the entry is dead configuration with a live consequence: anyone who can create a
+  computer with that name, or register the SPN on an account they control, receives tickets delegated by this account
+  for any user, including administrators.
+remediation:
+  en: >-
+    Remove the stale entries from msDS-AllowedToDelegateTo. Where the service moved, point the delegation at its
+    current host. Keep the machine-account quota at 0 (DSA-0013) so ordinary users cannot claim the freed name.
+  ru: >-
+    Удалите устаревшие значения из msDS-AllowedToDelegateTo. Если служба переехала, укажите в делегировании её текущий
+    узел. Установите квоту на создание учётных записей компьютеров равной 0 (DSA-0013), чтобы обычные пользователи
+    не могли занять освободившееся имя.
+attack:
+- id: T1558
+  name: Steal or Forge Kerberos Tickets
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=user)
+references:
+- title: Microsoft Learn — Kerberos constrained delegation overview
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/security/kerberos/kerberos-constrained-delegation-overview
+- title: Microsoft Learn — msDS-AllowedToDelegateTo attribute
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-msds-allowedtodelegateto
+notes: >-
+  Host aliases served through DNS CNAMEs are reported when no account carries the alias as an SPN; such entries
+  still fail Kerberos and deserve review.
+condition_cel: attrs(obj, "msDS-AllowedToDelegateTo").exists(s, !spn_known(s))
+expect:
+- CN=svc_print,CN=Users,DC=lab,DC=example

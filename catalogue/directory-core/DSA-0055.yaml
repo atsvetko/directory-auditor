@@ -1,0 +1,60 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0055
+title:
+  en: Group managed service account passwords readable by broad or non-Tier-0 principals
+  ru: >-
+    Пароли групповых управляемых учётных записей служб доступны широкому кругу или субъектам вне нулевого уровня
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'Group managed service accounts: msDS-GroupMSAMembership'
+attributes:
+- msDS-GroupMSAMembership
+- sAMAccountName
+condition: >-
+  The security descriptor in msDS-GroupMSAMembership allows password retrieval to Everyone, Anonymous, Authenticated
+  Users, BUILTIN\Users, Domain Users or Domain Computers; or the gMSA is Tier 0 and it allows retrieval to a principal
+  that is not Tier 0.
+threshold: any occurrence
+rationale: >-
+  Any principal allowed by msDS-GroupMSAMembership can read the gMSA's current password over an encrypted LDAP session
+  and act as the account. The list is meant to name the few hosts that run the service. A broad group turns every
+  user or every computer into a holder of that credential; a non-Tier-0 reader of a privileged gMSA is a direct
+  escalation.
+remediation:
+  en: >-
+    Replace broad entries with a dedicated group that contains only the hosts running the service. For a Tier-0
+    gMSA, allow only Tier-0 hosts, or remove the gMSA from privileged groups and grant it scoped rights.
+  ru: >-
+    Замените широкие группы выделенной группой, в которую входят только узлы, где работает служба. Для групповой
+    управляемой учётной записи нулевого уровня разрешите получение пароля только узлам нулевого уровня либо исключите
+    её из привилегированных групп и выдайте ей ограниченные права.
+attack:
+- id: T1552
+  name: Unsecured Credentials
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=msDS-GroupManagedServiceAccount)
+references:
+- title: Microsoft Learn — MS-ADTS 3.1.1.4.5.39 msDS-ManagedPassword
+  url: >-
+    https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/9cd2fc5e-7305-4fb8-b233-2a60bc3eec68
+- title: Microsoft Learn — Group Managed Service Accounts overview
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/group-managed-service-accounts/group-managed-service-accounts/group-managed-service-accounts-overview
+notes: >-
+  Shares the managed-service-account collection with the ANSSI wave-2 MSA points. The descriptor is read as returned
+  to the auditing account; when it is not readable the check does not fire.
+condition_cel: >-
+  aces_of(obj, "msDS-GroupMSAMembership").exists(a, a.allow && ((a.trustee in ["S-1-1-0", "S-1-5-7", "S-1-5-11",
+  "S-1-5-32-545"] || (a.trustee.startsWith("S-1-5-21-") && sid_rid(a.trustee) in [513, 515])) || (tier0(obj) &&
+  !a.trustee_tier0)))
+expect:
+- CN=gmsa-web,CN=Managed Service Accounts,DC=lab,DC=example

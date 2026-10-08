@@ -1,0 +1,62 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0046
+title:
+  en: Group Policy Creator Owners or Cert Publishers hold unexpected members
+  ru: В группах Group Policy Creator Owners или Cert Publishers есть непредусмотренные участники
+domain: directory-core
+tier: 0
+severity: low
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The domain groups Group Policy Creator Owners (RID 520) and Cert Publishers (RID 517)
+attributes:
+- member
+- sAMAccountName
+- objectSid
+condition: >-
+  Group Policy Creator Owners has a member that is not Tier 0 (the built-in Administrator is a default member and
+  is Tier 0), or Cert Publishers has a member that is neither a computer account nor Tier 0. Members that were not
+  collected are reported, because their nature cannot be confirmed.
+threshold: any occurrence
+rationale: >-
+  Neither group is privileged in the usual sense, which is why both are overlooked. Members of Group Policy Creator
+  Owners can create Group Policy objects and own the ones they create; a GPO that a later administrator links to
+  an OU or to the domain then runs the creator's settings on every computer in scope. Cert Publishers is meant for
+  certification authority computer accounts and can publish certificates to user objects and to PKI containers;
+  a user account in it can tamper with published certificate material.
+remediation:
+  en: >-
+    Remove the reported members. Create GPOs through Tier-0 administrators or a delegated GPO-management process,
+    and keep Cert Publishers limited to the computer accounts of enterprise certification authorities.
+  ru: >-
+    Удалите найденных участников. Создавайте объекты групповой политики силами администраторов нулевого уровня или
+    через делегированный процесс управления групповыми политиками, а в Cert Publishers оставляйте только учётные
+    записи компьютеров корпоративных центров сертификации.
+attack:
+- id: T1484.001
+  name: 'Domain or Tenant Policy Modification: Group Policy Modification'
+- id: T1649
+  name: Steal or Forge Authentication Certificates
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=group)
+references:
+- title: 'Microsoft Learn — Appendix B: Privileged Accounts and Groups in Active Directory'
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-b--privileged-accounts-and-groups-in-active-directory
+- title: MITRE ATT&CK — T1484.001 Group Policy Modification
+  url: https://attack.mitre.org/techniques/T1484/001/
+notes: >-
+  DHCP Administrators has no fixed RID and is not evaluated here. The evidence lists all members; the condition
+  only decides whether the group is reported.
+condition_cel: >-
+  attr(obj, "objectSid").startsWith("S-1-5-21-") && ((sid_rid(attr(obj, "objectSid")) == 520 && attrs(obj, "member").exists(m,
+  !tier0_sid(objattr(m, "objectSid")))) || (sid_rid(attr(obj, "objectSid")) == 517 && attrs(obj, "member").exists(m,
+  !tier0_sid(objattr(m, "objectSid")) && !objattrs(m, "objectClass").exists(c, c.lowerAscii() == "computer"))))
+expect:
+- CN=Group Policy Creator Owners,CN=Users,DC=lab,DC=example

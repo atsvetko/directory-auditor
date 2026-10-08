@@ -1,0 +1,62 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0047
+title:
+  en: Computer accounts that are members of privileged groups
+  ru: Учётные записи компьютеров в привилегированных группах
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Computer accounts other than domain controllers and managed service accounts
+attributes:
+- sAMAccountName
+- memberOf
+- operatingSystem
+- userAccountControl
+condition: >-
+  A computer account that is not a domain controller (neither SERVER_TRUST_ACCOUNT 0x2000 nor PARTIAL_SECRETS_ACCOUNT
+  0x4000000 is set) and not a managed service account is Tier 0 through the member attribute of a privileged group,
+  directly or nested.
+threshold: any occurrence
+rationale: >-
+  A computer account acts with the privileges of its groups whenever any code runs as SYSTEM or NETWORK SERVICE
+  on that machine. Putting a member server or workstation in a privileged group therefore makes every local administrator
+  and every service exploit on it a path to domain control, and extends Tier 0 to a host that is not managed as
+  Tier 0.
+remediation:
+  en: >-
+    Remove the computer account from the privileged group and grant the application only the specific rights it
+    needs. If the host truly needs Tier-0 rights, manage it as a Tier-0 system: restricted administrators, hardened
+    configuration, and the same monitoring as a domain controller.
+  ru: >-
+    Исключите учётную запись компьютера из привилегированной группы и выдайте приложению только необходимые права.
+    Если узлу действительно нужны права нулевого уровня, управляйте им как системой нулевого уровня: ограниченный
+    круг администраторов, усиленная конфигурация и такой же контроль, как для контроллера домена.
+attack:
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=computer)
+references:
+- title: Microsoft Learn — Enterprise access model (privileged access)
+  url: >-
+    https://learn.microsoft.com/en-us/security/privileged-access-workstations/privileged-access-access-model
+- title: 'Microsoft Learn — Appendix C: Protected Accounts and Groups in Active Directory'
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory
+notes: >-
+  Domain controllers are Tier 0 through their primary group and are excluded; group managed and standalone managed
+  service accounts are left to the service-account checks.
+condition_cel: >-
+  obj.class.exists(c, c.lowerAscii() == "computer") && !obj.class.exists(c, c.lowerAscii() in ["msds-groupmanagedserviceaccount",
+  "msds-managedserviceaccount"]) && tier0(obj) && obj.tier0_reason.contains(" > ") && !obj.tier0_reason.endsWith("(primary
+  group)") && !flags(obj, "userAccountControl", 8192) && !flags(obj, "userAccountControl", 67108864)
+expect:
+- CN=SQL01,OU=Servers,DC=lab,DC=example

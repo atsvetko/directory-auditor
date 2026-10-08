@@ -1,0 +1,61 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0048
+title:
+  en: Principals from another domain or forest in privileged groups
+  ru: Субъекты другого домена или леса в привилегированных группах
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Tier-0 groups and their member attribute
+attributes:
+- member
+- sAMAccountName
+condition: >-
+  A Tier-0 group has a direct member that is a foreign security principal for a domain SID (CN=S-1-5-21-…,CN=ForeignSecurityPrincipals,…),
+  i.e. a user or group of a trusted external domain or forest.
+threshold: any occurrence
+rationale: >-
+  A foreign security principal places the security of this domain in the hands of another one: whoever controls
+  the trusted domain controls the account, its password and the membership of a foreign group. A compromise there
+  becomes domain control here, outside the reach of this domain's administrators and monitoring, and SID filtering
+  on the trust does not help because the membership is granted on purpose.
+remediation:
+  en: >-
+    Remove the foreign principal from the privileged group. Administer this domain with accounts that belong to
+    it; if cross-forest administration is unavoidable, document it, restrict it to a dedicated administrative forest
+    and treat the trusted domain as part of Tier 0.
+  ru: >-
+    Исключите субъект другого домена из привилегированной группы. Администрируйте домен учётными записями этого
+    же домена; если межлесное администрирование неизбежно, задокументируйте его, ограничьте выделенным административным
+    лесом и относите доверенный домен к нулевому уровню.
+attack:
+- id: T1199
+  name: Trusted Relationship
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=group)
+references:
+- title: 'Microsoft Learn — Appendix C: Protected Accounts and Groups in Active Directory'
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory
+- title: Microsoft Learn — Security considerations for trusts
+  url: >-
+    https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2003/cc755321(v=ws.10)
+notes: >-
+  Well-known SIDs (S-1-5-x other than S-1-5-21-…) such as Authenticated Users also appear as foreign security principals
+  and are not reported here. The trusted domain is named by its SID; resolve it against the trusts collected for
+  DSA-0018.
+condition_cel: >-
+  tier0(obj) && obj.class.exists(c, c.lowerAscii() == "group") && attrs(obj, "member").exists(m, m.lowerAscii().startsWith("cn=s-1-5-21-")
+  && m.lowerAscii().contains(",cn=foreignsecurityprincipals,"))
+expect:
+- CN=Administrators,CN=Builtin,DC=lab,DC=example

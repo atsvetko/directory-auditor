@@ -143,3 +143,31 @@ func TestTimeOf(t *testing.T) {
 		t.Errorf("FILETIME epoch = %v %v", tm, ok)
 	}
 }
+
+func TestWave2aHelpers(t *testing.T) {
+	if got := parentDN(`CN=a\,b,OU=x,DC=lab,DC=example`); got != "OU=x,DC=lab,DC=example" {
+		t.Errorf("parentDN escaped comma: %q", got)
+	}
+	p := tier0Parents([]string{"cn=t0,ou=groups,dc=lab,dc=example"})
+	if !p["ou=groups,dc=lab,dc=example"] || !p["dc=lab,dc=example"] || p["cn=t0,ou=groups,dc=lab,dc=example"] {
+		t.Errorf("tier0Parents: %v", p)
+	}
+	if d := dnsDomainOf("OU=x,DC=Lab,DC=Example"); d != "lab.example" {
+		t.Errorf("dnsDomainOf: %q", d)
+	}
+	currentHosts = map[string]bool{"fs01.lab.example": true, "fs01": true, "sql02": true}
+	currentDNSDomain = "lab.example"
+	defer func() { currentHosts, currentDNSDomain = nil, "" }()
+	for spn, want := range map[string]bool{
+		"cifs/fs01.lab.example":           true,
+		"MSSQLSvc/SQL02.lab.example:1433": true, // short name of a computer account
+		"cifs/oldfs.lab.example":          false,
+		"cifs/oldfs":                      false,
+		"http/web.partner.example":        true, // other DNS domain: not judged
+		"nonsense":                        true,
+	} {
+		if got := spnKnown(spn); got != want {
+			t.Errorf("spnKnown(%q) = %v, want %v", spn, got, want)
+		}
+	}
+}

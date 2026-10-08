@@ -1,0 +1,56 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0060
+title:
+  en: Seamless SSO account key not rolled over in 30 days
+  ru: Ключ учётной записи Seamless SSO не обновлялся более 30 дней
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The computer account that represents Microsoft Entra ID for Seamless Single Sign-On
+attributes:
+- sAMAccountName
+- pwdLastSet
+condition: >-
+  A computer account named AZUREADSSOACC$ (or AZUREADSSO$) has a password — the Kerberos key shared with Microsoft
+  Entra ID — last set more than 30 days before collection.
+threshold: any occurrence
+rationale: >-
+  Seamless SSO works by having on-premises domain controllers issue service tickets to this account, which Entra
+  ID decrypts with the same key. Anyone who obtains the key can forge tickets for any synchronised user and sign
+  in to Entra ID as them, and the key does not rotate by itself. Microsoft recommends rolling it over at least every
+  30 days.
+remediation:
+  en: >-
+    Roll over the key with Update-AzureADSSOForest (once per forest per rollover), schedule the rollover at least
+    every 30 days, and treat the account as Tier 0: move it to a protected OU and restrict who can change it.
+  ru: >-
+    Обновите ключ командой Update-AzureADSSOForest (один раз на лес при каждом обновлении), запланируйте обновление
+    не реже раза в 30 дней и относите учётную запись к нулевому уровню: переместите её в защищённое подразделение
+    и ограничьте круг тех, кто может её изменять.
+attack:
+- id: T1558.002
+  name: 'Steal or Forge Kerberos Tickets: Silver Ticket'
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=computer)
+references:
+- title: 'Microsoft Learn — Microsoft Entra Seamless SSO: frequently asked questions (key rollover)'
+  url: https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-sso-faq
+- title: MITRE ATT&CK — T1558.002 Silver Ticket
+  url: https://attack.mitre.org/techniques/T1558/002/
+notes: >-
+  Only relevant to hybrid estates that use Seamless SSO; the check does not fire when the account is absent. The
+  account name is AZUREADSSOACC$ in deployed forests; Microsoft's documentation calls it the AZUREADSSO computer
+  account.
+condition_cel: >-
+  attr(obj, "sAMAccountName").lowerAscii() in ["azureadssoacc$", "azureadsso$"] && age_days(obj, "pwdLastSet") >
+  30
+expect:
+- CN=AZUREADSSOACC,CN=Computers,DC=lab,DC=example

@@ -1,0 +1,55 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0051
+title:
+  en: Enterprise Key Admins hold full control of the domain
+  ru: Группа Enterprise Key Admins имеет полный доступ к домену
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The domain naming-context head and its security descriptor
+attributes:
+- nTSecurityDescriptor
+condition: >-
+  An allow ACE on the domain head grants full control (GenericAll, or all standard and directory rights 0xF01FF)
+  with no object type to a SID whose RID is 527 (Enterprise Key Admins, including the unresolvable domain-relative
+  -527 SID that early Windows Server 2016 preparation wrote in non-root domains).
+threshold: any occurrence
+rationale: >-
+  Enterprise Key Admins only needs to manage the msDS-KeyCredentialLink attribute used by Windows Hello for Business
+  key trust. The Windows Server 2016 domain preparation granted it full control of the whole domain instead; Microsoft
+  corrected this in a later preparation step that replaces the grant with an ACE scoped to that attribute. Where
+  the correction never ran, membership of Enterprise Key Admins — usually a quiet, rarely reviewed group — is full
+  control of the domain.
+remediation:
+  en: >-
+    Run the current domain preparation (adprep /domainprep from a supported Windows Server version), or replace
+    the ACE manually with a grant of Read/Write Property on msDS-KeyCredentialLink only. Remove any bogus domain-relative
+    -527 ACE in non-root domains.
+  ru: >-
+    Выполните актуальную подготовку домена (adprep /domainprep из поддерживаемой версии Windows Server) или вручную
+    замените ACE правом чтения и записи только атрибута msDS-KeyCredentialLink. Удалите ошибочный ACE с относительным
+    SID -527 в некорневых доменах.
+attack:
+- id: T1098
+  name: Account Manipulation
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=domainDNS)
+references:
+- title: Microsoft Learn — Domain-wide updates (adprep operations 85, 87 and 89)
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/deploy/domain-wide-updates
+notes: >-
+  Enterprise Key Admins is Tier 0 in our model, so DSA-0015 does not report this ACE; this check reports the over-broad
+  default itself.
+condition_cel: >-
+  sd_readable(obj) && aces(obj).exists(a, a.allow && a.trustee.startsWith("S-1-5-21-") && sid_rid(a.trustee) ==
+  527 && a.object_type == "" && (mask_has(a.mask, 0x10000000) || mask_has(a.mask, 0xF01FF)))
+expect:
+- DC=lab,DC=example

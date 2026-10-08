@@ -33,8 +33,8 @@ type Query struct {
 
 var (
 	sidAttrs  = []string{"objectSid", "sIDHistory", "securityIdentifier", "ms-DS-CreatorSID"}
-	guidAttrs = []string{"objectGUID"}
-	sdAttrs   = []string{"nTSecurityDescriptor", "msDS-AllowedToActOnBehalfOfOtherIdentity"}
+	guidAttrs = []string{"objectGUID", "schemaIDGUID"}
+	sdAttrs   = []string{"nTSecurityDescriptor", "msDS-AllowedToActOnBehalfOfOtherIdentity", "msDS-GroupMSAMembership"}
 )
 
 var accountAttrs = []string{
@@ -46,6 +46,8 @@ var accountAttrs = []string{
 	// Readable free-text and credential-bearing attributes (DSA-0028): secrets
 	// are routinely parked in these where any authenticated user can read them.
 	"description", "info", "comment", "userPassword", "unixUserPassword", "ms-Mcs-AdmPwd",
+	// Explicit certificate mappings (DSA-0052, DSA-0053).
+	"altSecurityIdentities",
 }
 
 // Plan is the tier-0 (ordinary user) collection plan.
@@ -59,8 +61,8 @@ var Plan = []Query{
 		Attrs:   accountAttrs,
 		Purpose: "account flags, SPNs, delegation, password age, SID history (DSA-0001…0012, 0017, 0019)"},
 	{Name: "computers", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(sAMAccountType=805306369)", Classes: []string{"computer"},
-		Attrs:   append(append([]string{}, accountAttrs...), "operatingSystem", "operatingSystemVersion", "dNSHostName", "ms-DS-CreatorSID"),
-		Purpose: "delegation, RBCD, DCs, machine-account creators (DSA-0004…0006, 0013)"},
+		Attrs:   append(append([]string{}, accountAttrs...), "operatingSystem", "operatingSystemVersion", "dNSHostName", "ms-DS-CreatorSID", "msDS-GroupMSAMembership"),
+		Purpose: "delegation, RBCD, DCs, machine-account creators, gMSA password readers (DSA-0004…0006, 0013, 0055)"},
 	{Name: "groups", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(objectClass=group)", Classes: []string{"group"},
 		Attrs:   []string{"objectClass", "sAMAccountName", "objectSid", "objectGUID", "sIDHistory", "member", "groupType", "adminCount", "whenChanged"},
 		Purpose: "Tier-0 membership resolution (catalogue/TIER0.md)"},
@@ -76,6 +78,22 @@ var Plan = []Query{
 	{Name: "ds-heuristics", Base: "CN=Directory Service,CN=Windows NT,CN=Services,<config>", Scope: ldapx.ScopeBase, Filter: "(objectClass=*)", Classes: []string{"nTDSService"},
 		Attrs:   []string{"objectClass", "dSHeuristics", "tombstoneLifetime", "whenChanged"},
 		Purpose: "directory-wide switches such as anonymous LDAP operations (DSA-0025)"},
+	{Name: "dnsadmins-sd", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(&(objectClass=group)(sAMAccountName=DnsAdmins))", SD: true,
+		Attrs:   []string{"objectClass", "sAMAccountName"},
+		Purpose: "who can change DnsAdmins membership (DSA-0059)"},
+	{Name: "ou-sd", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(objectClass=organizationalUnit)", SD: true, Classes: []string{"organizationalUnit"},
+		Attrs:   []string{"objectClass", "gPLink", "gPOptions", "whenChanged"},
+		Purpose: "GPO-link and control rights on OUs holding Tier-0 objects, LAPS read delegation (DSA-0056, DSA-0058)"},
+	{Name: "container-sd", Base: "default", Scope: ldapx.ScopeOneLevel, Filter: "(objectClass=container)", SD: true, Classes: []string{"container"},
+		Attrs:   []string{"objectClass", "whenChanged"},
+		Purpose: "control rights on top-level containers holding Tier-0 objects (DSA-0056, DSA-0058)"},
+	{Name: "sites", Base: "CN=Sites,<config>", Scope: ldapx.ScopeOneLevel, Filter: "(objectClass=site)", SD: true, Classes: []string{"site"},
+		Attrs:   []string{"objectClass", "gPLink", "gPOptions", "whenChanged"},
+		Purpose: "who can link GPOs to AD sites (DSA-0058)"},
+	{Name: "schema-laps", Base: "<schema>", Scope: ldapx.ScopeOneLevel, Classes: []string{"attributeSchema"},
+		Filter:  "(|(lDAPDisplayName=ms-Mcs-AdmPwd)(lDAPDisplayName=msLAPS-Password)(lDAPDisplayName=msLAPS-EncryptedPassword)(lDAPDisplayName=msLAPS-EncryptedPasswordHistory)(lDAPDisplayName=msLAPS-EncryptedDSRMPassword)(lDAPDisplayName=msLAPS-EncryptedDSRMPasswordHistory))",
+		Attrs:   []string{"objectClass", "lDAPDisplayName", "searchFlags", "schemaIDGUID"},
+		Purpose: "LAPS password attributes: confidentiality flag and schema GUIDs for ACL matching (DSA-0056, DSA-0057)"},
 	{Name: "protected-sd", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(adminCount=1)", SD: true,
 		Attrs:   []string{"objectClass"},
 		Purpose: "ACLs and inheritance state of protected objects (DSA-0015, DSA-0019)"},
@@ -141,10 +159,10 @@ func collect(ctx context.Context, c searcher, meta snapshot.Meta, progress func(
 	}
 	sdSeen := map[string]bool{}
 
-	configNC := root["configurationNamingContext"]
+	configNC, schemaNC := root["configurationNamingContext"], root["schemaNamingContext"]
 	for _, q := range Plan {
 		progress("reading " + q.Name)
-		entries, err := run(ctx, c, q, resolveBase(q.Base, base, configNC))
+		entries, err := run(ctx, c, q, resolveBase(q.Base, base, configNC, schemaNC))
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil, err
@@ -224,16 +242,21 @@ func run(ctx context.Context, c searcher, q Query, base string) ([]ldapx.Entry, 
 	return c.SearchWith(ctx, base, q.Scope, q.Filter, attrs, opts)
 }
 
-func resolveBase(b, defaultNC, configNC string) string {
+func resolveBase(b, defaultNC, configNC, schemaNC string) string {
+	if configNC == "" {
+		configNC = "CN=Configuration," + defaultNC
+	}
+	if schemaNC == "" {
+		schemaNC = "CN=Schema," + configNC
+	}
 	switch {
 	case b == "default":
 		return defaultNC
 	case b == "":
 		return ""
+	case b == "<schema>":
+		return schemaNC
 	case strings.HasSuffix(b, "<config>"):
-		if configNC == "" {
-			configNC = "CN=Configuration," + defaultNC
-		}
 		return strings.TrimSuffix(b, "<config>") + configNC
 	}
 	return b + "," + defaultNC

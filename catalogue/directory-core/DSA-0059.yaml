@@ -1,0 +1,63 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0059
+title:
+  en: DnsAdmins membership can be changed outside Tier 0
+  ru: Состав группы DnsAdmins могут изменять субъекты вне нулевого уровня
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The DnsAdmins group and its security descriptor
+attributes:
+- nTSecurityDescriptor
+- sAMAccountName
+condition: >-
+  An allow ACE on the DnsAdmins group grants a principal that is not Tier 0 (SELF and CREATOR OWNER excluded) full
+  control, WriteDacl, WriteOwner, GenericWrite, write to all properties, or write to the member attribute (schema
+  GUID bf9679c0-0de6-11d0-a285-00aa003049e2).
+threshold: any occurrence
+rationale: >-
+  Membership of DnsAdmins leads to code execution as SYSTEM on domain controllers that run DNS (DSA-0027). Anyone
+  who can add members to the group therefore holds the same path, one step removed — and because DnsAdmins is not
+  a protected group, such rights are not reset by AdminSDHolder and often come from broad delegations on the container
+  that holds it.
+remediation:
+  en: >-
+    Remove the reported ACEs, and grant group-management delegations on the container in a way that excludes DnsAdmins.
+    Treat DnsAdmins as a Tier-0 group: move it to a Tier-0 OU and monitor changes to its membership and permissions.
+  ru: >-
+    Удалите найденные ACE, а делегирование управления группами на контейнере настройте так, чтобы оно не распространялось
+    на DnsAdmins. Относите DnsAdmins к группам нулевого уровня: переместите её в подразделение нулевого уровня и
+    отслеживайте изменения её состава и разрешений.
+attack:
+- id: T1098
+  name: Account Manipulation
+- id: T1574.001
+  name: 'Hijack Execution Flow: DLL'
+anssi:
+- vuln_dnsadmins
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=group)
+references:
+- title: Microsoft Learn — Active Directory security groups (DnsAdmins)
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups
+- title: Microsoft Learn — member attribute
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-member
+notes: >-
+  Together with DSA-0027 (membership) this covers the ANSSI DnsAdmins point. The group is matched by name because
+  it has no fixed RID.
+condition_cel: >-
+  attr(obj, "sAMAccountName").lowerAscii() == "dnsadmins" && sd_readable(obj) && aces(obj).exists(a, a.allow &&
+  !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"]) && ((mask_has(a.mask, 0x10000000) || mask_has(a.mask,
+  0xF01FF) || mask_has(a.mask, 0x40000) || mask_has(a.mask, 0x80000) || mask_has(a.mask, 0x40000000)) || (mask_has(a.mask,
+  0x20) && (a.object_type == "" || a.object_type == "bf9679c0-0de6-11d0-a285-00aa003049e2"))))
+expect:
+- CN=DnsAdmins,CN=Users,DC=lab,DC=example

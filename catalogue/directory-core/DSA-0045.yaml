@@ -1,0 +1,68 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0045
+title:
+  en: Built-in operator groups have members
+  ru: Во встроенных группах операторов есть участники
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  The built-in Account Operators, Server Operators, Print Operators and Backup Operators groups
+attributes:
+- member
+- sAMAccountName
+- objectSid
+condition: >-
+  One of the built-in groups S-1-5-32-548 (Account Operators), S-1-5-32-549 (Server Operators), S-1-5-32-550 (Print
+  Operators) or S-1-5-32-551 (Backup Operators) has at least one direct member.
+threshold: any occurrence
+rationale: >-
+  These groups predate the modern delegation model and carry rights on domain controllers: Server Operators administer
+  DCs, Backup Operators can read any file there (including the directory database) and restore files, Print Operators
+  can load device drivers on DCs, and Account Operators manage most accounts and groups. Each is therefore equivalent
+  to domain control, yet they are rarely watched as closely as Domain Admins. Delegated, task-specific permissions
+  replace every legitimate use, so a member is either a forgotten delegation or a privileged account hiding in plain
+  sight.
+remediation:
+  en: >-
+    Remove every member and delegate the underlying task instead: scoped OU permissions for account management,
+    the backup product's own service identity for backups, and Tier-0 administrators for DC maintenance. If a member
+    must stay, treat it as a Tier-0 account (separate admin account, privileged access workstation) and monitor
+    the group's membership.
+  ru: >-
+    Удалите всех участников и делегируйте нужную задачу иначе: ограниченными правами на подразделения для управления
+    учётными записями, собственной служебной учётной записью продукта резервного копирования для резервного копирования,
+    администраторами нулевого уровня для обслуживания контроллеров домена. Если участник должен остаться, обращайтесь
+    с ним как с учётной записью нулевого уровня (отдельная административная учётная запись, защищённая рабочая станция
+    администратора) и отслеживайте изменения состава группы.
+attack:
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+- id: T1098
+  name: Account Manipulation
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=group)
+references:
+- title: 'Microsoft Learn — Appendix B: Privileged Accounts and Groups in Active Directory'
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-b--privileged-accounts-and-groups-in-active-directory
+- title: 'Microsoft Learn — Appendix C: Protected Accounts and Groups in Active Directory'
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory
+- title: 'MITRE ATT&CK — T1078.002 Valid Accounts: Domain Accounts'
+  url: https://attack.mitre.org/techniques/T1078/002/
+notes: >-
+  Complements DSA-0035 (any Tier-0 group above 10 members): these four groups are expected to be empty, so any member
+  is reported. Members are listed in the evidence; nested and primary-group members are not expanded here.
+condition_cel: >-
+  attr(obj, "objectSid") in ["S-1-5-32-548", "S-1-5-32-549", "S-1-5-32-550", "S-1-5-32-551"] && hasattr(obj, "member")
+expect:
+- CN=Backup Operators,CN=Builtin,DC=lab,DC=example

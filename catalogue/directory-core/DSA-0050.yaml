@@ -1,0 +1,61 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0050
+title:
+  en: AdminSDHolder inherits permissions from its parent
+  ru: Объект AdminSDHolder наследует разрешения от родительского контейнера
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: CN=AdminSDHolder,CN=System and the control flags of its security descriptor
+attributes:
+- nTSecurityDescriptor
+condition: >-
+  The DACL of CN=AdminSDHolder,CN=System is not protected: the SE_DACL_PROTECTED control flag is clear, so the object
+  accepts inheritable ACEs from CN=System and the domain head.
+threshold: any occurrence
+rationale: >-
+  AdminSDHolder is the template whose permissions are stamped on every protected account and group. By default its
+  DACL is protected from inheritance, so only ACEs placed on the template itself reach privileged objects. With
+  inheritance enabled, any inheritable permission granted on the domain or on CN=System — including broad delegations
+  made for unrelated reasons — flows into the template and from there onto every administrator account at the next
+  propagation.
+remediation:
+  en: >-
+    Disable inheritance on AdminSDHolder while keeping its explicit ACEs, then compare them with the default and
+    remove any additions (see DSA-0016). Review recent changes to the object, as re-enabling inheritance is a known
+    persistence technique.
+  ru: >-
+    Отключите наследование на AdminSDHolder с сохранением явных ACE, затем сравните их со значениями по умолчанию
+    и удалите добавленные (см. DSA-0016). Проверьте недавние изменения объекта: повторное включение наследования
+    — известный приём закрепления.
+attack:
+- id: T1098
+  name: Account Manipulation
+- id: T1222.001
+  name: >-
+    File and Directory Permissions Modification: Windows File and Directory Permissions Modification
+anssi:
+- vuln_permissions_adminsdholder
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=container)
+references:
+- title: 'Microsoft Learn — Appendix C: Protected Accounts and Groups in Active Directory'
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory
+- title: MITRE ATT&CK — T1098 Account Manipulation
+  url: https://attack.mitre.org/techniques/T1098/
+notes: >-
+  Reads only the control word of the descriptor already collected for DSA-0016. On Samba AD DC the object exists
+  but no propagation process applies it (DSA-0221).
+condition_cel: >-
+  obj.dn.lowerAscii().startsWith("cn=adminsdholder,cn=system,") && sd_readable(obj) && !sd_protected(obj)
+expect:
+- CN=AdminSDHolder,CN=System,DC=lab,DC=example

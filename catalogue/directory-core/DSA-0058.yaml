@@ -1,0 +1,76 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0058
+title:
+  en: GPO links or containers of Tier-0 objects controllable outside Tier 0
+  ru: >-
+    Привязкой групповых политик или контейнерами объектов нулевого уровня могут управлять субъекты вне нулевого
+    уровня
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  Security descriptors of AD sites, the domain head and every OU or top-level container that holds a Tier-0 object
+attributes:
+- nTSecurityDescriptor
+- gPLink
+condition: >-
+  An allow ACE grants a principal that is not Tier 0 (SELF and CREATOR OWNER excluded): (a) write access to gPLink
+  or gPOptions on a site or on a container that holds Tier-0 objects (the domain head and the Domain Controllers
+  OU included); or (b) on such a container other than the domain head and the Domain Controllers OU (which DSA-0015
+  covers), full control, WriteDacl, WriteOwner, GenericWrite or write to all properties.
+threshold: any occurrence
+rationale: >-
+  Whoever can link a GPO to a container, or to the site of a domain controller, decides which policy runs on the
+  objects in it — on computers as SYSTEM. Whoever controls the container itself can grant themselves inheritable
+  rights over everything below it that is not protected from inheritance, such as nested privileged groups and their
+  members. Both are paths to Tier 0 that membership reviews do not show.
+remediation:
+  en: >-
+    Remove the reported ACEs. Keep Tier-0 objects in dedicated OUs administered only by Tier 0, and delegate GPO
+    linking only on OUs that hold no Tier-0 objects. Review site permissions, since a site link applies to every
+    domain controller in the site.
+  ru: >-
+    Удалите найденные ACE. Размещайте объекты нулевого уровня в выделенных подразделениях, которыми управляют только
+    администраторы нулевого уровня, а привязку групповых политик делегируйте только на подразделения без объектов
+    нулевого уровня. Проверьте разрешения на сайты: привязка к сайту действует на все контроллеры домена этого сайта.
+attack:
+- id: T1484.001
+  name: 'Domain or Tenant Policy Modification: Group Policy Modification'
+- id: T1222.001
+  name: >-
+    File and Directory Permissions Modification: Windows File and Directory Permissions Modification
+anssi:
+- vuln_permissions_gpo_container_priv
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: >-
+    (|(objectClass=organizationalUnit)(objectClass=container)(objectClass=domainDNS)(objectClass=site))
+references:
+- title: Microsoft Learn — GP-Link attribute (gPLink)
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-gplink
+- title: Microsoft Learn — GP-Options attribute (gPOptions)
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-gpoptions
+- title: Microsoft Learn — Enterprise access model (privileged access)
+  url: >-
+    https://learn.microsoft.com/en-us/security/privileged-access-workstations/privileged-access-access-model
+notes: >-
+  A container holds Tier-0 objects when a Tier-0 object's DN lies below it. Only top-level containers (one level
+  under the domain head) and OUs are collected; the Builtin container is a builtinDomain object and is not read.
+  Inherit-only ACEs count because they reach unprotected Tier-0 children.
+condition_cel: >-
+  sd_readable(obj) && (obj.class.exists(c, c.lowerAscii() == "site") || holds_tier0(obj)) && aces(obj).exists(a,
+  a.allow && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"]) && ((mask_has(a.mask, 0x20) && a.object_type
+  in ["f30e3bbe-9ff0-11d1-b603-0000f80367c1", "f30e3bbf-9ff0-11d1-b603-0000f80367c1"]) || (obj.dn.lowerAscii() !=
+  obj.base.lowerAscii() && !obj.dn.lowerAscii().startsWith("ou=domain controllers,") && ((mask_has(a.mask, 0x10000000)
+  || mask_has(a.mask, 0xF01FF) || mask_has(a.mask, 0x40000) || mask_has(a.mask, 0x80000) || mask_has(a.mask, 0x40000000))
+  || (mask_has(a.mask, 0x20) && a.object_type == "")))))
+expect:
+- CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=lab,DC=example
+- OU=Groups,DC=lab,DC=example

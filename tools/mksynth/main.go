@@ -69,7 +69,9 @@ func main() {
 		"lockoutDuration": {"-18000000000"}, "lockOutObservationWindow": {"-18000000000"}, "msDS-Behavior-Version": {"7"},
 		"nTSecurityDescriptor": {sd(false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""},
 			ace{dom + "-1105", 0x00000100, "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"}, // DSA-0014: j.doe has Get-Changes-All
-			ace{"S-1-5-9", 0x00000100, "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"})},   // Enterprise DCs: expected
+			ace{"S-1-5-9", 0x00000100, "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"},     // Enterprise DCs: expected
+			ace{dom + "-1201", 0x00000100, "9923a32a-3607-11d2-b9be-0000f87a36b2"}, // DSA-0049: Helpdesk may add replicas (DCs)
+			ace{dom + "-527", 0x000F01FF, ""})},                                    // DSA-0051: 2016-era full control for Enterprise Key Admins
 	})
 	add("CN=Directory Service,CN=Windows NT,CN=Services,CN=Configuration,"+base, []string{"top", "nTDSService"},
 		map[string][]string{"dSHeuristics": {"0000000"}, "tombstoneLifetime": {"180"}})
@@ -79,7 +81,8 @@ func main() {
 		extra                map[string][]string
 	}{
 		{"Administrator", "Built-in account for administering the domain", "66048", "500", 900, nil},
-		{"svc_backup", "backup service; password in wiki", "66048", "1104", 2400, map[string][]string{"servicePrincipalName": {"backup/fs01.lab.example"}, "adminCount": {"1"}}},
+		{"svc_backup", "backup service; password in wiki", "66048", "1104", 2400, map[string][]string{"servicePrincipalName": {"backup/fs01.lab.example"}, "adminCount": {"1"},
+			"altSecurityIdentities": {"X509:<I>DC=example,DC=lab,CN=lab-CA<S>CN=svc_backup"}}}, // DSA-0052 (Tier-0 mapping) + DSA-0053 (weak issuer+subject form)
 		{"j.doe", "", "512", "1105", 40, nil},
 		{"m.smith", "", "514", "1106", 400, nil},
 		{"old.admin", "", "512", "1107", 700, map[string][]string{"adminCount": {"1"}, "nTSecurityDescriptor": {sd(true, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-1201", 0x000F01FF, ""})}}}, // DSA-0019 (orphaned adminCount) + DSA-0029 (Helpdesk GenericAll over a protected, non-Tier-0 object)
@@ -98,6 +101,8 @@ func main() {
 		{"hidden.da", "", "1049088", "1117", 10, map[string][]string{"primaryGroupID": {"512"}}},      // DSA-0034/0044: primary group = Domain Admins (NOT_DELEGATED keeps DSA-0007 quiet)
 		{"dormant.user", "", "512", "1118", 30, map[string][]string{"lastLogonTimestamp": {ft(400)}}}, // DSA-0036: no logon for 400 days
 		{"Guest", "", "512", "501", 30, map[string][]string{"primaryGroupID": {"514"}}},               // DSA-0042: built-in Guest enabled
+		// Wave 2a (DSA-0045…0060)
+		{"svc_print", "", "512", "1119", 20, map[string][]string{"msDS-AllowedToDelegateTo": {"cifs/oldfs.lab.example"}}}, // DSA-0054: delegation to a host no account owns
 	}
 	for _, u := range users {
 		attrs := map[string][]string{"sAMAccountName": {u.name}, "userAccountControl": {u.uac}, "pwdLastSet": {ft(u.pwdAge)},
@@ -116,16 +121,19 @@ func main() {
 		members   []string
 		sd        string
 	}{
-		{"Administrators", "S-1-5-32-544", []string{"CN=Domain Admins,CN=Users," + base, "CN=Administrator,CN=Users," + base}, ""},
+		{"Administrators", "S-1-5-32-544", []string{"CN=Domain Admins,CN=Users," + base, "CN=Administrator,CN=Users," + base,
+			"CN=S-1-5-21-9-8-7-1500,CN=ForeignSecurityPrincipals," + base}, ""}, // DSA-0048: a partner-forest principal in Administrators
 		{"Domain Admins", dom + "-512", []string{"CN=Tier0 Ops,OU=Groups," + base},
 			sd(true, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""}, ace{dom + "-1201", 0x00040000, ""})},
 		{"Protected Users", dom + "-525", nil, ""},
-		{"Tier0 Ops", dom + "-1200", []string{"CN=svc_backup,CN=Users," + base}, ""},
+		{"Tier0 Ops", dom + "-1200", []string{"CN=svc_backup,CN=Users," + base, "CN=SQL01,OU=Servers," + base}, ""}, // DSA-0047: a member server in a Tier-0 group
 		{"Helpdesk", dom + "-1201", []string{"CN=j.doe,CN=Users," + base}, ""},
 		{"Domain Controllers", dom + "-516", nil, ""},
 		{"Backup Operators", "S-1-5-32-551", oversized(base), ""}, // DSA-0035: 11 direct members (members are placeholders, not collected)
 		{"Pre-Windows 2000 Compatible Access", "S-1-5-32-554", []string{"CN=S-1-5-7,CN=ForeignSecurityPrincipals," + base, "CN=S-1-5-11,CN=ForeignSecurityPrincipals," + base}, ""}, // DSA-0038/0039: Anonymous added
-		{"DnsAdmins", dom + "-1101", []string{"CN=j.doe,CN=Users," + base}, ""},                                                                                                     // DSA-0027: DLL-load to SYSTEM on the DC
+		{"DnsAdmins", dom + "-1101", []string{"CN=j.doe,CN=Users," + base}, // DSA-0027: DLL-load to SYSTEM on the DC; DSA-0059: Helpdesk can write member
+			sd(false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""}, ace{dom + "-1201", 0x00000020, "bf9679c0-0de6-11d0-a285-00aa003049e2"})},
+		{"Group Policy Creator Owners", dom + "-520", []string{"CN=Administrator,CN=Users," + base, "CN=j.doe,CN=Users," + base}, ""}, // DSA-0046: a non-Tier-0 GPO creator
 	}
 	for _, g := range groups {
 		attrs := map[string][]string{"sAMAccountName": {g.name}, "objectSid": {g.sid}, "description": {g.name + " (synthetic)"}}
@@ -134,7 +142,9 @@ func main() {
 		}
 		if g.sd != "" {
 			attrs["nTSecurityDescriptor"] = []string{g.sd}
-			attrs["adminCount"] = []string{"1"}
+			if g.name == "Domain Admins" {
+				attrs["adminCount"] = []string{"1"}
+			}
 		}
 		dn := fmt.Sprintf("CN=%s,CN=Users,%s", g.name, base)
 		if g.name == "Tier0 Ops" || g.name == "Helpdesk" {
@@ -162,6 +172,8 @@ func main() {
 		{"STALEDC", "OU=Domain Controllers", "1004", "516", "Windows Server 2022 Datacenter", "532480", 200, 200}, // DSA-0032 password 200 d, DSA-0033 no logon 200 d
 		{"BADDC", "OU=Domain Controllers", "1005", "516", "Windows Server 2022 Datacenter", "4096", 5, 3},         // DSA-0030 primary group 516 without SERVER_TRUST_ACCOUNT
 		{"FS01", "OU=Servers", "1006", "515", "Windows Server 2022 Standard", "4096", 200, 3},                     // DSA-0043 server password 200 d
+		{"SQL01", "OU=Servers", "1007", "515", "Windows Server 2022 Standard", "4096", 5, 3},                      // DSA-0047 (member of Tier0 Ops)
+		{"AZUREADSSOACC", "CN=Computers", "1009", "515", "", "4096", 120, 120},                                    // DSA-0060 Seamless SSO key 120 d old
 	} {
 		add(fmt.Sprintf("CN=%s,%s,%s", c.name, c.ou, base), computer, map[string][]string{
 			"sAMAccountName": {c.name + "$"}, "objectSid": {dom + "-" + c.rid}, "primaryGroupID": {c.pg}, "sAMAccountType": {"805306369"},
@@ -172,13 +184,29 @@ func main() {
 		map[string][]string{"sAMAccountName": {"WS01$"}, "objectSid": {dom + "-1002"}, "primaryGroupID": {"515"}, "sAMAccountType": {"805306369"},
 			"userAccountControl": {"4096"}, "pwdLastSet": {ft(5)}, "ms-DS-CreatorSID": {dom + "-1105"}})
 	// DSA-0016: AdminSDHolder with a WriteDacl ACE for Helpdesk
+	// DSA-0050: inheritance left enabled on AdminSDHolder
 	add("CN=AdminSDHolder,CN=System,"+base, []string{"top", "container"}, map[string][]string{
-		"nTSecurityDescriptor": {sd(true, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""}, ace{dom + "-1201", 0x00040000, ""})}})
+		"nTSecurityDescriptor": {sd(false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""}, ace{dom + "-1201", 0x00040000, ""})}})
 	// DSA-0018: a forest trust with SID filtering relaxed, and a disabled stale trust
 	add("CN=partner.example,CN=System,"+base, []string{"top", "leaf", "trustedDomain"}, map[string][]string{
 		"trustPartner": {"partner.example"}, "trustDirection": {"3"}, "trustType": {"2"}, "trustAttributes": {"72"}, "securityIdentifier": {"S-1-5-21-9-8-7"}})
 	add("CN=old.example,CN=System,"+base, []string{"top", "leaf", "trustedDomain"}, map[string][]string{
 		"trustPartner": {"old.example"}, "trustDirection": {"0"}, "trustType": {"2"}, "trustAttributes": {"4"}, "securityIdentifier": {"S-1-5-21-1-1-1"}})
+	// Wave 2a fixtures.
+	lapsGUID := "4f1c2b8e-6d1a-4c3e-9b7a-2a5d8e9f0c11"                                                                // invented: legacy LAPS has no fixed schemaIDGUID
+	add("CN=ms-Mcs-AdmPwd,CN=Schema,CN=Configuration,"+base, []string{"top", "attributeSchema"}, map[string][]string{ // DSA-0057: not confidential
+		"lDAPDisplayName": {"ms-Mcs-AdmPwd"}, "searchFlags": {"0"}, "schemaIDGUID": {lapsGUID}})
+	ou := []string{"top", "organizationalUnit"}
+	add("OU=Workstations,"+base, ou, map[string][]string{ // DSA-0056: every authenticated user may read LAPS passwords
+		"nTSecurityDescriptor": {sd(false, ace{dom + "-512", 0x000F01FF, ""}, ace{"S-1-5-11", 0x00000110, lapsGUID})}})
+	add("OU=Groups,"+base, ou, map[string][]string{ // DSA-0058: Helpdesk holds WriteDacl over the OU of Tier0 Ops
+		"nTSecurityDescriptor": {sd(false, ace{dom + "-512", 0x000F01FF, ""}, ace{dom + "-1201", 0x00040000, ""})}})
+	add("CN=Default-First-Site-Name,CN=Sites,CN=Configuration,"+base, []string{"top", "site"}, map[string][]string{ // DSA-0058: Helpdesk may link GPOs to the DCs' site
+		"nTSecurityDescriptor": {sd(false, ace{dom + "-519", 0x000F01FF, ""}, ace{dom + "-1201", 0x00000020, "f30e3bbe-9ff0-11d1-b603-0000f80367c1"})}})
+	add("CN=gmsa-web,CN=Managed Service Accounts,"+base, append(append([]string{}, computer...), "msDS-GroupManagedServiceAccount"), map[string][]string{ // DSA-0055
+		"sAMAccountName": {"gmsa-web$"}, "objectSid": {dom + "-1008"}, "primaryGroupID": {"515"}, "sAMAccountType": {"805306369"},
+		"userAccountControl": {"4096"}, "pwdLastSet": {ft(5)},
+		"msDS-GroupMSAMembership": {sd(false, ace{dom + "-515", 0x000F01FF, ""})}}) // every domain computer may read the password
 	s.Skipped = []snapshot.Skipped{{Query: "sysvol", Reason: "tier", Detail: "tier 1 not requested"}}
 
 	for _, path := range []string{*out, "internal/demo/synthetic-lab.json.zst"} {

@@ -42,6 +42,11 @@ import (
 //	smbbool(obj, "server schannel", true)         Samba boolean (yes/true/1/on) with a default for absent
 //	version_lt("4.17.3", "4.17.4")                dotted-numeric version compare; "" is never less
 //	intval("0x1c")                                decimal or 0x-hex string to int; 0 when not numeric
+//	schema_guid("ms-Mcs-AdmPwd")                  schemaIDGUID of a collected attributeSchema/classSchema
+//	                                              object by lDAPDisplayName ("" when not collected)
+//	holds_tier0(obj)                              a Tier-0 object lies below obj in the tree
+//	spn_known("cifs/fs01.lab.example")            the SPN's host belongs to a collected account; hosts
+//	                                              outside the snapshot's DNS domain count as known
 func helperOptions() []cel.EnvOption {
 	mapT := cel.MapType(cel.StringType, cel.DynType)
 	aceList := cel.ListType(cel.MapType(cel.StringType, cel.DynType))
@@ -177,6 +182,23 @@ func helperOptions() []cel.EnvOption {
 				cel.BinaryBinding(func(a, b ref.Val) ref.Val {
 					return types.Bool(versionLess(string(a.(types.String)), string(b.(types.String))))
 				}))),
+		cel.Function("schema_guid",
+			cel.Overload("schema_guid_string", []*cel.Type{cel.StringType}, cel.StringType,
+				cel.UnaryBinding(func(s ref.Val) ref.Val {
+					return types.String(currentSchemaGUIDs[strings.ToLower(string(s.(types.String)))])
+				}))),
+		cel.Function("holds_tier0",
+			cel.Overload("holds_tier0_map", []*cel.Type{mapT}, cel.BoolType,
+				cel.UnaryBinding(func(o ref.Val) ref.Val {
+					m, _ := o.Value().(map[string]any)
+					dn, _ := m["dn"].(string)
+					return types.Bool(currentT0Parents[strings.ToLower(dn)])
+				}))),
+		cel.Function("spn_known",
+			cel.Overload("spn_known_string", []*cel.Type{cel.StringType}, cel.BoolType,
+				cel.UnaryBinding(func(s ref.Val) ref.Val {
+					return types.Bool(spnKnown(string(s.(types.String))))
+				}))),
 		cel.Function("aces",
 			cel.Overload("aces_map", []*cel.Type{mapT}, aceList,
 				cel.UnaryBinding(func(o ref.Val) ref.Val { return aceVals(o, "nTSecurityDescriptor") }))),
@@ -277,9 +299,13 @@ func aceVals(o ref.Val, attr string) ref.Val {
 // Snapshot index for the objattr/objattrs/objexists helpers; set per evaluation
 // under evalMu like currentTier0.
 var (
-	currentIndex map[string]*snapshot.Object
-	currentSIDs  map[string]bool
-	currentBase  string
+	currentIndex       map[string]*snapshot.Object
+	currentSIDs        map[string]bool
+	currentBase        string
+	currentSchemaGUIDs map[string]string // lower(lDAPDisplayName) -> schemaIDGUID
+	currentT0Parents   map[string]bool   // lower(DN) of every ancestor of a Tier-0 object
+	currentHosts       map[string]bool   // lower host names and short names of collected accounts
+	currentDNSDomain   string            // DNS domain derived from the base DN
 )
 
 func indexSnapshot(snap *snapshot.Snapshot) map[string]*snapshot.Object {
@@ -292,7 +318,97 @@ func indexSnapshot(snap *snapshot.Snapshot) map[string]*snapshot.Object {
 		}
 	}
 	currentSIDs = sids
+
+	currentSchemaGUIDs = map[string]string{}
+	currentHosts = map[string]bool{}
+	for i := range snap.Objects {
+		o := &snap.Objects[i]
+		if n, g := o.Attr("lDAPDisplayName"), o.Attr("schemaIDGUID"); n != "" && g != "" {
+			currentSchemaGUIDs[strings.ToLower(n)] = strings.ToLower(g)
+		}
+		if h := o.Attr("dNSHostName"); h != "" {
+			currentHosts[strings.ToLower(h)] = true
+		}
+		if sam := o.Attr("sAMAccountName"); strings.HasSuffix(sam, "$") {
+			currentHosts[strings.ToLower(strings.TrimSuffix(sam, "$"))] = true
+		}
+		for k, vals := range o.Attrs {
+			if !strings.EqualFold(k, "servicePrincipalName") {
+				continue
+			}
+			for _, v := range vals {
+				if h := spnHost(v); h != "" {
+					currentHosts[h] = true
+				}
+			}
+		}
+	}
+	currentDNSDomain = dnsDomainOf(snap.Meta.BaseDN)
 	return idx
+}
+
+// tier0Parents marks every ancestor DN of every Tier-0 object, so a check can
+// ask whether a container (OU, CN=Users, the domain head) holds Tier-0 objects.
+func tier0Parents(dns []string) map[string]bool {
+	out := map[string]bool{}
+	for _, dn := range dns {
+		for p := parentDN(dn); p != ""; p = parentDN(p) {
+			out[strings.ToLower(p)] = true
+		}
+	}
+	return out
+}
+
+// parentDN strips the first RDN, honouring backslash-escaped commas.
+func parentDN(dn string) string {
+	for i := 0; i < len(dn); i++ {
+		switch dn[i] {
+		case '\\':
+			i++
+		case ',':
+			return strings.TrimSpace(dn[i+1:])
+		}
+	}
+	return ""
+}
+
+func dnsDomainOf(base string) string {
+	var parts []string
+	for _, rdn := range strings.Split(base, ",") {
+		rdn = strings.TrimSpace(rdn)
+		if len(rdn) > 3 && strings.EqualFold(rdn[:3], "dc=") {
+			parts = append(parts, strings.ToLower(rdn[3:]))
+		}
+	}
+	return strings.Join(parts, ".")
+}
+
+// spnHost returns the lower-case host part of service/host[:port][/name].
+func spnHost(spn string) string {
+	i := strings.IndexByte(spn, '/')
+	if i < 0 {
+		return ""
+	}
+	h := spn[i+1:]
+	if j := strings.IndexAny(h, ":/"); j >= 0 {
+		h = h[:j]
+	}
+	return strings.ToLower(strings.TrimSuffix(h, "."))
+}
+
+// spnKnown reports whether the host of an SPN belongs to an account in the
+// snapshot. A host in another DNS domain cannot be judged from one domain's
+// data and counts as known, so the check never fires on what it cannot see.
+func spnKnown(spn string) bool {
+	h := spnHost(spn)
+	if h == "" || currentHosts[h] {
+		return true
+	}
+	short, suffix, dotted := strings.Cut(h, ".")
+	if dotted && currentDNSDomain != "" && suffix != currentDNSDomain {
+		return true
+	}
+	return currentHosts[short]
 }
 
 func lookupObject(dn string) (*snapshot.Object, bool) {

@@ -1,0 +1,56 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0057
+title:
+  en: LAPS password attribute is not marked confidential
+  ru: Атрибут пароля LAPS не помечен как конфиденциальный
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: attributeSchema objects of the LAPS password attributes
+attributes:
+- lDAPDisplayName
+- searchFlags
+condition: >-
+  One of ms-Mcs-AdmPwd, msLAPS-Password, msLAPS-EncryptedPassword, msLAPS-EncryptedPasswordHistory, msLAPS-EncryptedDSRMPassword
+  or msLAPS-EncryptedDSRMPasswordHistory exists in the schema without the fCONFIDENTIAL bit (0x80) in searchFlags.
+threshold: any occurrence
+rationale: >-
+  Without the confidential flag, ordinary read permission is enough to read the attribute, and many principals hold
+  read permission on computer objects by default. A schema change that drops the flag, or a non-standard extension
+  that never set it, exposes the local administrator password of every managed computer to all authenticated users.
+remediation:
+  en: >-
+    Restore the fCONFIDENTIAL bit on the attribute's searchFlags (Schema Admins; the default Windows LAPS value
+    is 904), then review who read the attribute while it was exposed and rotate the managed passwords.
+  ru: >-
+    Восстановите бит fCONFIDENTIAL в searchFlags атрибута (требуются права Schema Admins; значение Windows LAPS
+    по умолчанию — 904), затем проверьте, кто читал атрибут, пока он был открыт, и смените управляемые пароли.
+attack:
+- id: T1552
+  name: Unsecured Credentials
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=attributeSchema)
+references:
+- title: Microsoft Learn — Windows LAPS technical reference (schema attributes and searchFlags)
+  url: https://learn.microsoft.com/en-us/windows-server/identity/laps/laps-technical-reference
+- title: Microsoft Learn — MS-ADTS 3.1.1.2.3 Attributes (searchFlags, fCONFIDENTIAL)
+  url: >-
+    https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/7c1cdf82-1ecc-4834-827e-d26ff95fb207
+notes: >-
+  Only the six LAPS attributes are read from the schema. The Windows LAPS values come from Microsoft's technical
+  reference; the legacy ms-Mcs-AdmPwd flag is set by the legacy schema extension (single source, to verify on a
+  legacy deployment).
+condition_cel: >-
+  attr(obj, "lDAPDisplayName").lowerAscii() in ["ms-mcs-admpwd", "mslaps-password", "mslaps-encryptedpassword",
+  "mslaps-encryptedpasswordhistory", "mslaps-encrypteddsrmpassword", "mslaps-encrypteddsrmpasswordhistory"] && !anyflag(obj,
+  "searchFlags", 0x80)
+expect:
+- CN=ms-Mcs-AdmPwd,CN=Schema,CN=Configuration,DC=lab,DC=example

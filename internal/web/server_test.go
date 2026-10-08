@@ -120,7 +120,7 @@ func TestDemoFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	// One unsigned fixture pack (development mode) plus every built-in preview check.
-	if len(res.Inventory.Tier0) != 13 || len(res.Checks) != 1+len(builtIn) || res.Preview != len(builtIn) || !res.Unsigned {
+	if len(res.Inventory.Tier0) != 14 || len(res.Checks) != 1+len(builtIn) || res.Preview != len(builtIn) || !res.Unsigned {
 		t.Errorf("tier0 %d, checks %d, preview %d (want %d), unsigned %v", len(res.Inventory.Tier0), len(res.Checks), res.Preview, len(builtIn), res.Unsigned)
 	}
 	for _, c := range res.Checks {

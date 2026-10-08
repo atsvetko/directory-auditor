@@ -1,0 +1,61 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0056
+title:
+  en: LAPS passwords readable by broad principals
+  ru: Пароли LAPS доступны для чтения широкому кругу субъектов
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  Security descriptors of OUs, top-level containers and the domain head, matched against the forest's LAPS schema
+  attributes
+attributes:
+- nTSecurityDescriptor
+condition: >-
+  LAPS (legacy ms-Mcs-AdmPwd or Windows LAPS msLAPS-Password) is present in the schema, and an allow ACE that applies
+  to computer objects grants Everyone, Anonymous, Authenticated Users, BUILTIN\Users, Domain Users or Domain Computers
+  full control or the control-access right on all attributes or on the LAPS password attribute.
+threshold: any occurrence
+rationale: >-
+  LAPS password attributes are confidential: reading them needs the control-access right in addition to read permission.
+  A grant of that right to a broad group publishes the local administrator password of every computer in scope to
+  all users or all machines, which turns one compromised account into local administrator everywhere and enables
+  lateral movement to administrators' workstations.
+remediation:
+  en: >-
+    Remove the ACE and delegate LAPS password read only to the administrative groups responsible for those computers.
+    Prefer Windows LAPS with encrypted passwords, whose decryption is limited to a named group.
+  ru: >-
+    Удалите ACE и делегируйте чтение паролей LAPS только административным группам, отвечающим за эти компьютеры.
+    Отдавайте предпочтение Windows LAPS с шифрованием паролей, где расшифровка ограничена указанной группой.
+attack:
+- id: T1552
+  name: Unsecured Credentials
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (|(objectClass=organizationalUnit)(objectClass=container)(objectClass=domainDNS))
+references:
+- title: Microsoft Learn — Windows LAPS technical reference (schema attributes and searchFlags)
+  url: https://learn.microsoft.com/en-us/windows-server/identity/laps/laps-technical-reference
+- title: Microsoft Learn — MS-ADTS 3.1.1.2.3 Attributes (searchFlags, fCONFIDENTIAL)
+  url: >-
+    https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/7c1cdf82-1ecc-4834-827e-d26ff95fb207
+notes: >-
+  The attribute's schemaIDGUID is read from the forest schema because the legacy LAPS extension does not use a fixed
+  GUID. Encrypted Windows LAPS attributes are not evaluated: reading them is not enough to recover the password.
+  Delegations to named administrative groups are not reported.
+condition_cel: >-
+  size([schema_guid("ms-Mcs-AdmPwd"), schema_guid("msLAPS-Password")].filter(g, g != "")) > 0 && sd_readable(obj)
+  && aces(obj).exists(a, a.allow && (a.trustee in ["S-1-1-0", "S-1-5-7", "S-1-5-11", "S-1-5-32-545"] || (a.trustee.startsWith("S-1-5-21-")
+  && sid_rid(a.trustee) in [513, 515])) && (a.inherited_object_type == "" || a.inherited_object_type == "bf967a86-0de6-11d0-a285-00aa003049e2")
+  && (mask_has(a.mask, 0x10000000) || mask_has(a.mask, 0xF01FF) || (mask_has(a.mask, 0x100) && (a.object_type ==
+  "" || a.object_type in [schema_guid("ms-Mcs-AdmPwd"), schema_guid("msLAPS-Password")].filter(g, g != "")))))
+expect:
+- OU=Workstations,DC=lab,DC=example
