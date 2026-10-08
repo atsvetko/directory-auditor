@@ -1,0 +1,66 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0208
+title:
+  en: SMB1 is enabled on the domain controller (server min protocol)
+  ru: На контроллере домена включён SMB1 (server min protocol)
+domain: samba
+tier: 2
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- server min protocol
+- server max protocol
+condition: >-
+  `server min protocol` is an SMB1 dialect (NT1, LANMAN1, LANMAN2, CORE, COREPLUS). The default is SMB2_02
+  since Samba 4.11.
+threshold: any occurrence
+rationale: >-
+  SMB1 has no mandatory signing, no encryption and a long history of memory-safety bugs; Microsoft and
+  Samba both disabled it by default. On a DC it re-enables unsigned access to SYSVOL and the classic relay
+  attacks, and keeps old clients from ever being fixed.
+remediation:
+  en: >-
+    Remove the line or set `server min protocol = SMB2_02`. Find SMB1 clients first (`log level = 1 smb:3`
+    or the smbstatus dialect column) and upgrade or isolate them.
+  ru: >-
+    Удалите строку или задайте `server min protocol = SMB2_02`. Сначала найдите клиентов SMB1 (`log level
+    = 1 smb:3` или столбец диалекта в smbstatus) и обновите либо изолируйте их.
+attack:
+- id: T1210
+  name: Exploitation of Remote Services
+- id: T1557.001
+  name: 'Adversary-in-the-Middle: LLMNR/NBT-NS Poisoning and SMB Relay'
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - server min protocol
+  - server max protocol
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file.
+references:
+- title: >-
+    Samba smb.conf(5) — 'server min protocol' (docs-xml/smbdotconf/protocol/serverminprotocol.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/protocol/serverminprotocol.xml
+- title: 'Samba 4.11.0 release notes — SMB1 is disabled by default: server min protocol = SMB2_02'
+  url: https://github.com/samba-team/samba/blob/samba-4.11.0/WHATSNEW.txt
+- title: Microsoft Learn — SMBv1 is not installed by default
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/storage/file-server/troubleshoot/smbv1-not-installed-by-default-in-windows
+- title: MITRE ATT&CK — T1210 Exploitation of Remote Services
+  url: https://attack.mitre.org/techniques/T1210/
+notes: ''
+condition_cel: attr(obj, "server min protocol").lowerAscii().trim() in ["nt1", "lanman1", "lanman2", "core",
+  "coreplus"]
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor

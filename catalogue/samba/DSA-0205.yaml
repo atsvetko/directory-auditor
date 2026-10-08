@@ -1,0 +1,65 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0205
+title:
+  en: SMB signing is not required on the domain controller (server signing)
+  ru: Подпись SMB не обязательна на контроллере домена (server signing)
+domain: samba
+tier: 2
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- server signing
+condition: >-
+  `server signing` is auto or disabled. The default value default means mandatory on an AD DC.
+threshold: any occurrence
+rationale: >-
+  Without mandatory signing, SMB sessions to the DC — SYSVOL and NETLOGON, where every client fetches
+  Group Policy and logon scripts — can be relayed or altered by anyone on the network. A relayed authentication
+  to a DC share is a classic step to code execution on every machine that applies the policy. Windows
+  DCs require signing by default and so does Samba; the setting is relaxed for old clients and then forgotten.
+remediation:
+  en: >-
+    Remove the line or set `server signing = mandatory`. Clients that cannot sign (SMB1-only devices)
+    should not talk to a DC at all; give them a member file server if they must stay.
+  ru: >-
+    Удалите строку или задайте `server signing = mandatory`. Клиенты, не умеющие подписывать (устройства
+    только с SMB1), вообще не должны обращаться к контроллеру; если их нельзя вывести, дайте им отдельный
+    файловый сервер — член домена.
+attack:
+- id: T1557.001
+  name: 'Adversary-in-the-Middle: LLMNR/NBT-NS Poisoning and SMB Relay'
+- id: T1484.001
+  name: 'Domain or Tenant Policy Modification: Group Policy Modification'
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - server signing
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file.
+references:
+- title: Samba smb.conf(5) — 'server signing' (docs-xml/smbdotconf/security/serversigning.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/serversigning.xml
+- title: >-
+    Microsoft Learn — Domain controller: Digitally sign communications (always) — default Enabled on DCs
+  url: >-
+    https://learn.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/microsoft-network-server-digitally-sign-communications-always
+- title: MITRE ATT&CK — T1557.001 LLMNR/NBT-NS Poisoning and SMB Relay
+  url: https://attack.mitre.org/techniques/T1557/001/
+notes: >-
+  SMB2+ cannot have signing disabled, but 'auto' still lets unsigned SMB1 sessions in when SMB1 is enabled
+  (DSA-0208).
+condition_cel: attr(obj, "server signing").lowerAscii().trim() in ["auto", "disabled", "no", "false",
+  "off", "0"]
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor

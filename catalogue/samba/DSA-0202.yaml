@@ -1,0 +1,82 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0202
+title:
+  en: >-
+    NetLogon secure channel is not enforced (server schannel / allow nt4 crypto) — ZeroLogon class
+  ru: >-
+    Защищённый канал NetLogon не принудителен (server schannel / allow nt4 crypto) — класс ZeroLogon
+domain: samba
+tier: 2
+severity: critical
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- server schannel
+- allow nt4 crypto
+- server require schannel:*
+- allow nt4 crypto:*
+condition: >-
+  `server schannel` is not yes (auto or no; the default is yes), or `allow nt4 crypto` is yes (default
+  no). Per-computer exceptions (`server require schannel:NAME = no`, `allow nt4 crypto:NAME = yes`) are
+  listed as evidence, not findings.
+threshold: any occurrence
+rationale: >-
+  The NetLogon secure channel is how every domain member proves it is who it says before it changes its
+  machine password or asks the DC to validate logons. With schannel optional, a client can use unauthenticated
+  NetLogon calls — the condition behind ZeroLogon (CVE-2020-1472), where a few attempts let anyone on
+  the network set the DC's own machine password and take over the domain. `allow nt4 crypto = yes` re-admits
+  the weak NT4-era key negotiation that the same class of attacks relies on.
+remediation:
+  en: >-
+    Remove the global relaxation (`server schannel = yes`, `allow nt4 crypto = no`, or simply delete the
+    lines). If one legacy member really needs it, use the per-account form Samba logs for you (`server
+    require schannel:LEGACY$ = no`) for a short grace period and retire that machine. Samba 4.13+ already
+    warns at log level 0 when the setting is not needed.
+  ru: >-
+    Уберите глобальное ослабление (`server schannel = yes`, `allow nt4 crypto = no` или просто удалите
+    строки). Если одному устаревшему члену домена это действительно нужно, используйте форму для конкретной
+    учётной записи, которую Samba подсказывает в журнале (`server require schannel:LEGACY$ = no`), на
+    короткий переходный период и выведите эту машину из эксплуатации. Samba 4.13+ пишет в журнал на уровне
+    0, если настройка не требуется.
+attack:
+- id: T1068
+  name: Exploitation for Privilege Escalation
+- id: T1557
+  name: Adversary-in-the-Middle
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - server schannel
+  - allow nt4 crypto
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file.
+references:
+- title: Samba smb.conf(5) — 'server schannel' (docs-xml/smbdotconf/security/serverschannel.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/serverschannel.xml
+- title: Samba smb.conf(5) — 'allow nt4 crypto' (docs-xml/smbdotconf/logon/allownt4crypto.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/logon/allownt4crypto.xml
+- title: Samba security advisory CVE-2020-1472 'ZeroLogon' (cited by smb.conf(5))
+  url: https://www.samba.org/samba/security/CVE-2020-1472.html
+- title: >-
+    Samba 4.17.4 release notes — deprecation of server schannel / allow nt4 crypto, per-computer exceptions
+  url: https://github.com/samba-team/samba/blob/samba-4.17.4/WHATSNEW.txt
+- title: MITRE ATT&CK — T1068 Exploitation for Privilege Escalation
+  url: https://attack.mitre.org/techniques/T1068/
+notes: >-
+  Advisory pages on samba.org could not be opened at verification time; the CVE and the setting semantics
+  are taken from the smb.conf(5) text, which cites them.
+condition_cel: attr(obj, "server schannel").lowerAscii().trim() in ["auto", "no", "false", "0", "off"]
+  || smbbool(obj, "allow nt4 crypto", false)
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor

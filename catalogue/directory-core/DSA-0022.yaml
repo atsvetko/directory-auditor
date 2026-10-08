@@ -1,0 +1,60 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0022
+title:
+  en: Password complexity is not required (pwdProperties lacks DOMAIN_PASSWORD_COMPLEX)
+  ru: Требования к сложности пароля отключены (в pwdProperties нет DOMAIN_PASSWORD_COMPLEX)
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The domain naming-context head
+attributes:
+- pwdProperties
+condition: >-
+  pwdProperties on the domain head does not have bit 0x1 (DOMAIN_PASSWORD_COMPLEX) set. Both Windows and
+  Samba provision it set.
+threshold: bit 0x1 clear
+rationale: >-
+  Without the complexity rule, a user may set a password equal to their user name or a single dictionary
+  word, which online and offline guessing find first. Complexity is a weak control on its own, but turning
+  it off removes the only built-in check against the most trivial passwords.
+remediation:
+  en: >-
+    Re-enable complexity (Windows: 'Password must meet complexity requirements'; Samba: `samba-tool domain
+    passwordsettings set --complexity=on`) and add a banned-password list where the platform allows.
+  ru: >-
+    Снова включите требования к сложности (Windows: «Пароль должен отвечать требованиям сложности»; Samba:
+    `samba-tool domain passwordsettings set --complexity=on`) и, где возможно, добавьте список запрещённых
+    паролей.
+attack:
+- id: T1110.001
+  name: 'Brute Force: Password Guessing'
+engine: declarative
+query_sketch:
+  base: default
+  scope: base
+  filter: (&(objectClass=domainDNS)(!(pwdProperties:1.2.840.113556.1.4.803:=1)))
+  attributes:
+  - pwdProperties
+references:
+- title: Microsoft Learn — Password must meet complexity requirements (DC default Enabled)
+  url: >-
+    https://learn.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/password-must-meet-complexity-requirements
+- title: MS-ADTS 6.1.1.1.4 pwdProperties (DOMAIN_PASSWORD_COMPLEX = 0x1)
+  url: >-
+    https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/3e6ad4a8-2a0d-4d64-8a5b-3f0fe1b4fb3e
+- title: >-
+    Samba source — source4/setup/provision_basedn_modify.ldif (provisioned domain policy: lockoutThreshold
+    0, pwdProperties 1, pwdHistoryLength 24, maxPwdAge 42 days, MAQ 10)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/source4/setup/provision_basedn_modify.ldif
+- title: MITRE ATT&CK — T1110.001 Password Guessing
+  url: https://attack.mitre.org/techniques/T1110/001/
+notes: ''
+condition_cel: '!flags(obj, "pwdProperties", 1)'
+expect:
+- DC=samba,DC=example

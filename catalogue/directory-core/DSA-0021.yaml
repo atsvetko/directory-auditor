@@ -1,0 +1,59 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0021
+title:
+  en: Domain password policy allows passwords shorter than 8 characters
+  ru: Политика паролей домена допускает пароли короче 8 символов
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The domain naming-context head
+attributes:
+- minPwdLength
+condition: minPwdLength on the domain head is less than 8. Windows and Samba provision 7.
+threshold: minPwdLength < 8
+rationale: >-
+  Length is the one password rule whose cost to an attacker grows exponentially. Microsoft's own guidance
+  sets the floor at 8; the provisioned 7 predates it and survives in most domains because nobody is told
+  to change it. Short passwords fall quickly to offline attacks on captured Kerberos or NTLM material.
+remediation:
+  en: >-
+    Raise the minimum (Windows: Default Domain Policy → Minimum password length, or the registry-backed
+    'MinimumPasswordLengthAudit' first; Samba: `samba-tool domain passwordsettings set --min-pwd-length=12`).
+    Combine with a banned-password check rather than only complexity rules.
+  ru: >-
+    Увеличьте минимум (Windows: политика домена по умолчанию → минимальная длина пароля; Samba: `samba-tool
+    domain passwordsettings set --min-pwd-length=12`). Дополните проверкой по списку запрещённых паролей,
+    а не только требованиями к сложности.
+attack:
+- id: T1110.002
+  name: 'Brute Force: Password Cracking'
+engine: declarative
+query_sketch:
+  base: default
+  scope: base
+  filter: (&(objectClass=domainDNS)(minPwdLength<=7))
+  attributes:
+  - minPwdLength
+references:
+- title: >-
+    Microsoft Learn — Minimum password length (DC effective default 7; best practice at least 8)
+  url: >-
+    https://learn.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/minimum-password-length
+- title: Samba source — python/samba/provision/__init__.py (DEFAULT_MIN_PWD_LENGTH = 7)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/python/samba/provision/__init__.py
+- title: >-
+    Microsoft Learn — AD schema: lockoutThreshold, minPwdLength, maxPwdAge, pwdHistoryLength attributes
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-lockoutthreshold
+- title: MITRE ATT&CK — T1110.002 Password Cracking
+  url: https://attack.mitre.org/techniques/T1110/002/
+notes: ''
+condition_cel: intattr(obj, "minPwdLength") < 8
+expect:
+- DC=lab,DC=example
+- DC=samba,DC=example

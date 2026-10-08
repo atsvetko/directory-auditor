@@ -1,0 +1,76 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0201
+title:
+  en: Samba version is no longer maintained
+  ru: Версия Samba больше не сопровождается
+domain: samba
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The rootDSE (vendorVersion) of a Samba AD DC; the local `samba -V` when run on the DC
+attributes:
+- vendorVersion
+- vendorName
+condition: >-
+  vendorVersion in the rootDSE (or the locally reported version) is below the oldest release series the
+  Samba Team still maintains. At the time of writing that is 4.23 (4.25 current, 4.24 maintenance, 4.23
+  security-fixes-only). The threshold is a constant in the pack and is reviewed with every Samba release.
+threshold: version < 4.23.0
+rationale: >-
+  An unmaintained series gets no security fixes: every advisory published after its end of life applies
+  to it with a public patch to diff against. For a DC that is the domain's trust anchor. Samba's cadence
+  is a new series every six months with the last three maintained, so a DC installed from a distribution
+  and never upgraded is out of support within about eighteen months.
+remediation:
+  en: >-
+    Upgrade all DCs to a maintained series (join a new DC on a current version, transfer the FSMO roles,
+    demote the old one), or move to a distribution that back-ports security fixes to its Samba package
+    and track its advisories instead; the check then needs the distribution's version mapping.
+  ru: >-
+    Обновите все контроллеры до сопровождаемой серии (введите новый контроллер на актуальной версии, передайте
+    роли FSMO, понизьте старый) либо используйте дистрибутив, который переносит исправления безопасности
+    в свой пакет Samba, и отслеживайте его бюллетени; тогда проверке нужна таблица соответствия версий
+    дистрибутива.
+attack:
+- id: T1190
+  name: Exploit Public-Facing Application
+- id: T1210
+  name: Exploitation of Remote Services
+engine: declarative
+query_sketch:
+  base: cn=dirauditor
+  scope: one
+  filter: (objectClass=dirauditorRootDSE)
+  attributes:
+  - vendorVersion
+  - vendorName
+  notes: >-
+    Samba returns vendorVersion only when the attribute is requested explicitly; the collector does so.
+references:
+- title: >-
+    Samba source — source4/dsdb/samdb/ldb_modules/rootdse.c (vendorVersion = SAMBA_VERSION_STRING, returned
+    on explicit request)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/source4/dsdb/samdb/ldb_modules/rootdse.c
+- title: >-
+    Samba release tags (samba-4.20.0 2024-03-27, 4.21.0 2024-09-02, 4.22.0 2025-03-06, 4.23.0 2025-09-12,
+    4.24.0 2026-03-18, 4.25.0 2026-09-24)
+  url: https://github.com/samba-team/samba/tags
+- title: >-
+    Samba wiki — Release Planning (maintained series policy; could not be fetched during verification
+    — single-source)
+  url: https://wiki.samba.org/index.php/Samba_Release_Planning
+- title: MITRE ATT&CK — T1210 Exploitation of Remote Services
+  url: https://attack.mitre.org/techniques/T1210/
+notes: >-
+  Single-source: the 'last three series' policy is from the Samba wiki page listed above, which was not
+  reachable at verification time; confidence high (long-standing practice, consistent with tag history).
+  Distribution packages (RHEL, Debian, Astra, РЕД ОС) carry back-ports — treat a finding on such a package
+  as 'verify against the vendor advisories' and give the distribution's own version, not upstream's.
+condition_cel: version_lt(attr(obj, "vendorVersion"), "4.23.0") && attr(obj, "vendorName").lowerAscii().contains("samba")
+expect:
+- cn=rootdse,cn=dirauditor

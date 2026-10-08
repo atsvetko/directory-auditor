@@ -1,0 +1,73 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0213
+title:
+  en: Recoverable password material is stored (GPG-encrypted cleartext or crypt hashes)
+  ru: Хранится восстанавливаемый парольный материал (открытый пароль под GPG или crypt-хеши)
+domain: samba
+tier: 2
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- password hash gpg key ids
+- password hash userpassword schemes
+condition: >-
+  `password hash gpg key ids` is set (cleartext passwords stored as Primary:SambaGPG in supplementalCredentials
+  — high), or `password hash userpassword schemes` is set (crypt(3) hashes stored as Primary:userPassword
+  — medium).
+threshold: any occurrence
+rationale: >-
+  These options exist to synchronise passwords to other systems. The GPG form stores every user's cleartext
+  password, encrypted to a key whose private half decrypts all of them at once; whoever obtains sam.ldb
+  (a DC backup, a replica, DCSync) plus that key has every password. The crypt form stores a second, offline-crackable
+  hash alongside the NT hash. Both widen what a directory compromise yields.
+remediation:
+  en: >-
+    If synchronisation is no longer needed, remove the options and let passwords age out (the stored values
+    are replaced on the next change; force resets for privileged accounts). If it is needed, keep the
+    GPG private key off the DCs and in an HSM or vault, restrict who can run `samba-tool user getpassword`,
+    and prefer per-application federation (Kerberos, SAML/OIDC) to password copying.
+  ru: >-
+    Если синхронизация больше не нужна, удалите параметры и дайте паролям обновиться (значения заменяются
+    при следующей смене; для привилегированных учётных записей выполните принудительный сброс). Если нужна
+    — храните закрытый ключ GPG вне контроллеров, в HSM или хранилище секретов, ограничьте право запускать
+    `samba-tool user getpassword` и предпочитайте федерацию (Kerberos, SAML/OIDC) копированию паролей.
+attack:
+- id: T1003.006
+  name: 'OS Credential Dumping: DCSync'
+- id: T1552
+  name: Unsecured Credentials
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - password hash gpg key ids
+  - password hash userpassword schemes
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file.
+references:
+- title: >-
+    Samba smb.conf(5) — 'password hash gpg key ids' (docs-xml/smbdotconf/security/passwordhashgpgkeyids.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/passwordhashgpgkeyids.xml
+- title: >-
+    Samba smb.conf(5) — 'password hash userPassword schemes' (docs-xml/smbdotconf/security/passwordhashuserpasswordschemes.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/passwordhashuserpasswordschemes.xml
+- title: Samba 4.5.0 release notes — 'password hash gpg key ids' introduced
+  url: https://github.com/samba-team/samba/blob/samba-4.5.0/WHATSNEW.txt
+- title: MITRE ATT&CK — T1552 Unsecured Credentials
+  url: https://attack.mitre.org/techniques/T1552/
+notes: ''
+condition_cel: attr(obj, "password hash gpg key ids").lowerAscii().trim() != "" || attr(obj, "password
+  hash userpassword schemes").lowerAscii().trim() != ""
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor

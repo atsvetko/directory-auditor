@@ -1,0 +1,70 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0025
+title:
+  en: Anonymous LDAP operations are enabled (dSHeuristics fLDAPBlockAnonOps)
+  ru: Разрешены анонимные операции LDAP (dSHeuristics, fLDAPBlockAnonOps)
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  CN=Directory Service,CN=Windows NT,CN=Services in the configuration naming context (objectClass nTDSService)
+attributes:
+- dSHeuristics
+condition: >-
+  The seventh character of dSHeuristics is '2'. Any other value, or an absent attribute, blocks anonymous
+  operations on current functional levels.
+threshold: 7th character = 2
+rationale: >-
+  With anonymous operations unblocked, anyone who can reach port 389 can search the directory without
+  an account: user and group lists, naming conventions, service accounts, OU structure and descriptions.
+  That is the reconnaissance behind password spraying and targeted phishing, handed out before any credential
+  is tried. Both Windows and Samba block it by default; the switch is usually flipped for a legacy application
+  and never flipped back.
+remediation:
+  en: >-
+    Reset the seventh character to '0' (Windows: edit dSHeuristics with ADSI Edit or `Set-ADObject`; Samba:
+    `samba-tool dsacl`/ldbmodify on the same object, or `ldbmodify` against sam.ldb) after moving the
+    application that needed it to an authenticated bind with a dedicated read-only account.
+  ru: >-
+    Верните седьмой символ в «0» (Windows: правка dSHeuristics в ADSI Edit или `Set-ADObject`; Samba:
+    `ldbmodify` для того же объекта), предварительно переведя приложение, которому это требовалось, на
+    аутентифицированную привязку с отдельной учётной записью только для чтения.
+attack:
+- id: T1087.002
+  name: 'Account Discovery: Domain Account'
+- id: T1589.003
+  name: 'Gather Victim Identity Information: Employee Names'
+engine: declarative
+query_sketch:
+  base: CN=Directory Service,CN=Windows NT,CN=Services,<config>
+  scope: base
+  filter: (objectClass=nTDSService)
+  attributes:
+  - dSHeuristics
+references:
+- title: >-
+    MS-ADTS 6.1.1.2.4.1.2 dSHeuristics — fLDAPBlockAnonOps is the 7th character; '2' allows anonymous
+    operations
+  url: >-
+    https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/e5899be4-862e-496f-9a38-33950617d2c5
+- title: >-
+    Samba source — source4/dsdb/samdb/ldb_modules/util.c (dsdb_block_anonymous_ops: character 7 == '2'
+    disables blocking)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/source4/dsdb/samdb/ldb_modules/util.c
+- title: Samba source — libds/common/flags.h (DS_HR_BLOCK_ANONYMOUS_OPS = 7)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/libds/common/flags.h
+- title: MITRE ATT&CK — T1087.002 Domain Account
+  url: https://attack.mitre.org/techniques/T1087/002/
+notes: >-
+  Readable by any authenticated user (configuration NC). The rootDSE and a few attributes stay readable
+  anonymously by design and are not findings.
+condition_cel: attr(obj, "dSHeuristics").size() >= 7 && attr(obj, "dSHeuristics").substring(6, 7) == "2"
+expect:
+- CN=Directory Service,CN=Windows NT,CN=Services,CN=Configuration,DC=samba,DC=example

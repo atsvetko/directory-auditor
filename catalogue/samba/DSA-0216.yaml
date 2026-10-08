@@ -1,0 +1,58 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0216
+title:
+  en: Kerberos FAST (armoring) is disabled on the KDC (kdc enable fast = no)
+  ru: На KDC отключена защита FAST (kdc enable fast = no)
+domain: samba
+tier: 2
+severity: low
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- kdc enable fast
+condition: '`kdc enable fast` is no (default yes; applies to the embedded Heimdal KDC, Samba 4.16+).'
+threshold: any occurrence
+rationale: >-
+  FAST wraps the password-derived part of a Kerberos pre-authentication exchange inside a tunnel keyed
+  from a stronger (machine) credential, so a weak user password cannot be attacked offline from captured
+  AS traffic. Turning it off on the KDC removes that protection for every client that would use it — including
+  Windows clients once the domain level is 2012 or higher.
+remediation:
+  en: Delete the line (FAST is on by default); it is documented as a testing switch.
+  ru: Удалите строку (FAST включён по умолчанию); параметр документирован как тестовый.
+attack:
+- id: T1110.002
+  name: 'Brute Force: Password Cracking'
+- id: T1558.004
+  name: 'Steal or Forge Kerberos Tickets: AS-REP Roasting'
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - kdc enable fast
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file.
+references:
+- title: Samba smb.conf(5) — 'kdc enable fast' (docs-xml/smbdotconf/security/kdcenablefast.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/kdcenablefast.xml
+- title: >-
+    Samba 4.16.0 release notes — Heimdal 8.0pre adds FAST support; 'kdc enable fast = no' to disable
+  url: https://github.com/samba-team/samba/blob/samba-4.16.0/WHATSNEW.txt
+- title: >-
+    Samba 4.19.0 release notes — Kerberos Armoring (FAST) support for Windows clients at DC level 2012+
+  url: https://github.com/samba-team/samba/blob/samba-4.19.0/WHATSNEW.txt
+- title: MITRE ATT&CK — T1558.004 AS-REP Roasting
+  url: https://attack.mitre.org/techniques/T1558/004/
+notes: ''
+condition_cel: hasattr(obj, "kdc enable fast") && !smbbool(obj, "kdc enable fast", true)
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor

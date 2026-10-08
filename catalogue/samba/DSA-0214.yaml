@@ -1,0 +1,65 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0214
+title:
+  en: Guest access is possible on the domain controller (map to guest / guest ok)
+  ru: На контроллере домена возможен гостевой доступ (map to guest / guest ok)
+domain: samba
+tier: 2
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] and share sections on the DC
+attributes:
+- map to guest
+- guest ok
+- guest account
+condition: >-
+  `map to guest` is not Never (Bad User, Bad Password, Bad Uid), or any share on the DC has `guest ok
+  = yes` (synonym public). Findings are raised on the [global] object and on each such share.
+threshold: any occurrence
+rationale: >-
+  A DC's shares are SYSVOL and NETLOGON — policy and logon scripts for every machine. Guest mapping lets
+  a failed logon (a mistyped name, or an attacker with no password) fall through to the guest account,
+  and a guest-enabled share needs no password at all. Either gives anonymous read of the policy store
+  and, with a writable path, a way to plant scripts that every workstation runs.
+remediation:
+  en: >-
+    Set `map to guest = Never` (the default) and remove `guest ok = yes` from shares on the DC; move any
+    share that genuinely needs guest access to a member file server.
+  ru: >-
+    Задайте `map to guest = Never` (значение по умолчанию) и уберите `guest ok = yes` из общих ресурсов
+    на контроллере; ресурсы, которым действительно нужен гостевой доступ, перенесите на файловый сервер
+    — член домена.
+attack:
+- id: T1078.001
+  name: 'Valid Accounts: Default Accounts'
+- id: T1021.002
+  name: 'Remote Services: SMB/Windows Admin Shares'
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: subtree
+  filter: (|(objectClass=dirauditorSmbConf)(objectClass=dirauditorSmbShare))
+  attributes:
+  - map to guest
+  - guest ok
+  - name
+references:
+- title: Samba smb.conf(5) — 'map to guest' (docs-xml/smbdotconf/security/maptoguest.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/maptoguest.xml
+- title: Samba smb.conf(5) — 'guest ok' (docs-xml/smbdotconf/security/guestok.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/guestok.xml
+- title: MITRE ATT&CK — T1078.001 Default Accounts
+  url: https://attack.mitre.org/techniques/T1078/001/
+notes: ''
+condition_cel: (obj.class.exists(c, c == "dirauditorSmbConf") && attr(obj, "map to guest").lowerAscii().trim()
+  != "" && attr(obj, "map to guest").lowerAscii().trim() != "never") || (obj.class.exists(c, c == "dirauditorSmbShare")
+  && smbbool(obj, "guest ok", false))
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor
+- cn=public,cn=shares,cn=smb.conf,cn=dirauditor

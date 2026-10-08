@@ -1,0 +1,59 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0218
+title:
+  en: Samba as a Kerberos client is limited to RC4 (kerberos encryption types = legacy)
+  ru: Samba как клиент Kerberos ограничен RC4 (kerberos encryption types = legacy)
+domain: samba
+tier: 2
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- kerberos encryption types
+condition: >-
+  `kerberos encryption types` is legacy (RC4-HMAC-MD5 only). The default is all; strong is AES-only.
+threshold: any occurrence
+rationale: >-
+  This governs the Kerberos library configuration Samba generates for its own client operations — winbind,
+  net, replication helpers — on the DC. 'legacy' forces RC4 for all of them, which the smb.conf manual
+  itself says to avoid because of CVE-2022-37966: RC4 session keys can be downgraded and attacked. On
+  a DC that talks to other DCs and trusted domains, it weakens inter-DC traffic too.
+remediation:
+  en: >-
+    Remove the line (all) or set `kerberos encryption types = strong` once every peer supports AES.
+  ru: >-
+    Удалите строку (значение all) или задайте `kerberos encryption types = strong`, когда все узлы поддерживают
+    AES.
+attack:
+- id: T1557
+  name: Adversary-in-the-Middle
+- id: T1558
+  name: Steal or Forge Kerberos Tickets
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - kerberos encryption types
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file.
+references:
+- title: >-
+    Samba smb.conf(5) — 'kerberos encryption types' (docs-xml/smbdotconf/security/kerberosencryptiontypes.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/kerberosencryptiontypes.xml
+- title: Samba security advisory CVE-2022-37966 (RC4 session keys; cited by smb.conf(5))
+  url: https://www.samba.org/samba/security/CVE-2022-37966.html
+- title: MITRE ATT&CK — T1557 Adversary-in-the-Middle
+  url: https://attack.mitre.org/techniques/T1557/
+notes: ''
+condition_cel: attr(obj, "kerberos encryption types").lowerAscii().trim() == "legacy"
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor

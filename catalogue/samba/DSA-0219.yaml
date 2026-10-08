@@ -1,0 +1,67 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0219
+title:
+  en: NTLM is still enabled and NT hashes are stored for all users (ntlm auth / nt hash store)
+  ru: NTLM всё ещё включён, NT-хеши хранятся для всех пользователей (ntlm auth / nt hash store)
+domain: samba
+tier: 2
+severity: info
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- ntlm auth
+- nt hash store
+condition: >-
+  `ntlm auth` is not disabled and `nt hash store` is always or auto (the defaults). Reported as information:
+  it describes the standard state, with the hardening Samba offers.
+threshold: defaults
+rationale: >-
+  NTLMv2 is still a pass-the-hash protocol: the unsalted NT hash stored for every user is itself a credential.
+  Samba can run an AD domain without NTLM at all (`ntlm auth = disabled`) and then stop storing NT hashes
+  for users (`nt hash store = never`), so that sam.ldb no longer contains a reusable credential per user.
+  Few domains can do this today, which is why this is informational — but it is the end state to plan
+  for, and the finding lists what still depends on NTLM.
+remediation:
+  en: >-
+    Inventory NTLM use with the auth_audit log (DSA-0215), move the remaining clients and applications
+    to Kerberos, then set `ntlm auth = disabled` and `nt hash store = never` and reset passwords so stored
+    NT hashes are removed.
+  ru: >-
+    Проведите инвентаризацию использования NTLM по журналу auth_audit (DSA-0215), переведите оставшихся
+    клиентов и приложения на Kerberos, затем задайте `ntlm auth = disabled` и `nt hash store = never`
+    и выполните смену паролей, чтобы хранимые NT-хеши были удалены.
+attack:
+- id: T1550.002
+  name: 'Use Alternate Authentication Material: Pass the Hash'
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - ntlm auth
+  - nt hash store
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file.
+references:
+- title: Samba smb.conf(5) — 'nt hash store' (docs-xml/smbdotconf/security/nt_hash_store.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/nt_hash_store.xml
+- title: Samba smb.conf(5) — 'ntlm auth' (docs-xml/smbdotconf/security/ntlmauth.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/ntlmauth.xml
+- title: Samba 4.17.4 release notes — Operation without the (unsalted) NT password hash
+  url: https://github.com/samba-team/samba/blob/samba-4.17.4/WHATSNEW.txt
+- title: MITRE ATT&CK — T1550.002 Pass the Hash
+  url: https://attack.mitre.org/techniques/T1550/002/
+notes: Informational by design; not part of the score.
+condition_cel: attr(obj, "ntlm auth").lowerAscii().trim() != "disabled" && attr(obj, "nt hash store").lowerAscii().trim()
+  != "never"
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor

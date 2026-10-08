@@ -1,0 +1,72 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0206
+title:
+  en: NTLMv1 authentication is permitted (ntlm auth)
+  ru: Разрешена проверка подлинности NTLMv1 (ntlm auth)
+domain: samba
+tier: 2
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- ntlm auth
+- nt hash store
+condition: >-
+  `ntlm auth` is ntlmv1-permitted or yes (the default is ntlmv2-only since Samba 4.5). mschapv2-and-ntlmv2-only
+  is reported as info: NTLMv1 only for MSCHAPv2 through ntlm_auth.
+threshold: any occurrence
+rationale: >-
+  NTLMv1 responses are computed with DES from the NT hash and no server-bound salt: a captured challenge/response
+  pair is cracked to the NT hash in hours on commodity hardware, or with a chosen challenge of 1122334455667788
+  looked up in rainbow tables. On a DC the setting applies to every domain user, so one VPN or Wi-Fi gateway
+  that still speaks NTLMv1 lowers the whole domain.
+remediation:
+  en: >-
+    Set `ntlm auth = ntlmv2-only` (or remove the line). Where RADIUS/802.1X needs MSCHAPv2 through ntlm_auth,
+    use mschapv2-and-ntlmv2-only and plan for EAP-TLS. Longer term, disable NTLM altogether (`ntlm auth
+    = disabled`, `nt hash store = never`) once Kerberos covers every client.
+  ru: >-
+    Задайте `ntlm auth = ntlmv2-only` (или удалите строку). Если RADIUS/802.1X требует MSCHAPv2 через
+    ntlm_auth, используйте mschapv2-and-ntlmv2-only и планируйте переход на EAP-TLS. В перспективе отключите
+    NTLM полностью (`ntlm auth = disabled`, `nt hash store = never`), когда Kerberos покроет всех клиентов.
+attack:
+- id: T1557
+  name: Adversary-in-the-Middle
+- id: T1110.002
+  name: 'Brute Force: Password Cracking'
+- id: T1550.002
+  name: 'Use Alternate Authentication Material: Pass the Hash'
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - ntlm auth
+  - nt hash store
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file.
+references:
+- title: Samba smb.conf(5) — 'ntlm auth' (docs-xml/smbdotconf/security/ntlmauth.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/ntlmauth.xml
+- title: >-
+    Samba 4.5.0 release notes — NTLMv1 disabled by default: 'ntlm auth' default changed from yes to no
+  url: https://github.com/samba-team/samba/blob/samba-4.5.0/WHATSNEW.txt
+- title: Samba smb.conf(5) — 'nt hash store' (docs-xml/smbdotconf/security/nt_hash_store.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/nt_hash_store.xml
+- title: MITRE ATT&CK — T1557 Adversary-in-the-Middle
+  url: https://attack.mitre.org/techniques/T1557/
+notes: >-
+  `lanman auth` has no effect on an AD DC (LM authentication is always disabled there) and is not evaluated.
+condition_cel: attr(obj, "ntlm auth").lowerAscii().trim() in ["ntlmv1-permitted", "yes", "true", "1",
+  "on"]
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor

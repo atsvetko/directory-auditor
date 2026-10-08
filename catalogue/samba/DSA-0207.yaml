@@ -1,0 +1,63 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0207
+title:
+  en: DNS zone accepts non-secure dynamic updates (allow dns updates = nonsecure)
+  ru: DNS принимает незащищённые динамические обновления (allow dns updates = nonsecure)
+domain: samba
+tier: 2
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- allow dns updates
+- server services
+condition: >-
+  `allow dns updates` is nonsecure (the default is secure only). Applies to Samba's internal DNS server
+  and to the BIND9_DLZ back end, both of which take the setting from smb.conf.
+threshold: any occurrence
+rationale: >-
+  With non-secure updates, any host that can reach the DNS server adds or overwrites records in the AD-integrated
+  zone without authenticating: redirect a server name to an attacker's host, add a name clients will trust,
+  or break resolution. In an AD domain, names are what Kerberos tickets and SMB signing are bound to,
+  so a hijacked record becomes a credential-capture or relay position.
+remediation:
+  en: >-
+    Set `allow dns updates = secure only` (or delete the line) and let members update their own records
+    with their machine credentials, which is the default behaviour. Use `disabled` for zones that are
+    maintained by hand.
+  ru: >-
+    Задайте `allow dns updates = secure only` (или удалите строку): члены домена обновляют свои записи
+    учётными данными компьютера, как и по умолчанию. Для зон, которые ведутся вручную, используйте `disabled`.
+attack:
+- id: T1557
+  name: Adversary-in-the-Middle
+- id: T1565.001
+  name: 'Data Manipulation: Stored Data Manipulation'
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - allow dns updates
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file.
+references:
+- title: Samba smb.conf(5) — 'allow dns updates' (docs-xml/smbdotconf/domain/allowdnsupdates.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/domain/allowdnsupdates.xml
+- title: >-
+    Microsoft Learn — Secure dynamic update (AD-integrated zones accept secure-only updates by default)
+  url: https://learn.microsoft.com/en-us/windows-server/networking/dns/deploy/dns-dynamic-update
+- title: MITRE ATT&CK — T1557 Adversary-in-the-Middle
+  url: https://attack.mitre.org/techniques/T1557/
+notes: ''
+condition_cel: attr(obj, "allow dns updates").lowerAscii().trim() == "nonsecure"
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor

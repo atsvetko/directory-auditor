@@ -14,13 +14,18 @@ Each entry (one YAML file per check, `catalogue/<domain>/DSA-NNNN.yaml`) records
 - `attack`, `bdu`, `compliance` mappings
 - `verified_by` — the human who confirmed the entry against its source, and the date
 
-ID blocks: `DSA-0001…0099` directory-core (AD / Samba), `DSA-0101…0199` FreeIPA / IdM (verified
-against the FreeIPA source tree, commit `13a1df3`, and Red Hat IdM documentation), DNS and Group
-Policy blocks to follow.
+ID blocks: `DSA-0001…0099` directory-core (AD and Samba AD DC, read over LDAP), `DSA-0101…0199`
+FreeIPA / IdM (verified against the FreeIPA source tree, commit `13a1df3`, and Red Hat IdM
+documentation), `DSA-0201…0299` Samba AD DC configuration (smb.conf on the DC, tier 2; verified
+against the Samba source tree — docs-xml/smbdotconf, loadparm, provision LDIFs — and the release
+notes of the versions that changed each default). DNS and Group Policy blocks to follow.
 
 Implemented entries carry `condition_cel` (the pack condition, evaluated by the engine) and `expect`
 (the objects in the matching synthetic snapshot under `testdata/` that must fire). `go test
 ./internal/catalogue` runs every implemented entry against its snapshot, so a check is proven before
 the pack is written. Packs are still written only from entries with `verified_by` filled.
 
-Status: 19 directory-core and 23 FreeIPA entries, all `draft` (awaiting human verification).
+Status: 25 directory-core, 23 FreeIPA and 19 Samba entries, all `draft` (awaiting human
+verification). 48 of them carry `condition_cel` and are exercised by `go test ./internal/catalogue`
+against `testdata/synthetic-*.json.zst`; `synthetic-samba-hardened` is the negative control on
+which no entry may fire.

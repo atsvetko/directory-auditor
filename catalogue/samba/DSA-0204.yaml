@@ -1,0 +1,70 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0204
+title:
+  en: LDAP server accepts unsigned or plaintext binds (ldap server require strong auth relaxed)
+  ru: >-
+    Сервер LDAP принимает неподписанные или открытые привязки (ldap server require strong auth ослаблен)
+domain: samba
+tier: 2
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- ldap server require strong auth
+condition: >-
+  `ldap server require strong auth` is no (default yes). The value allow_sasl_without_tls_channel_bindings
+  (alias allow_sasl_over_tls) is reported at medium: binds stay encrypted but lose channel binding.
+threshold: any occurrence
+rationale: >-
+  With the requirement off, a simple bind — user name and password in clear — is accepted on port 389,
+  and SASL binds need neither signing nor sealing. Anyone on the path reads passwords and can relay or
+  tamper with directory traffic. The setting mirrors Windows' LdapEnforceChannelBinding: 'no' is level
+  0. It is usually lowered for an application that cannot do LDAPS, which is exactly the application whose
+  credentials then travel in clear.
+remediation:
+  en: >-
+    Set `ldap server require strong auth = yes` (or remove the line). Move applications to LDAPS (636)
+    or StartTLS with a certificate the DC trusts; applications that cannot send TLS channel bindings can
+    be allowed with allow_sasl_without_tls_channel_bindings as a documented exception.
+  ru: >-
+    Задайте `ldap server require strong auth = yes` (или удалите строку). Переведите приложения на LDAPS
+    (636) или StartTLS с сертификатом, которому доверяет контроллер; приложения, не умеющие передавать
+    привязку к TLS-каналу, можно допустить значением allow_sasl_without_tls_channel_bindings как задокументированное
+    исключение.
+attack:
+- id: T1040
+  name: Network Sniffing
+- id: T1557
+  name: Adversary-in-the-Middle
+- id: T1557.001
+  name: 'Adversary-in-the-Middle: LLMNR/NBT-NS Poisoning and SMB Relay'
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - ldap server require strong auth
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file.
+references:
+- title: >-
+    Samba smb.conf(5) — 'ldap server require strong auth' (docs-xml/smbdotconf/ldap/ldapserverrequirestrongauth.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/ldap/ldapserverrequirestrongauth.xml
+- title: >-
+    Samba 4.21.0 release notes — LDAP TLS/SASL channel binding support; allow_sasl_over_tls deprecated
+  url: https://github.com/samba-team/samba/blob/samba-4.21.0/WHATSNEW.txt
+- title: MITRE ATT&CK — T1557 Adversary-in-the-Middle
+  url: https://attack.mitre.org/techniques/T1557/
+notes: ''
+condition_cel: attr(obj, "ldap server require strong auth").lowerAscii().trim() in ["no", "false", "0",
+  "off", "allow_sasl_over_tls", "allow_sasl_without_tls_channel_bindings"]
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor

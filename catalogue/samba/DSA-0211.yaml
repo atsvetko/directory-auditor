@@ -1,0 +1,61 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0211
+title:
+  en: Old password accepted for an extended period after a change (old password allowed period)
+  ru: Старый пароль принимается слишком долго после смены (old password allowed period)
+domain: samba
+tier: 2
+severity: medium
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- old password allowed period
+condition: >-
+  `old password allowed period` is greater than 60 minutes (the default). 0 disables the grace period.
+threshold: '> 60 minutes'
+rationale: >-
+  After a reset, the DC keeps accepting the previous password for NTLM logons (and LDAP simple binds)
+  for this many minutes so cached credentials on other devices do not lock the user out. Raising it to
+  a day means a password that was reset because it leaked keeps working for a day — on a DC, for every
+  account, including the one just reset by the help desk after a phishing incident.
+remediation:
+  en: >-
+    Return to the default (`old password allowed period = 60`, or delete the line) or set 0 if cached-credential
+    lockouts are not a concern; handle incident resets by also revoking sessions and tokens.
+  ru: >-
+    Верните значение по умолчанию (`old password allowed period = 60` или удалите строку) либо задайте
+    0, если блокировки из-за кэшированных паролей не критичны; при сбросе по инциденту дополнительно отзывайте
+    сеансы и токены.
+attack:
+- id: T1078
+  name: Valid Accounts
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - old password allowed period
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file.
+references:
+- title: >-
+    Samba smb.conf(5) — 'old password allowed period' (docs-xml/smbdotconf/security/oldpasswordallowedperiod.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/oldpasswordallowedperiod.xml
+- title: >-
+    Samba 4.16.0 release notes — BUG 15001: LDAP simple binds should honour 'old password allowed period'
+  url: https://github.com/samba-team/samba/blob/samba-4.16.0/WHATSNEW.txt
+- title: MITRE ATT&CK — T1078 Valid Accounts
+  url: https://attack.mitre.org/techniques/T1078/
+notes: ''
+condition_cel: hasattr(obj, "old password allowed period") && intattr(obj, "old password allowed period")
+  > 60
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor

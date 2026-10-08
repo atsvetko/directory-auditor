@@ -1,0 +1,73 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0215
+title:
+  en: Authentication and directory-change auditing is not enabled (log level)
+  ru: Аудит проверки подлинности и изменений каталога не включён (log level)
+domain: samba
+tier: 2
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- log level
+- logging
+condition: >-
+  `log level` contains neither auth_audit nor auth_json_audit at level 2 or higher, or contains none of
+  dsdb_audit / dsdb_json_audit / dsdb_password_audit / dsdb_group_audit (any level ≥ 2). Two findings
+  on one object are merged into one with evidence naming the missing class.
+threshold: classes absent
+rationale: >-
+  Samba writes nothing about logons, password changes or group-membership changes unless these debug classes
+  are raised: the default log level 0 records none of them. Without the auth audit stream there is no
+  record of who authenticated from where, no way to see a spraying attempt, and nothing to feed a SIEM;
+  without the dsdb audit stream, a new Domain Admin or a changed ACL leaves no trace. Both exist since
+  Samba 4.7/4.9 precisely to give AD-style auditing.
+remediation:
+  en: >-
+    Set, for example, `log level = 1 auth_audit:3 auth_json_audit:3 dsdb_audit:5 dsdb_password_audit:5
+    dsdb_group_audit:5 dsdb_json_audit:5`, send the JSON stream to a SIEM, and alert on privileged-group
+    changes and on authentication failures by source address.
+  ru: >-
+    Задайте, например, `log level = 1 auth_audit:3 auth_json_audit:3 dsdb_audit:5 dsdb_password_audit:5
+    dsdb_group_audit:5 dsdb_json_audit:5`, отправляйте JSON-поток в SIEM и настройте оповещения об изменениях
+    привилегированных групп и о неудачных попытках входа по адресу источника.
+attack:
+- id: T1562.002
+  name: 'Impair Defenses: Disable Windows Event Logging'
+- id: T1098
+  name: Account Manipulation
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - log level
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file.
+references:
+- title: Samba smb.conf(5) — 'log level' (docs-xml/smbdotconf/logging/loglevel.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/logging/loglevel.xml
+- title: >-
+    Samba 4.7.0 release notes — Authentication and Authorization audit support (auth_audit, auth_json_audit)
+  url: https://github.com/samba-team/samba/blob/samba-4.7.0/WHATSNEW.txt
+- title: >-
+    Samba 4.9.0 release notes — Database, password change and group membership audit (dsdb_audit, dsdb_password_audit,
+    dsdb_group_audit)
+  url: https://github.com/samba-team/samba/blob/samba-4.9.0/WHATSNEW.txt
+- title: MITRE ATT&CK — T1562.002 Disable Windows Event Logging
+  url: https://attack.mitre.org/techniques/T1562/002/
+notes: >-
+  Level thresholds (auth ≥ 2, dsdb ≥ 2) are the engine's choice, not Samba's; the Samba wiki page 'Setting
+  up Audit Logging' recommends concrete levels but could not be fetched at verification time.
+condition_cel: '!attr(obj, "log level").lowerAscii().trim().matches("(auth_audit|auth_json_audit):([2-9]|[1-9][0-9])")
+  || !attr(obj, "log level").lowerAscii().trim().matches("(dsdb_audit|dsdb_json_audit|dsdb_password_audit|dsdb_password_json_audit|dsdb_group_audit|dsdb_group_json_audit):([2-9]|[1-9][0-9])")'
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor

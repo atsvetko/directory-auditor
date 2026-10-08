@@ -1,0 +1,68 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0023
+title:
+  en: Domain passwords never expire or no password history is kept
+  ru: Пароли домена никогда не истекают или история паролей не хранится
+domain: directory-core
+tier: 0
+severity: low
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: The domain naming-context head
+attributes:
+- maxPwdAge
+- pwdHistoryLength
+condition: >-
+  maxPwdAge is 0 (never expires) or pwdHistoryLength is 0. Provisioned defaults are 42 days and 24 remembered
+  passwords. Severity rises to medium when both are set to 0.
+threshold: maxPwdAge = 0 or pwdHistoryLength = 0
+rationale: >-
+  Expiry bounds how long a leaked password stays useful; history stops users from changing back to it.
+  Current guidance (NIST SP 800-63B, Microsoft) favours long passwords with breach-driven rather than
+  scheduled changes — so a deliberate 'never expires' with compensating controls is defensible, which
+  is why this is low. A zero history is not: it lets the previous password be restored immediately after
+  any forced reset.
+remediation:
+  en: >-
+    Keep a history of at least 24 passwords (`samba-tool domain passwordsettings set --history-length=24`).
+    Decide on expiry explicitly: either a documented no-expiry policy with breached-password screening
+    and MFA, or a maximum age of 30–90 days.
+  ru: >-
+    Храните историю не менее 24 паролей (`samba-tool domain passwordsettings set --history-length=24`).
+    Решение об истечении примите осознанно: либо задокументированная политика без истечения с проверкой
+    по утечкам и MFA, либо максимальный срок 30–90 дней.
+attack:
+- id: T1078
+  name: Valid Accounts
+engine: declarative
+query_sketch:
+  base: default
+  scope: base
+  filter: (&(objectClass=domainDNS)(|(maxPwdAge=0)(pwdHistoryLength=0)))
+  attributes:
+  - maxPwdAge
+  - pwdHistoryLength
+references:
+- title: Microsoft Learn — Maximum password age (DC effective default 42 days; recommended 30–90)
+  url: >-
+    https://learn.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/maximum-password-age
+- title: >-
+    Samba source — source4/setup/provision_basedn_modify.ldif (provisioned domain policy: lockoutThreshold
+    0, pwdProperties 1, pwdHistoryLength 24, maxPwdAge 42 days, MAQ 10)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/source4/setup/provision_basedn_modify.ldif
+- title: >-
+    Microsoft Learn — AD schema: lockoutThreshold, minPwdLength, maxPwdAge, pwdHistoryLength attributes
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-lockoutthreshold
+- title: MITRE ATT&CK — T1078 Valid Accounts
+  url: https://attack.mitre.org/techniques/T1078/
+notes: >-
+  maxPwdAge is a negative 100-ns interval; 0 means never. -9223372036854775808 (Int64 min) also means
+  never on Windows and is treated the same.
+condition_cel: attr(obj, "maxPwdAge") == "0" || attr(obj, "maxPwdAge") == "-9223372036854775808" || intattr(obj,
+  "pwdHistoryLength") == 0
+expect:
+- DC=samba,DC=example

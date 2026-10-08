@@ -1,0 +1,66 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0217
+title:
+  en: Kerberos ticket lifetimes raised above the defaults (kdc:* lifetime options)
+  ru: Срок действия билетов Kerberos увеличен сверх значений по умолчанию (параметры kdc:*)
+domain: samba
+tier: 2
+severity: low
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- kdc:user ticket lifetime
+- kdc:service ticket lifetime
+- kdc:renewal lifetime
+condition: >-
+  `kdc:user ticket lifetime` or `kdc:service ticket lifetime` is greater than 10 (hours), or `kdc:renewal
+  lifetime` is greater than 168 (hours). These apply only when no Kerberos policy GPO sets the values
+  (Samba reads gpo.tdb first).
+threshold: lifetime > 10 h or renewal > 7 d
+rationale: >-
+  A stolen ticket stays valid for its remaining lifetime whatever happens to the account; renewable age
+  bounds how long a stolen renewable TGT can be kept alive without the password. Long lifetimes are set
+  to spare users re-authentication and silently extend the window for pass-the-ticket.
+remediation:
+  en: >-
+    Remove the overrides (defaults: 10 hours, 10 hours, 7 days) or set them through the Default Domain
+    Policy's Kerberos policy so all DCs agree.
+  ru: >-
+    Удалите переопределения (по умолчанию 10 часов, 10 часов, 7 дней) или задайте их через политику Kerberos
+    в политике домена по умолчанию, чтобы все контроллеры использовали одинаковые значения.
+attack:
+- id: T1550.003
+  name: 'Use Alternate Authentication Material: Pass the Ticket'
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - kdc:user ticket lifetime
+  - kdc:service ticket lifetime
+  - kdc:renewal lifetime
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file.
+references:
+- title: >-
+    Samba source — lib/param/util.c (lpcfg_default_kdc_policy: kdc:user ticket lifetime 10, service ticket
+    lifetime 10, renewal lifetime 24*7 hours; gpo.tdb takes precedence)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/lib/param/util.c
+- title: Microsoft Learn — Maximum lifetime for user ticket (default 10 hours)
+  url: >-
+    https://learn.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/maximum-lifetime-for-user-ticket
+- title: MITRE ATT&CK — T1550.003 Pass the Ticket
+  url: https://attack.mitre.org/techniques/T1550/003/
+notes: ''
+condition_cel: intattr(obj, "kdc:user ticket lifetime") > 10 || intattr(obj, "kdc:service ticket lifetime")
+  > 10 || intattr(obj, "kdc:renewal lifetime") > 168
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor

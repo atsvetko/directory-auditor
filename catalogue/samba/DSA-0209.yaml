@@ -1,0 +1,65 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0209
+title:
+  en: LDAPS/StartTLS is disabled on the domain controller (tls enabled = no)
+  ru: LDAPS/StartTLS отключён на контроллере домена (tls enabled = no)
+domain: samba
+tier: 2
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- tls enabled
+- tls certfile
+- tls keyfile
+- tls cafile
+condition: '`tls enabled` is no (default yes).'
+threshold: any occurrence
+rationale: >-
+  Without TLS the DC offers no LDAPS on 636 and no StartTLS on 389. Every application that needs a simple
+  bind — most non-Windows systems, HR and ticketing integrations — then either fails, or an administrator
+  lowers `ldap server require strong auth` (DSA-0204) and passwords cross the network in clear. Password
+  changes over LDAP (unicodePwd) require an encrypted connection and become impossible too.
+remediation:
+  en: >-
+    Set `tls enabled = yes` and give the DC a certificate from the organisation's CA (`tls certfile`,
+    `tls keyfile`, `tls cafile`) so clients can verify it; Samba generates a self-signed one otherwise,
+    which is a stop-gap, not a solution.
+  ru: >-
+    Задайте `tls enabled = yes` и выдайте контроллеру сертификат от корпоративного УЦ (`tls certfile`,
+    `tls keyfile`, `tls cafile`), чтобы клиенты могли его проверить; иначе Samba создаёт самоподписанный,
+    и это временная мера, а не решение.
+attack:
+- id: T1040
+  name: Network Sniffing
+- id: T1557
+  name: Adversary-in-the-Middle
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - tls enabled
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file.
+references:
+- title: Samba smb.conf(5) — 'tls enabled' (docs-xml/smbdotconf/security/tlsenabled.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/tlsenabled.xml
+- title: >-
+    Samba smb.conf(5) — 'ldap server require strong auth' (docs-xml/smbdotconf/ldap/ldapserverrequirestrongauth.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/ldap/ldapserverrequirestrongauth.xml
+- title: MITRE ATT&CK — T1040 Network Sniffing
+  url: https://attack.mitre.org/techniques/T1040/
+notes: ''
+condition_cel: attr(obj, "tls enabled").lowerAscii().trim() in ["no", "false", "0", "off"]
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor

@@ -1,0 +1,83 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0203
+title:
+  en: NetLogon accepts RC4/HMAC-MD5 clients or unsealed secure channels (CVE-2022-38023)
+  ru: >-
+    NetLogon принимает клиентов RC4/HMAC-MD5 или незашифрованный защищённый канал (CVE-2022-38023)
+domain: samba
+tier: 2
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- reject md5 clients
+- server schannel require seal
+- server reject md5 schannel:*
+- server schannel require seal:*
+condition: >-
+  `reject md5 clients` is no, or `server schannel require seal` is no. Both default to yes since the CVE-2022-38023
+  fixes (Samba 4.17.4, 4.16.8, 4.15.13); an absent parameter on an older version therefore counts as no.
+threshold: any occurrence
+rationale: >-
+  RC4/HMAC-MD5 NetLogon crypto is weak enough that an attacker on the network can recover the session
+  key and act as a domain member; without sealing, the channel's contents are readable. Samba changed
+  both defaults in December 2022 and deprecated the switches. Setting them back to no for one NAS re-exposes
+  the whole domain, which is why Samba provides per-computer exceptions instead.
+remediation:
+  en: >-
+    Delete the global `reject md5 clients = no` and `server schannel require seal = no`. For a device
+    that still needs RC4 (older NetApp ONTAP, some NAS), use the per-account exception Samba prints in
+    its log (`server reject md5 schannel:NASBOX$ = no`, `server schannel require seal:NASBOX$ = no`) and
+    plan its replacement.
+  ru: >-
+    Удалите глобальные `reject md5 clients = no` и `server schannel require seal = no`. Для устройства,
+    которому всё ещё нужен RC4 (старые NetApp ONTAP, некоторые NAS), используйте исключение для конкретной
+    учётной записи, которое Samba выводит в журнал (`server reject md5 schannel:NASBOX$ = no`, `server
+    schannel require seal:NASBOX$ = no`), и запланируйте его замену.
+attack:
+- id: T1557
+  name: Adversary-in-the-Middle
+- id: T1550
+  name: Use Alternate Authentication Material
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - reject md5 clients
+  - server schannel require seal
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file. The version comes from cn=samba,cn=dirauditor.
+references:
+- title: Samba smb.conf(5) — 'reject md5 clients' (docs-xml/smbdotconf/logon/rejectmd5clients.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/logon/rejectmd5clients.xml
+- title: >-
+    Samba smb.conf(5) — 'server schannel require seal' (docs-xml/smbdotconf/security/serverschannelrequireseal.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/serverschannelrequireseal.xml
+- title: >-
+    Samba 4.17.4 release notes — 'reject md5 clients' new default yes, 'server schannel require seal'
+    new, deprecated
+  url: https://github.com/samba-team/samba/blob/samba-4.17.4/WHATSNEW.txt
+- title: >-
+    Samba security advisory CVE-2022-38023 (RC4/HMAC-MD5 NetLogon secure channel; cited by smb.conf(5))
+  url: https://www.samba.org/samba/security/CVE-2022-38023.html
+- title: MITRE ATT&CK — T1557 Adversary-in-the-Middle
+  url: https://attack.mitre.org/techniques/T1557/
+notes: >-
+  Backport versions 4.16.8 and 4.15.13 are from the 4.17.4 release notes' companion releases of the same
+  day; single-source for those two numbers.
+condition_cel: (attr(obj, "reject md5 clients").lowerAscii().trim() in ["no", "false", "0", "off"]) ||
+  (attr(obj, "server schannel require seal").lowerAscii().trim() in ["no", "false", "0", "off"]) || (attr(obj,
+  "reject md5 clients").lowerAscii().trim() == "" && version_lt(objattr("cn=samba,cn=dirauditor", "version"),
+  "4.17.4"))
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor

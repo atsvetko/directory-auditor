@@ -1,0 +1,63 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0212
+title:
+  en: Schema updates are allowed on this DC (dsdb:schema update allowed)
+  ru: На этом контроллере разрешено изменение схемы (dsdb:schema update allowed)
+domain: samba
+tier: 2
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- dsdb:schema update allowed
+condition: The parametric option `dsdb:schema update allowed` is yes (default no).
+threshold: any occurrence
+rationale: >-
+  Samba refuses schema modifications unless this switch is on, because a bad schema change is forest-wide
+  and irreversible. samba-tool turns it on only for the duration of a schema upgrade. Left on, any principal
+  with write access to the schema partition (Schema Admins, or whoever obtained it) can add attributes,
+  change defaultSecurityDescriptor templates or break replication from this DC.
+remediation:
+  en: >-
+    Remove the line (or set `dsdb:schema update allowed = no`); turn it on only on one DC for the duration
+    of a planned schema upgrade, as `samba-tool domain schemaupgrade` does by itself.
+  ru: >-
+    Удалите строку (или задайте `dsdb:schema update allowed = no`); включайте только на одном контроллере
+    на время запланированного обновления схемы, как это делает сама команда `samba-tool domain schemaupgrade`.
+attack:
+- id: T1484
+  name: Domain or Tenant Policy Modification
+- id: T1098
+  name: Account Manipulation
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - dsdb:schema update allowed
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file. Parametric options are not printed by testparm -v unless set; the collector merges
+    them from the file.
+references:
+- title: >-
+    Samba source — source4/dsdb/schema/schema_init.c (update_allowed = lpcfg_parm_bool(..., "dsdb", "schema
+    update allowed", false))
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/source4/dsdb/schema/schema_init.c
+- title: >-
+    Samba source — python/samba/netcmd/domain/schemaupgrade.py (schemaupgrade enables the option temporarily)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/python/samba/netcmd/domain/schemaupgrade.py
+- title: MITRE ATT&CK — T1484 Domain or Tenant Policy Modification
+  url: https://attack.mitre.org/techniques/T1484/
+notes: ''
+condition_cel: smbbool(obj, "dsdb:schema update allowed", false)
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor

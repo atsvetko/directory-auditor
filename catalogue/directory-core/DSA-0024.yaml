@@ -1,0 +1,79 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0024
+title:
+  en: Domain functional level below Windows Server 2012 R2
+  ru: Функциональный уровень домена ниже Windows Server 2012 R2
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The rootDSE (domainFunctionality) and the domain head (msDS-Behavior-Version)
+attributes:
+- domainFunctionality
+- forestFunctionality
+- domainControllerFunctionality
+condition: >-
+  domainFunctionality in the rootDSE is below 6 (DS_BEHAVIOR_WIN2012R2). Samba provisions level 4 (2008
+  R2) and keeps it there unless `ad dc functional level` is raised in smb.conf on every DC and the level
+  is raised with samba-tool.
+threshold: domainFunctionality < 6
+rationale: >-
+  Several credential protections exist only from the 2012 R2 level: the Protected Users group (no NTLM,
+  no RC4, no delegation for its members), authentication policies and silos, and — in Samba — Kerberos
+  armoring (FAST) for Windows clients, which hides weak passwords from offline attack. A domain left at
+  2008 R2 cannot use any of them, whatever the DCs are capable of.
+remediation:
+  en: >-
+    Windows: raise the level once all DCs run a supporting version (Active Directory Domains and Trusts,
+    or `Set-ADDomainMode`). Samba: set `ad dc functional level = 2016` on every DC, then `samba-tool domain
+    schemaupgrade --schema=2019`, `samba-tool domain functionalprep --function-level=2016` and `samba-tool
+    domain level raise --domain-level=2016 --forest-level=2016`; all DCs must run the same Samba version.
+  ru: >-
+    Windows: повысьте уровень, когда все контроллеры работают на поддерживающей версии (оснастка «Домены
+    и доверие» или `Set-ADDomainMode`). Samba: задайте `ad dc functional level = 2016` на каждом контроллере,
+    затем выполните `samba-tool domain schemaupgrade --schema=2019`, `samba-tool domain functionalprep
+    --function-level=2016` и `samba-tool domain level raise --domain-level=2016 --forest-level=2016`;
+    все контроллеры должны работать на одной версии Samba.
+attack:
+- id: T1558
+  name: Steal or Forge Kerberos Tickets
+- id: T1550.002
+  name: 'Use Alternate Authentication Material: Pass the Hash'
+engine: declarative
+query_sketch:
+  base: cn=dirauditor
+  scope: one
+  filter: (objectClass=dirauditorRootDSE)
+  attributes:
+  - domainFunctionality
+  - forestFunctionality
+  notes: The rootDSE is stored as cn=rootdse,cn=dirauditor by the collector.
+references:
+- title: MS-ADTS 6.1.4.4 msDS-Behavior-Version values (4 = 2008 R2, 6 = 2012 R2, 7 = 2016)
+  url: >-
+    https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/564dc969-6db3-49b3-891a-f2f8d0a68a7f
+- title: >-
+    Microsoft Learn — Protected Users security group (requires domain functional level 2012 R2)
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/security/credentials-protection-and-management/protected-users-security-group
+- title: >-
+    Samba smb.conf(5) — 'ad dc functional level' (docs-xml/smbdotconf/protocol/addcfunctionallevel.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/protocol/addcfunctionallevel.xml
+- title: Samba 4.20.0 release notes — functional level 2012_R2/2016 and authentication policies
+  url: https://github.com/samba-team/samba/blob/samba-4.20.0/WHATSNEW.txt
+- title: >-
+    Samba 4.19.0 release notes — FAST for Windows clients needs DC functional level 2012 or higher
+  url: https://github.com/samba-team/samba/blob/samba-4.19.0/WHATSNEW.txt
+- title: MITRE ATT&CK — T1558 Steal or Forge Kerberos Tickets
+  url: https://attack.mitre.org/techniques/T1558/
+notes: >-
+  Raising the level is irreversible; the remediation names the prerequisites. Samba's 2016 level is documented
+  as incomplete (claims, DAC) — the security features above still apply.
+condition_cel: hasattr(obj, "domainFunctionality") && intattr(obj, "domainFunctionality") < 6
+expect:
+- cn=rootdse,cn=dirauditor

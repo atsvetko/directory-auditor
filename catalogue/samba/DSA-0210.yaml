@@ -1,0 +1,84 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0210
+title:
+  en: KDC issues RC4 Kerberos keys or session keys
+  ru: KDC выдаёт ключи Kerberos RC4 или сеансовые ключи RC4
+domain: samba
+tier: 2
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: smb.conf [global] on the DC
+attributes:
+- kdc supported enctypes
+- kdc default domain supported enctypes
+- kdc force enable rc4 weak session keys
+condition: >-
+  `kdc supported enctypes` or `kdc default domain supported enctypes` explicitly includes rc4-hmac / arcfour-hmac-md5
+  / bit 0x4, or `kdc force enable rc4 weak session keys` is yes. From Samba 4.24.0 (CVE-2026-20833) the
+  default for `kdc default domain supported enctypes` is AES-only when the domain functional level is
+  2008 or higher; on older versions an unset value is reported as info with the version as evidence.
+threshold: any occurrence
+rationale: >-
+  RC4 Kerberos keys are the unsalted NT hash: a service ticket encrypted with one is cracked offline at
+  NT-hash speed (Kerberoasting at full speed), and RC4 session keys weaken every exchange that uses them.
+  These switches exist for compatibility with old trusts and clients; left on, they undo the AES-only
+  defaults Samba adopted for the KDC.
+remediation:
+  en: >-
+    Remove rc4 from both lists (`kdc supported enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96`),
+    set `kdc force enable rc4 weak session keys = no`, and make sure accounts carry msDS-SupportedEncryptionTypes
+    with AES (DSA-0012 reports those that do not). Upgrade to 4.24+ so the default is AES-only.
+  ru: >-
+    Уберите rc4 из обоих списков (`kdc supported enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96`),
+    задайте `kdc force enable rc4 weak session keys = no` и убедитесь, что у учётных записей в msDS-SupportedEncryptionTypes
+    указан AES (DSA-0012 находит те, у которых его нет). Обновитесь до 4.24+, где AES-only действует по
+    умолчанию.
+attack:
+- id: T1558.003
+  name: 'Steal or Forge Kerberos Tickets: Kerberoasting'
+- id: T1557
+  name: Adversary-in-the-Middle
+engine: declarative
+query_sketch:
+  base: cn=smb.conf,cn=dirauditor
+  scope: base
+  filter: (objectClass=dirauditorSmbConf)
+  attributes:
+  - kdc supported enctypes
+  - kdc default domain supported enctypes
+  - kdc force enable rc4 weak session keys
+  notes: >-
+    Synthetic object produced by the local smb.conf collector (internal/local/smbconf): parameter names
+    lower-cased, values as testparm prints them; _explicit lists parameters set in the file; _source is
+    testparm or file.
+references:
+- title: >-
+    Samba smb.conf(5) — 'kdc supported enctypes' (docs-xml/smbdotconf/security/kdcsupportedenctypes.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/kdcsupportedenctypes.xml
+- title: >-
+    Samba smb.conf(5) — 'kdc default domain supported enctypes' (docs-xml/smbdotconf/security/kdcdefaultdomainsupportedenctypes.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/kdcdefaultdomainsupportedenctypes.xml
+- title: >-
+    Samba smb.conf(5) — 'kdc force enable rc4 weak session keys' (docs-xml/smbdotconf/security/kdcforceenablerc4weaksessionkeys.xml)
+  url: >-
+    https://github.com/samba-team/samba/blob/08d94fbc998a68259a4d2b424ff226fb5d4f9c7c/docs-xml/smbdotconf/security/kdcforceenablerc4weaksessionkeys.xml
+- title: >-
+    Samba 4.24.0 release notes — domain encryption types changed to AES by default, CVE-2026-20833
+  url: https://github.com/samba-team/samba/blob/samba-4.24.0/WHATSNEW.txt
+- title: MITRE ATT&CK — T1558.003 Kerberoasting
+  url: https://attack.mitre.org/techniques/T1558/003/
+notes: >-
+  Which older series received the CVE-2026-20833 back-port could not be verified (advisory not reachable);
+  the condition therefore only flags explicit RC4 and the force switch.
+condition_cel: attr(obj, "kdc supported enctypes").lowerAscii().trim().matches("rc4|arcfour") || mask_has(intval(attr(obj,
+  "kdc supported enctypes").lowerAscii().trim()), 4) || attr(obj, "kdc default domain supported enctypes").lowerAscii().trim().matches("rc4|arcfour")
+  || mask_has(intval(attr(obj, "kdc default domain supported enctypes").lowerAscii().trim()), 4) || smbbool(obj,
+  "kdc force enable rc4 weak session keys", false)
+expect:
+- cn=global,cn=smb.conf,cn=dirauditor
