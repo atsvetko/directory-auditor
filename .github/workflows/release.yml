@@ -1,0 +1,180 @@
+# Release: on a tag v* build the four static binaries reproducibly, gate them
+# (read-only symbols), pack one zip per OS/arch with the licence, README and the
+# test-stand handout, and publish a GitHub Release with SHA256SUMS, the SBOM
+# and the behaviour manifest. A tag with a suffix (v0.1.0-rc1) is a pre-release.
+#
+# Reproducible: -trimpath, -buildid=, build date = tag commit date, zip entries
+# with the commit timestamp and no extra attributes — the same tag rebuilt on
+# another day yields byte-identical zips.
+#
+# No code signing yet (Windows SmartScreen will warn; see docs/STAND-RU.md).
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:   # dry run from any ref: builds and uploads artifacts, publishes nothing
+
+permissions:
+  contents: read
+
+env:
+  CGO_ENABLED: "0"
+  GOFLAGS: -trimpath
+
+jobs:
+  verify:
+    name: test · read-only gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test -count=1 ./...
+        env:
+          CGO_ENABLED: "1"
+      - name: embedded catalogue equals the working tree
+        run: go test -count=1 -run TestEmbeddedMatchesWorkingTree ./internal/catalogue
+
+  build:
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { goos: linux,   goarch: amd64 }
+          - { goos: linux,   goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+          - { goos: darwin,  goarch: arm64 }
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: version from the tag
+        id: v
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then ver="$GITHUB_REF_NAME"; else ver="snapshot-${GITHUB_SHA::12}"; fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "date=$(git log -1 --format=%cs)" >> "$GITHUB_OUTPUT"
+          echo "epoch=$(git log -1 --format=%ct)" >> "$GITHUB_OUTPUT"
+      - name: build (reproducible)
+        run: |
+          ext=""; [ "$GOOS" = windows ] && ext=".exe"
+          mkdir -p dist
+          go build -trimpath \
+            -ldflags "-buildid= -X github.com/atsvetko/directory-auditor/internal/buildinfo.Version=${{ steps.v.outputs.version }} -X github.com/atsvetko/directory-auditor/internal/buildinfo.Commit=${GITHUB_SHA::12} -X github.com/atsvetko/directory-auditor/internal/buildinfo.Date=${{ steps.v.outputs.date }}" \
+            -o "dist/dirauditor-${GOOS}-${GOARCH}${ext}" ./cmd/dirauditor
+      - name: read-only symbol gate
+        run: |
+          ext=""; [ "$GOOS" = windows ] && ext=".exe"
+          scripts/readonly-check.sh "dist/dirauditor-${GOOS}-${GOARCH}${ext}"
+      - name: smoke test and manifest (native target)
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: |
+          ./dist/dirauditor-linux-amd64 version | tee dist/version.txt
+          grep -q "${{ steps.v.outputs.version }}" dist/version.txt
+          ./dist/dirauditor-linux-amd64 manifest --queries > dist/manifest.txt
+          mkdir -p proto && cp dist/dirauditor-linux-amd64 proto/dirauditor && (cd proto && ./dirauditor analyse --snapshot ../testdata/synthetic-lab.json.zst --out out)
+          python3 -c "import json; r=json.load(open('proto/out/report.json')); assert r['preview_checks']>0"
+      - name: pack
+        run: |
+          ext=""; [ "$GOOS" = windows ] && ext=".exe"
+          name="dirauditor-${{ steps.v.outputs.version }}-${GOOS}-${GOARCH}"
+          mkdir -p "pkg/$name"
+          cp "dist/dirauditor-${GOOS}-${GOARCH}${ext}" "pkg/$name/dirauditor${ext}"
+          cp LICENSE README.md "pkg/$name/"
+          cp docs/STAND-RU.md "pkg/$name/STAND-RU.md"
+          [ -f dist/manifest.txt ] && cp dist/manifest.txt "pkg/$name/manifest.txt" || true
+          # deterministic archive: fixed mtimes, no extra attributes, sorted entries
+          find "pkg/$name" -exec touch -d "@${{ steps.v.outputs.epoch }}" {} +
+          mkdir -p out
+          (cd pkg && find "$name" -type f | LC_ALL=C sort | TZ=UTC zip -X -9 "../out/$name.zip" -@ | tail -1)
+          # the bare binary too, for scripted installs and for checksum comparison after unzip
+          cp "dist/dirauditor-${GOOS}-${GOARCH}${ext}" "out/"
+          [ -f dist/manifest.txt ] && cp dist/manifest.txt out/ || true
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: out/
+          retention-days: 30
+          if-no-files-found: error
+
+  sbom:
+    name: SBOM (CycloneDX)
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: |
+          go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+          cyclonedx-gomod app -main cmd/dirauditor -licenses -json -output sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-sbom
+          path: sbom.cdx.json
+          if-no-files-found: error
+
+  publish:
+    name: publish GitHub Release
+    needs: [build, sbom]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: assets
+      - name: checksums
+        run: |
+          cd assets
+          sha256sum dirauditor-* sbom.cdx.json > SHA256SUMS
+          cat SHA256SUMS
+      - name: release notes
+        run: |
+          ver="$GITHUB_REF_NAME"
+          pre=""; [[ "$ver" == *-* ]] && pre="--prerelease"
+          echo "pre=$pre" >> "$GITHUB_ENV"
+          preview=$(grep -c '^  DSA-' assets/manifest.txt)
+          cat > notes.md <<EOF
+          Directory Auditor ${ver} — prototype build for test-stand runs.
+
+          **One file, read-only.** Unzip, run \`dirauditor\` (double-click on Windows) → the wizard opens
+          on 127.0.0.1; or \`dirauditor scan --server <dc> --user <audit account>\`. Handout for the
+          stand: \`STAND-RU.md\` inside every zip.
+
+          **Preview checks: ${preview}.** Catalogue entries built into the binary, unsigned and not yet
+          verified by a human (status draft). Reports label them; treat findings as leads to confirm.
+
+          **Verify what you downloaded** (\`SHA256SUMS\` covers the zips and the bare binaries):
+
+              sha256sum --ignore-missing -c SHA256SUMS            # Linux / macOS
+              Get-FileHash .\\dirauditor-${ver}-windows-amd64.zip   # Windows, compare with SHA256SUMS
+
+          Not code-signed yet: Windows SmartScreen will warn on first run (More info → Run anyway).
+
+          Behaviour manifest: \`manifest.txt\`. SBOM: \`sbom.cdx.json\`. Built reproducibly from
+          \`${GITHUB_SHA}\` (\`-trimpath -buildid=\`, date = commit date).
+          EOF
+      - name: create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" $pre --verify-tag --title "Directory Auditor $GITHUB_REF_NAME" --notes-file notes.md \
+            assets/dirauditor-* assets/SHA256SUMS assets/sbom.cdx.json assets/manifest.txt
+          gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name'
