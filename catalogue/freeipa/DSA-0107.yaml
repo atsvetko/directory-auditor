@@ -67,7 +67,10 @@ references:
 notes: >-
   Reading policies needs the 'Password Policy Readers' privilege (System: Read Group Password Policy,
   bind rule permission); without it the engine reports the check as not collected. Least privilege: add
-  the audit account to that privilege only.
-condition_cel: hasattr(obj, "krbPwdMinLength") && intattr(obj, "krbPwdMinLength") < 8
+  the audit account to that privilege only. The 'Default Kerberos Service Password Policy' (cn=Kerberos
+  Service Password Policy) governs service principals with random keys and is excluded — found by the
+  live FreeIPA lab.
+condition_cel: '!obj.dn.lowerAscii().contains(",cn=kerberos service password policy,") && hasattr(obj,
+  "krbPwdMinLength") && intattr(obj, "krbPwdMinLength") < 8'
 expect:
 - cn=global_policy,cn=IPA.EXAMPLE,cn=kerberos,dc=ipa,dc=example

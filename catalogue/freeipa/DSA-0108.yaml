@@ -69,9 +69,11 @@ references:
   url: https://attack.mitre.org/techniques/T1110/003/
 notes: >-
   The policy part needs 'Password Policy Readers'; the configuration part is readable by all authenticated
-  users.
-condition_cel: (hasattr(obj, "krbPwdMaxFailure") && intattr(obj, "krbPwdMaxFailure") == 0) || attrs(obj,
-  "ipaConfigString").exists(s, s.lowerAscii() == "kdc:disable lockout")
+  users. The service-principal policy under cn=Kerberos Service Password Policy is excluded (random keys,
+  no lockout by design).
+condition_cel: (!obj.dn.lowerAscii().contains(",cn=kerberos service password policy,") && hasattr(obj,
+  "krbPwdMaxFailure") && intattr(obj, "krbPwdMaxFailure") == 0) || attrs(obj, "ipaConfigString").exists(s,
+  s.lowerAscii() == "kdc:disable lockout")
 expect:
 - cn=global_policy,cn=IPA.EXAMPLE,cn=kerberos,dc=ipa,dc=example
 - cn=ipaConfig,cn=etc,dc=ipa,dc=example
