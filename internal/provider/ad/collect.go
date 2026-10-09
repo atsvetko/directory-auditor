@@ -101,7 +101,7 @@ var Plan = []Query{
 		Attrs:   []string{"objectClass", "cn"},
 		Purpose: "who can read the DPAPI domain backup keys (DSA-0067)"},
 	{Name: "kds-root-keys", Base: "CN=Master Root Keys,CN=Group Key Distribution Service,CN=Services,<config>", Scope: ldapx.ScopeOneLevel,
-		Filter:  "(objectClass=msKds-ProvRootKey)", SD: true, Classes: []string{"msKds-ProvRootKey"},
+		Filter: "(objectClass=msKds-ProvRootKey)", SD: true, Classes: []string{"msKds-ProvRootKey"},
 		Attrs:   []string{"objectClass", "cn"},
 		Purpose: "who can read the KDS root keys that derive every gMSA password (DSA-0068)"},
 	{Name: "protected-sd", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(adminCount=1)", SD: true,
