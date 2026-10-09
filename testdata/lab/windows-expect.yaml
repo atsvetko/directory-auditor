@@ -1,0 +1,89 @@
+# Expected outcome of `dirauditor scan` against the Windows AD lab built by
+# tools/lab/windows/provision.ps1 + populate.ps1 (domain da.test).
+# Checked by `go run ./tools/lab/verify`. Conservative on purpose: only the
+# deterministic single-object fixtures are pinned under `must`; every other
+# directory-core check may fire (`allow`). Tighten by promoting checks from
+# allow to must once the first live run shows their exact DNs.
+lab: windows
+min_objects: 40
+dn_glob: true
+allow_skip: [provider, tier]   # FreeIPA/Samba entries skip by provider; tier-2 by tier
+must:
+  DSA-0001: ["CN=svc_legacy,CN=Users,DC=da,DC=test"]   # no Kerberos pre-auth
+  DSA-0011: ["CN=rev_user,CN=Users,DC=da,DC=test"]   # reversible encryption
+  DSA-0026: ["CN=svc_sql,CN=Users,DC=da,DC=test"]   # kerberoastable (SPN on a user)
+  DSA-0027: ["CN=DnsAdmins,CN=Users,DC=da,DC=test"]   # DnsAdmins has a member
+  DSA-0028: ["CN=t_contractor,CN=Users,DC=da,DC=test"]   # cleartext password in description (masked in the report)
+  DSA-0042: ["CN=Guest,CN=Users,DC=da,DC=test"]   # built-in Guest enabled
+  DSA-0071: ["CN=WeakAdminPSO,CN=Password Settings Container,CN=System,DC=da,DC=test"]   # weak PSO applied to Domain Admins
+allow:
+  - DSA-0002
+  - DSA-0003
+  - DSA-0004
+  - DSA-0005
+  - DSA-0006
+  - DSA-0007
+  - DSA-0008
+  - DSA-0009
+  - DSA-0010
+  - DSA-0012
+  - DSA-0013
+  - DSA-0014
+  - DSA-0015
+  - DSA-0016
+  - DSA-0017
+  - DSA-0018
+  - DSA-0019
+  - DSA-0020
+  - DSA-0021
+  - DSA-0022
+  - DSA-0023
+  - DSA-0024
+  - DSA-0025
+  - DSA-0029
+  - DSA-0030
+  - DSA-0031
+  - DSA-0032
+  - DSA-0033
+  - DSA-0034
+  - DSA-0035
+  - DSA-0036
+  - DSA-0037
+  - DSA-0038
+  - DSA-0039
+  - DSA-0040
+  - DSA-0041
+  - DSA-0043
+  - DSA-0044
+  - DSA-0045
+  - DSA-0046
+  - DSA-0047
+  - DSA-0048
+  - DSA-0049
+  - DSA-0050
+  - DSA-0051
+  - DSA-0052
+  - DSA-0053
+  - DSA-0054
+  - DSA-0055
+  - DSA-0056
+  - DSA-0057
+  - DSA-0058
+  - DSA-0059
+  - DSA-0060
+  - DSA-0061
+  - DSA-0062
+  - DSA-0063
+  - DSA-0064
+  - DSA-0065
+  - DSA-0066
+  - DSA-0067
+  - DSA-0068
+  - DSA-0069
+  - DSA-0070
+  - DSA-0072
+tier0_must_include:
+  - CN=Administrator,CN=Users,DC=da,DC=test
+  - CN=krbtgt,CN=Users,DC=da,DC=test
+tier0_must_exclude:
+  - CN=audit,CN=Users,DC=da,DC=test

@@ -1,0 +1,110 @@
+# Windows AD DC lab (self-hosted). On the Hyper-V host, this restores a disposable
+# domain controller to its vulnerable baseline checkpoint, scans it as an ordinary
+# user over LDAPS and over plain LDAP with Kerberos SSPI sealing, and checks the
+# findings against testdata/lab/windows-expect.yaml. Matrix: Windows Server 2022
+# and 2025. See tools/lab/windows/README.md for the one-time host setup.
+name: lab-windows
+
+on:
+  schedule:
+    - cron: "0 3 * * *"        # nightly, 03:00 UTC
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "catalogue/**"
+      - "internal/provider/ad/**"
+      - "internal/check/**"
+      - "tools/lab/windows/**"
+      - "testdata/lab/windows-expect.yaml"
+
+permissions:
+  contents: read
+
+# The lab VMs are shared hardware; never run two lab jobs at once.
+concurrency:
+  group: lab-windows
+  cancel-in-progress: false
+
+env:
+  DIRAUDITOR_LAB: "1"
+
+jobs:
+  windows:
+    name: Windows Server ${{ matrix.ver }} DC
+    runs-on: [self-hosted, windows, hyperv-lab]
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - ver: "2022"
+            vm:  "DA-DC-2022"
+            dc:  "10.55.0.10"
+          - ver: "2025"
+            vm:  "DA-DC-2025"
+            dc:  "10.55.0.11"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: build
+        shell: pwsh
+        run: $env:CGO_ENABLED = "0"; go build -trimpath -o dirauditor.exe ./cmd/dirauditor
+
+      - name: restore DC to vulnerable baseline
+        shell: pwsh
+        run: ./tools/lab/windows/reset.ps1 -VMName "${{ matrix.vm }}" -DCAddress "${{ matrix.dc }}" -Checkpoint "vuln-baseline"
+
+      - name: doctor
+        shell: pwsh
+        run: ./dirauditor.exe doctor --domain da.test --server ${{ matrix.dc }} ; exit 0
+
+      - name: scan (ordinary user, auto transport — LDAPS/StartTLS/sealed)
+        shell: pwsh
+        env:
+          LAB_AUDIT_PASSWORD: ${{ secrets.LAB_AUDIT_PASSWORD }}
+        run: |
+          $env:LAB_AUDIT_PASSWORD | ./dirauditor.exe scan `
+            --server ${{ matrix.dc }} --domain da.test `
+            --user audit@da.test --password-stdin `
+            --catalogue catalogue --packs "" --out lab-out --lang en
+      - name: verify (auto transport)
+        shell: pwsh
+        run: go run ./tools/lab/verify -report lab-out/report.json -expect testdata/lab/windows-expect.yaml
+
+      - name: scan (ordinary user, plain LDAP + Kerberos SSPI sealing)
+        shell: pwsh
+        env:
+          LAB_AUDIT_PASSWORD: ${{ secrets.LAB_AUDIT_PASSWORD }}
+        run: |
+          $env:LAB_AUDIT_PASSWORD | ./dirauditor.exe scan `
+            --server ${{ matrix.dc }} --domain da.test `
+            --user audit@da.test --password-stdin --tls none `
+            --catalogue catalogue --packs "" --out lab-seal --lang en
+      - name: show sealed transport
+        shell: pwsh
+        run: |
+          $t = (Get-Content lab-seal/report.json -Raw | ConvertFrom-Json).inventory.transport
+          Write-Host "sealed transport: $t"
+      - name: verify (sealed)
+        shell: pwsh
+        run: go run ./tools/lab/verify -report lab-seal/report.json -expect testdata/lab/windows-expect.yaml
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-${{ matrix.ver }}-lab-report
+          path: |
+            lab-out/report.html
+            lab-out/report.json
+            lab-out/run-*.log
+          retention-days: 14
+
+      - name: restore baseline (leave the lab clean)
+        if: always()
+        shell: pwsh
+        run: ./tools/lab/windows/reset.ps1 -VMName "${{ matrix.vm }}" -DCAddress "${{ matrix.dc }}" -Checkpoint "vuln-baseline" ; exit 0
