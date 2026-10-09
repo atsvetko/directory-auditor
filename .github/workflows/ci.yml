@@ -80,7 +80,7 @@ jobs:
           # prototype layout: binary alone, no packs directory → built-in preview checks
           mkdir -p proto && cp dist/dirauditor-linux-amd64 proto/dirauditor && cd proto
           ./dirauditor analyse --snapshot ../testdata/synthetic-lab.json.zst --out out
-          python3 -c "import json; r=json.load(open('out/report.json')); assert r['preview_checks']==105 and not r['unsigned_packs'], r['preview_checks']"
+          python3 -c "import json; r=json.load(open('out/report.json')); assert r['preview_checks']==112 and not r['unsigned_packs'], r['preview_checks']"
           grep -q 'Preview checks' out/report.html
           ! ./dirauditor analyse --snapshot ../testdata/synthetic-lab.json.zst --out out2 --no-preview
       - uses: actions/upload-artifact@v4
@@ -114,7 +114,7 @@ jobs:
           .\dirauditor.exe analyse --snapshot testdata\synthetic-lab.json.zst --out out
           if ($LASTEXITCODE -ne 0) { throw "analyse failed" }
           $r = Get-Content out\report.json -Raw | ConvertFrom-Json
-          if ($r.preview_checks -ne 105) { throw "preview_checks = $($r.preview_checks)" }
+          if ($r.preview_checks -ne 112) { throw "preview_checks = $($r.preview_checks)" }
           if (-not (Test-Path out\report.html)) { throw "no report.html" }
           $log = Get-ChildItem out\run-*.log | Select-Object -First 1
           if (-not (Select-String -Path $log -Pattern "finished: exit 0")) { throw "run log incomplete" }
@@ -142,7 +142,7 @@ jobs:
           $base = $url -replace '/\?t=.*$', ''; $tok = ($url -split 't=')[1]
           $h = @{ "X-DA-Token" = $tok }
           $info = Invoke-RestMethod "$base/api/info" -Headers $h
-          if ($info.preview -ne 105) { throw "info.preview = $($info.preview)" }
+          if ($info.preview -ne 112) { throw "info.preview = $($info.preview)" }
           $c = Invoke-RestMethod "$base/api/connect" -Method Post -Headers $h -ContentType "application/json" -Body '{"mode":"demo"}'
           if (-not $c.ok) { throw "connect: $($c | ConvertTo-Json)" }
           $null = Invoke-RestMethod "$base/api/scan" -Method Post -Headers $h -ContentType "application/json" -Body '{"quick":false}'
@@ -150,7 +150,7 @@ jobs:
           for ($i = 0; $i -lt 100 -and $state -ne "done"; $i++) { Start-Sleep -Milliseconds 200; $state = (Invoke-RestMethod "$base/api/status" -Headers $h).state; if ($state -eq "error") { throw "scan error" } }
           if ($state -ne "done") { throw "scan did not finish" }
           $res = Invoke-RestMethod "$base/api/result" -Headers $h
-          if ($res.preview_checks -ne 105 -or $res.inventory.tier0.Count -lt 5) { throw "result: preview $($res.preview_checks), tier0 $($res.inventory.tier0.Count)" }
+          if ($res.preview_checks -ne 112 -or $res.inventory.tier0.Count -lt 5) { throw "result: preview $($res.preview_checks), tier0 $($res.inventory.tier0.Count)" }
           $log = Invoke-WebRequest "$base/api/run.log?t=$tok" -UseBasicParsing
           if ($log.Content -notmatch "finished: exit 0") { throw "run log: $($log.Content)" }
           # the page itself renders (static assets served, CSP present)

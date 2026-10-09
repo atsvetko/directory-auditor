@@ -1,0 +1,58 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0062
+title:
+  en: Forest functional level below Windows Server 2016
+  ru: Функциональный уровень леса ниже Windows Server 2016
+domain: directory-core
+tier: 0
+severity: low
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The forest functional level reported by the rootDSE (forestFunctionality)
+attributes:
+- forestFunctionality
+condition: >-
+  The rootDSE reports a forestFunctionality below 7 (Windows Server 2016). Lower levels cannot enforce several forest-wide
+  protections introduced at 2016, such as Privileged Access Management with time-limited group membership.
+threshold: any occurrence
+rationale: >-
+  The forest functional level gates security features for the whole forest, and it can only be raised once every
+  domain controller runs a new enough Windows Server. A level below 2016 means the forest cannot use expiring (time-boxed)
+  membership of privileged groups, and usually indicates domain controllers that are themselves out of support.
+  Raising it is a prerequisite for modern Tier-0 hardening.
+remediation:
+  en: >-
+    Retire or upgrade any domain controller below Windows Server 2016 across every domain, then raise the forest
+    functional level to at least 2016. Confirm there is no legacy dependency (an old application or an NTLM-only
+    trust partner) before raising it, and take a system-state backup of a DC first.
+  ru: >-
+    Выведите из эксплуатации или обновите все контроллеры домена ниже Windows Server 2016 во всех доменах, затем
+    поднимите функциональный уровень леса минимум до 2016. Перед повышением убедитесь в отсутствии устаревших зависимостей
+    (старое приложение или доверие только с NTLM) и снимите резервную копию состояния системы одного из КД.
+attack:
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+anssi:
+- vuln_functional_level
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=dirauditorRootDSE)
+references:
+- title: Microsoft Learn — Forest and domain functional levels
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/active-directory-functional-levels
+- title: >-
+    Microsoft Learn — Privileged Access Management (time-based group membership requires the 2016 forest level)
+  url: >-
+    https://learn.microsoft.com/en-us/microsoft-identity-manager/pam/privileged-identity-management-for-active-directory-domain-services
+notes: >-
+  Complements DSA-0024 (domain functional level). Fires on the synthetic Samba lab (forest level 2008 R2); the AD
+  lab is at 2016. forestFunctionality is read from the rootDSE, not from an object in the directory.
+condition_cel: hasattr(obj, "forestFunctionality") && intattr(obj, "forestFunctionality") < 7
+expect:
+- cn=rootdse,cn=dirauditor

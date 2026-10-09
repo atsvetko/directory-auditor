@@ -39,6 +39,9 @@ allow:
   - DSA-0220   # RC4 default inferred from version < 4.24.0
   - DSA-0026   # kerberoastable accounts: svc-backup carries an SPN in the live lab
   - DSA-0061   # control-path: Helpdesk's GenericAll on Domain Admins is a path to Tier 0
+  - DSA-0062   # forest functional level below 2016 (Samba default is lower)
+  - DSA-0063   # DC crypto: fires if the Samba DC advertises RC4 or omits AES
+  - DSA-0066   # dSHeuristics dwAdminSDExMask: fires only if set on the live DC
   - DSA-0027   # DnsAdmins membership (fires only if the live lab populates the group)
   - DSA-0028   # secrets in readable attributes (depends on the live lab's descriptions)
   - DSA-0029   # control over protected non-Tier-0 objects (depends on the live lab's ACLs)

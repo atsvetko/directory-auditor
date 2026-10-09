@@ -74,7 +74,7 @@ func main() {
 			ace{dom + "-527", 0x000F01FF, ""})},                                    // DSA-0051: 2016-era full control for Enterprise Key Admins
 	})
 	add("CN=Directory Service,CN=Windows NT,CN=Services,CN=Configuration,"+base, []string{"top", "nTDSService"},
-		map[string][]string{"dSHeuristics": {"0000000"}, "tombstoneLifetime": {"180"}})
+		map[string][]string{"dSHeuristics": {"000000000100000f"}, "tombstoneLifetime": {"180"}})
 	users := []struct {
 		name, desc, uac, rid string
 		pwdAge               int
@@ -102,7 +102,8 @@ func main() {
 		{"dormant.user", "", "512", "1118", 30, map[string][]string{"lastLogonTimestamp": {ft(400)}}}, // DSA-0036: no logon for 400 days
 		{"Guest", "", "512", "501", 30, map[string][]string{"primaryGroupID": {"514"}}},               // DSA-0042: built-in Guest enabled
 		// Wave 2a (DSA-0045…0060)
-		{"svc_print", "", "512", "1119", 20, map[string][]string{"msDS-AllowedToDelegateTo": {"cifs/oldfs.lab.example"}}}, // DSA-0054: delegation to a host no account owns
+		{"svc_print", "", "512", "1119", 20, map[string][]string{"msDS-AllowedToDelegateTo": {"cifs/oldfs.lab.example"}}},          // DSA-0054: delegation to a host no account owns
+		{"PARTNER$", "", "2048", "1120", 400, map[string][]string{"sAMAccountType": {"805306370"}, "lastLogonTimestamp": {ft(5)}}}, // DSA-0065: interdomain trust account, password 400 d old
 	}
 	for _, u := range users {
 		attrs := map[string][]string{"sAMAccountName": {u.name}, "userAccountControl": {u.uac}, "pwdLastSet": {ft(u.pwdAge)},
@@ -158,7 +159,7 @@ func main() {
 	computer := append(append([]string{}, user...), "computer")
 	add("CN=DC01,OU=Domain Controllers,"+base, computer,
 		map[string][]string{"sAMAccountName": {"DC01$"}, "objectSid": {dom + "-1000"}, "primaryGroupID": {"516"}, "sAMAccountType": {"805306369"},
-			"dNSHostName": {"dc01.lab.example"}, "operatingSystem": {"Windows Server 2022 Datacenter"}, "operatingSystemVersion": {"10.0 (20348)"}, "userAccountControl": {"532480"}, "pwdLastSet": {ft(12)},
+			"dNSHostName": {"dc01.lab.example"}, "operatingSystem": {"Windows Server 2022 Datacenter"}, "operatingSystemVersion": {"10.0 (20348)"}, "userAccountControl": {"532480"}, "pwdLastSet": {ft(12)}, "msDS-SupportedEncryptionTypes": {"28"},
 			// DSA-0006: RBCD on a DC, trustee = APP01$
 			"msDS-AllowedToActOnBehalfOfOtherIdentity": {sd(false, ace{dom + "-1001", 0x000F01FF, ""})}})
 	add("CN=APP01,OU=Servers,"+base, computer, // DSA-0004 unconstrained delegation
@@ -192,6 +193,19 @@ func main() {
 		"trustPartner": {"partner.example"}, "trustDirection": {"3"}, "trustType": {"2"}, "trustAttributes": {"72"}, "securityIdentifier": {"S-1-5-21-9-8-7"}})
 	add("CN=old.example,CN=System,"+base, []string{"top", "leaf", "trustedDomain"}, map[string][]string{
 		"trustPartner": {"old.example"}, "trustDirection": {"0"}, "trustType": {"2"}, "trustAttributes": {"4"}, "securityIdentifier": {"S-1-5-21-1-1-1"}})
+	// Wave 2b fixtures.
+	msaClass := []string{"top", "person", "organizationalPerson", "user", "computer", "msDS-ManagedServiceAccount"}
+	add("CN=svc-msa,CN=Managed Service Accounts,"+base, msaClass, map[string][]string{ // DSA-0064: MSA password 200 d old
+		"sAMAccountName": {"svc-msa$"}, "objectSid": {dom + "-1121"}, "primaryGroupID": {"515"}, "sAMAccountType": {"805306369"},
+		"userAccountControl": {"4096"}, "pwdLastSet": {ft(200)}})
+	add("CN=BCKUPKEY_PREFERRED Secret,CN=System,"+base, []string{"top", "leaf", "secret"}, map[string][]string{ // DSA-0067
+		"cn":                   {"BCKUPKEY_PREFERRED Secret"},
+		"nTSecurityDescriptor": {sd(false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{"S-1-5-11", 0x00000010, ""})}}) // Authenticated Users may read it
+	add("CN=81b4f12e-9000-0000-0000-000000000001,CN=Master Root Keys,CN=Group Key Distribution Service,CN=Services,CN=Configuration,"+base,
+		[]string{"top", "msKds-ProvRootKey"}, map[string][]string{ // DSA-0068
+			"cn":                   {"81b4f12e-9000-0000-0000-000000000001"},
+			"nTSecurityDescriptor": {sd(false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{"S-1-5-11", 0x00000010, ""})}}) // Authenticated Users may read it
+
 	// Wave 2a fixtures.
 	lapsGUID := "4f1c2b8e-6d1a-4c3e-9b7a-2a5d8e9f0c11"                                                                // invented: legacy LAPS has no fixed schemaIDGUID
 	add("CN=ms-Mcs-AdmPwd,CN=Schema,CN=Configuration,"+base, []string{"top", "attributeSchema"}, map[string][]string{ // DSA-0057: not confidential

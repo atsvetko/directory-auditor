@@ -17,17 +17,10 @@
 plan:
 # --- wave 1 — done (DSA-0030…0044) -------------------------------------------------------------------
 # --- wave 2 -------------------------------------------------------------------------------------------
-- {id: vuln_dsheuristics_bad,                status: partial, wave: 2, note: "DSA-0025 covers anonymous operations; other dangerous dSHeuristics flags to add (MS-ADTS)"}
-- {id: vuln_functional_level,                status: partial, wave: 2, note: "DSA-0024 covers the domain level; forest level to add from rootDSE"}
 - {id: vuln_display_specifier,               status: collect, wave: 2, needs: "CN=DisplaySpecifiers in the configuration partition"}
 - {id: vuln_permissions_gpo_priv,            status: collect, wave: 2, needs: "groupPolicyContainer objects and their DACLs"}
-- {id: vuln_permissions_dpapi,               status: collect, wave: 2, needs: "DPAPI backup-key objects (CN=BCKUPKEY_*,CN=System) and their DACLs"}
-- {id: vuln_permissions_gmsa_keys,           status: collect, wave: 2, needs: "KDS root keys (Group Key Distribution Service, configuration partition)"}
-- {id: vuln_dc_crypto,                       status: gap,     wave: 2, note: "msDS-SupportedEncryptionTypes on DC accounts (extends DSA-0012)"}
 - {id: vuln_privileged_members_password,     status: collect, wave: 2, needs: "fine-grained password policies (msDS-PasswordSettings) and their targets"}
-- {id: vuln_password_change_msa_no_change_90, status: collect, wave: 2, needs: "managed service accounts (msDS-ManagedServiceAccount / msDS-GroupManagedServiceAccount)"}
 - {id: vuln_password_change_cluster_no_change_3years, status: gap, wave: 2, note: "cluster name objects identified by their SPNs"}
-- {id: vuln_trusts_accounts,                 status: gap,     wave: 2, note: "interdomain trust accounts (TRUSTDOMAIN$) password age"}
 - {id: vuln_rodc_priv_revealed,              status: collect, wave: 2, needs: "RODC revealed lists (msDS-RevealedList)"}
 - {id: vuln_sysvol_ntfrs,                    status: collect, wave: 2, needs: "DFSR migration state / NTFRS replica set objects"}
 - {id: vuln_adupdate_bad,                    status: collect, wave: 2, needs: "schema and forest/domain preparation versions"}

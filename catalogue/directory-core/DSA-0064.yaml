@@ -1,0 +1,65 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0064
+title:
+  en: Managed service accounts whose password has not changed in 90 days
+  ru: Управляемые учётные записи служб, чей пароль не менялся 90 дней
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  Standalone and group managed service accounts (msDS-ManagedServiceAccount, msDS-GroupManagedServiceAccount)
+attributes:
+- sAMAccountName
+- pwdLastSet
+condition: >-
+  A managed service account (object class msDS-ManagedServiceAccount or msDS-GroupManagedServiceAccount) has pwdLastSet
+  more than 90 days before collection.
+threshold: any occurrence
+rationale: >-
+  The whole point of a managed service account is that Active Directory rotates its password automatically — every
+  30 days by default. A managed account whose password is over 90 days old means that rotation has stopped: the
+  account may be orphaned, its hosts may be offline, or the group's membership for password retrieval may be broken.
+  A long-lived service credential is exactly what an attacker wants, and a stalled rotation also hides a Kerberoasting
+  attempt behind a legitimately static key.
+remediation:
+  en: >-
+    Find why rotation stopped: confirm the account is still in use, that at least one healthy host is allowed to
+    retrieve its password, and that the KDS root key is reachable. Remove managed accounts that are no longer needed.
+    For a group managed account, check msDS-ManagedPasswordInterval and the membership that retrieves the password.
+  ru: >-
+    Выясните, почему прекратилась смена пароля: убедитесь, что учётная запись ещё используется, что хотя бы один
+    работоспособный узел вправе получать её пароль и что корневой ключ KDS доступен. Удалите управляемые учётные
+    записи, которые больше не нужны. Для групповой управляемой учётной записи проверьте msDS-ManagedPasswordInterval
+    и состав, которому разрешено получать пароль.
+attack:
+- id: T1558.003
+  name: 'Steal or Forge Kerberos Tickets: Kerberoasting'
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+anssi:
+- vuln_password_change_msa_no_change_90
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=computer)
+references:
+- title: Microsoft Learn — Group Managed Service Accounts overview (automatic password management)
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/group-managed-service-accounts/group-managed-service-accounts-overview
+- title: Microsoft Learn — ms-DS-Managed-Password-Interval attribute
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-msds-managedpasswordinterval
+notes: >-
+  90 days is three default rotation intervals; the group interval is configurable (msDS-ManagedPasswordInterval)
+  so a very long interval is a tunable false positive. Managed service accounts are machine-class objects, collected
+  with the computer accounts.
+condition_cel: >-
+  obj.class.exists(c, c.lowerAscii() in ["msds-managedserviceaccount", "msds-groupmanagedserviceaccount"]) && age_days(obj,
+  "pwdLastSet") > 90
+expect:
+- CN=svc-msa,CN=Managed Service Accounts,DC=lab,DC=example

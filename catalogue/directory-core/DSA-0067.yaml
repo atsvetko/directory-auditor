@@ -1,0 +1,71 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0067
+title:
+  en: DPAPI domain backup key readable outside Tier 0
+  ru: Резервный ключ DPAPI домена доступен для чтения вне нулевого уровня
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  The DPAPI domain backup key objects (class secret, CN=BCKUPKEY_*,CN=System) and their security descriptors
+attributes:
+- cn
+condition: >-
+  A BCKUPKEY secret object in CN=System has an allow ACE granting a principal that is not Tier 0 (SELF and CREATOR
+  OWNER excluded) read of the key (ReadProperty on all properties or GenericRead) or control of the object (full
+  control, WriteDacl, WriteOwner, GenericAll).
+threshold: any occurrence
+rationale: >-
+  The DPAPI domain backup key decrypts every user's DPAPI master key across the domain — saved browser and credential-manager
+  passwords, certificates and more. It is generated once when the domain is created and cannot be rotated. By default
+  only domain controllers and administrators can read it; any other principal with read or control over the BCKUPKEY
+  objects can recover the key and, from it, decrypt secrets for the life of the domain.
+remediation:
+  en: >-
+    Remove the ACE so only domain controllers and Tier-0 administrators can read the BCKUPKEY objects. If a non-Tier-0
+    principal could read the key, treat the domain backup key as compromised: there is no supported rotation, so
+    plan compensating controls and monitor for mass DPAPI decryption.
+  ru: >-
+    Удалите ACE, чтобы объекты BCKUPKEY могли читать только контроллеры домена и администраторы нулевого уровня.
+    Если ключ мог прочитать субъект вне нулевого уровня, считайте резервный ключ DPAPI домена скомпрометированным:
+    поддерживаемой ротации нет, поэтому предусмотрите компенсирующие меры и отслеживайте массовую расшифровку DPAPI.
+attack:
+- id: T1552
+  name: Unsecured Credentials
+- id: T1555
+  name: Credentials from Password Stores
+anssi:
+- vuln_permissions_dpapi
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=secret)
+references:
+- title: >-
+    Microsoft Learn — CNG DPAPI backup keys on AD domain controllers (stored as secret objects in CN=System; restricted
+    to domain administrators)
+  url: >-
+    https://learn.microsoft.com/en-us/windows/win32/seccng/cng-dpapi-backup-keys-on-ad-domain-controllers
+- title: MITRE ATT&CK — T1552 Unsecured Credentials
+  url: https://attack.mitre.org/techniques/T1552/
+notes: >-
+  The BCKUPKEY objects are class secret; a normal auditing account usually cannot read their security descriptor,
+  in which case the check reports not-collected rather than a pass. Reading the SACL events (4662) on these objects
+  is the detective complement.
+evidence_principals: >-
+  aces(obj).filter(a, a.allow && a.effective && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"]) && (mask_has(a.mask,
+  0x10000000) || mask_has(a.mask, 0xF01FF) || mask_has(a.mask, 0x40000) || mask_has(a.mask, 0x80000) || mask_has(a.mask,
+  0x80000000) || (mask_has(a.mask, 0x10) && a.object_type == ""))).map(a, a.trustee)
+condition_cel: >-
+  attr(obj, "cn").lowerAscii().startsWith("bckupkey") && sd_readable(obj) && aces(obj).exists(a, a.allow && a.effective
+  && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"]) && (mask_has(a.mask, 0x10000000) || mask_has(a.mask,
+  0xF01FF) || mask_has(a.mask, 0x40000) || mask_has(a.mask, 0x80000) || mask_has(a.mask, 0x80000000) || (mask_has(a.mask,
+  0x10) && a.object_type == "")))
+expect:
+- CN=BCKUPKEY_PREFERRED Secret,CN=System,DC=lab,DC=example

@@ -1,0 +1,66 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0063
+title:
+  en: Domain controllers that still allow RC4 or DES Kerberos encryption
+  ru: Контроллеры домена, всё ещё допускающие шифрование Kerberos RC4 или DES
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: 'Domain controller computer accounts: msDS-SupportedEncryptionTypes'
+attributes:
+- sAMAccountName
+- msDS-SupportedEncryptionTypes
+condition: >-
+  A domain controller account (primaryGroupID 516 or 521, or SERVER_TRUST_ACCOUNT in userAccountControl) has msDS-SupportedEncryptionTypes
+  set to a non-zero value that still enables DES (0x1, 0x2) or RC4 (0x4), or that does not enable either AES type
+  (0x8, 0x10). Accounts with the attribute absent or zero use the operating-system default and are not reported.
+threshold: any occurrence
+rationale: >-
+  The encryption types a domain controller advertises here are the ones it will issue and accept for Kerberos. Allowing
+  RC4 keeps a weak cipher available for Kerberoasting and for downgrade, and omitting AES forces weak tickets. Domain
+  controllers are the most important place to require AES, because every account's tickets pass through them. Unlike
+  DSA-0012, which flags accounts pinned to weak ciphers anywhere, this check targets the declared types on the DCs
+  themselves.
+remediation:
+  en: >-
+    Set msDS-SupportedEncryptionTypes on the domain controllers to AES only (0x18) once every client and service
+    supports AES, or at least add both AES types. Remove DES everywhere first. Stage the change on one DC, watch
+    authentication for RC4 and DES use, then roll it out and keep RC4 disabled.
+  ru: >-
+    Установите на контроллерах домена msDS-SupportedEncryptionTypes только в AES (0x18), когда все клиенты и службы
+    поддерживают AES, либо как минимум добавьте оба типа AES. Сначала повсеместно уберите DES. Внедряйте изменение
+    поэтапно: на одном КД, отслеживая использование RC4 и DES при аутентификации, затем на остальных, и держите
+    RC4 отключённым.
+attack:
+- id: T1558.003
+  name: 'Steal or Forge Kerberos Tickets: Kerberoasting'
+- id: T1550.003
+  name: 'Use Alternate Authentication Material: Pass the Ticket'
+anssi:
+- vuln_dc_crypto
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=computer)
+references:
+- title: Microsoft Learn — MS-KILE 2.2.7 Supported Encryption Types Bit Flags
+  url: >-
+    https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-kile/6cfc7b50-11ed-4b4d-846d-6f08f0812919
+- title: >-
+    Microsoft Support — KB5021131: How to manage the Kerberos protocol changes (RC4 deprecation)
+  url: https://support.microsoft.com/help/5021131
+notes: >-
+  Bit values from MS-KILE 2.2.7: DES 0x1/0x2, RC4 0x4, AES128 0x8, AES256 0x10. The default (absent/0) is left to
+  the OS, which on current Windows includes AES; we do not guess it. Runs on the AD provider's DC accounts.
+condition_cel: >-
+  (intattr(obj, "primaryGroupID") == 516 || intattr(obj, "primaryGroupID") == 521 || flags(obj, "userAccountControl",
+  8192)) && intattr(obj, "msDS-SupportedEncryptionTypes") != 0 && (anyflag(obj, "msDS-SupportedEncryptionTypes",
+  7) || !anyflag(obj, "msDS-SupportedEncryptionTypes", 24))
+expect:
+- CN=DC01,OU=Domain Controllers,DC=lab,DC=example

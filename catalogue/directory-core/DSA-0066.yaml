@@ -1,0 +1,65 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0066
+title:
+  en: Privileged groups excluded from AdminSDHolder via dSHeuristics
+  ru: Привилегированные группы исключены из защиты AdminSDHolder через dSHeuristics
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The Directory Service object's dSHeuristics (character 16, dwAdminSDExMask)
+attributes:
+- dSHeuristics
+condition: >-
+  The 16th character of dSHeuristics (dwAdminSDExMask) is a non-zero hexadecimal value. Each bit removes one built-in
+  operator group (Account Operators, Server Operators, Print Operators, Backup Operators) from AdminSDHolder/SDProp
+  protection.
+threshold: any occurrence
+rationale: >-
+  The AdminSDHolder process (SDProp) periodically re-stamps a hardened ACL onto every protected account and group,
+  so a permission an attacker plants on an administrator is removed within the hour. The dwAdminSDExMask character
+  in dSHeuristics lets an administrator switch that protection off for the built-in operator groups. Once excluded,
+  those groups — several of which are equivalent to domain control (DSA-0045) — keep whatever permissions anyone
+  grants them, including an attacker's backdoor, permanently.
+remediation:
+  en: >-
+    Set the 16th character of dSHeuristics back to 0 so every protected group is covered by SDProp again, unless
+    there is a documented reason for the exclusion. After restoring it, review the DACLs of the operator groups
+    and their members (DSA-0015, DSA-0045), because SDProp will not have corrected them while the exclusion was
+    in place.
+  ru: >-
+    Верните 16-й символ dSHeuristics в 0, чтобы SDProp снова охватывал все защищённые группы, если только для исключения
+    нет задокументированной причины. После восстановления проверьте DACL групп операторов и их участников (DSA-0015,
+    DSA-0045): пока исключение действовало, SDProp их не исправлял.
+attack:
+- id: T1098
+  name: Account Manipulation
+- id: T1222.001
+  name: >-
+    File and Directory Permissions Modification: Windows File and Directory Permissions Modification
+anssi:
+- vuln_dsheuristics_bad
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=nTDSService)
+references:
+- title: Microsoft Learn — MS-ADTS dSHeuristics (character 16, dwAdminSDExMask)
+  url: >-
+    https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/e5899be4-862e-496f-9a38-33950617d2c5
+- title: 'Microsoft Learn — Appendix C: Protected Accounts and Groups in Active Directory (SDProp)'
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory
+notes: >-
+  Character positions are 1-based (MS-ADTS): character 7 is anonymous LDAP (DSA-0025), character 16 is dwAdminSDExMask.
+  The per-bit mapping to the four operator groups is specified in MS-ADTS 3.1.1.6.1. A non-zero value is reported;
+  the character is a single hex nibble 0–f.
+condition_cel: >-
+  attr(obj, "dSHeuristics").size() >= 16 && attr(obj, "dSHeuristics").substring(15, 16) != "0"
+expect:
+- CN=Directory Service,CN=Windows NT,CN=Services,CN=Configuration,DC=lab,DC=example

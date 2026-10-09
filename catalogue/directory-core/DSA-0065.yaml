@@ -1,0 +1,60 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0065
+title:
+  en: Interdomain trust account password unchanged for over a year
+  ru: Пароль учётной записи междоменного доверия не менялся больше года
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Interdomain trust accounts (TRUSTDOMAIN$, sAMAccountType SAM_TRUST_ACCOUNT)
+attributes:
+- sAMAccountName
+- pwdLastSet
+condition: >-
+  An interdomain trust account (sAMAccountType 805306370, SAM_TRUST_ACCOUNT) has pwdLastSet more than 365 days before
+  collection.
+threshold: any occurrence
+rationale: >-
+  Each trust has a shared secret, held as the password of a TRUSTDOMAIN$ account on both sides. Windows rotates
+  it every 30 days by default; a trust password over a year old means rotation is disabled or broken. The trust
+  key lets the holder forge inter-realm referral tickets between the domains, so a stale, long-lived key is a durable
+  cross-domain credential and a sign the trust is unmanaged.
+remediation:
+  en: >-
+    Confirm the trust is still required; if not, remove it. If it is, re-enable password changes on both sides and
+    force one rotation during a maintenance window (both domains must be reachable). Review the trust's attributes
+    (SID filtering, selective authentication) while you are there.
+  ru: >-
+    Убедитесь, что доверие ещё нужно; если нет — удалите его. Если нужно, включите смену пароля с обеих сторон и
+    выполните одну принудительную смену в окно обслуживания (оба домена должны быть доступны). Заодно проверьте
+    атрибуты доверия (фильтрацию SID, выборочную аутентификацию).
+attack:
+- id: T1558
+  name: Steal or Forge Kerberos Tickets
+- id: T1199
+  name: Trusted Relationship
+anssi:
+- vuln_trusts_accounts
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=user)
+references:
+- title: Microsoft Learn — sAMAccountType attribute (SAM_TRUST_ACCOUNT 0x30000002)
+  url: https://learn.microsoft.com/en-us/windows/win32/ADSchema/a-samaccounttype
+- title: Microsoft Learn — MS-ADTS 6.1.6.8 Essential Attributes of Interdomain Trust Accounts
+  url: >-
+    https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/ac527b5b-0e88-48a1-8c73-497d40388d04
+notes: >-
+  365 days is deliberately generous (12 default rotation cycles) to avoid flagging trusts that rotate on a slower
+  schedule; it is tunable. The trust account is collected by a dedicated query (sAMAccountType=805306370). The matching
+  trustedDomain object is covered by DSA-0018.
+condition_cel: intattr(obj, "sAMAccountType") == 805306370 && age_days(obj, "pwdLastSet") > 365
+expect:
+- CN=PARTNER$,CN=Users,DC=lab,DC=example
