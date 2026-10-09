@@ -13,7 +13,8 @@ import (
 
 // Target describes what to collect from and with which identity.
 type Target struct {
-	Server            string // host or host:port; empty = discover from Domain
+	Server            string // host, host:port or IP; empty = discover from Domain
+	ServerName        string // DC name for TLS verification / Kerberos SPN when Server is an IP
 	Domain            string // DNS domain name
 	TLS               string // auto (default), ldaps, starttls, none — see ldapx.TLSMode
 	InsecurePlaintext bool   // allow a password over an unencrypted connection (labs only)

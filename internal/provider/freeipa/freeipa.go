@@ -201,7 +201,7 @@ func dial(ctx context.Context, t provider.Target) (*ldapx.Conn, error) {
 	if t.Server == "" {
 		return nil, errors.New("freeipa: --server is required")
 	}
-	return ldapx.Dial(ctx, ldapx.Options{Server: t.Server, TLS: ldapx.TLSMode(t.TLS),
+	return ldapx.Dial(ctx, ldapx.Options{Server: t.Server, ServerName: t.ServerName, TLS: ldapx.TLSMode(t.TLS),
 		InsecurePlaintext: t.InsecurePlaintext, PinSHA256: t.PinSHA256, MaxQPS: t.MaxQPS, Timeout: 20 * time.Second, Domain: t.Domain})
 }
 

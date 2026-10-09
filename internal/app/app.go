@@ -42,7 +42,8 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) (code int) {
 	var providerName string
 	checkFlags(fs, &o, "packs")
 	fs.StringVar(&providerName, "provider", "auto", "directory type: auto, "+strings.Join(provider.Names(), ", "))
-	fs.StringVar(&t.Server, "server", "", "domain controller host[:port]")
+	fs.StringVar(&t.Server, "server", "", "domain controller host, host:port or IP address")
+	fs.StringVar(&t.ServerName, "server-name", "", "DC name for TLS verification and the Kerberos SPN when --server is an IP (e.g. dc01.corp.example.com)")
 	fs.StringVar(&t.Domain, "domain", "", "DNS domain name")
 	fs.StringVar(&t.BindUser, "user", "", "bind identity (DN or UPN); empty = current logon via Kerberos (no password)")
 	fs.StringVar(&t.TLS, "tls", "auto", "connection security: auto (LDAPS, then StartTLS, then plain LDAP with Kerberos sealing), ldaps, starttls, none")

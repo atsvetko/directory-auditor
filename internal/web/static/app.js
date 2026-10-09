@@ -34,7 +34,8 @@ const T = {
  connok_smb:["Local smb.conf included.","Локальный smb.conf включён."],
  c_man:["Enter domain and credentials","Указать домен и учётные данные"],
  c_man_d:["Another domain, a non-joined machine, Samba AD DC, or a dedicated audit account.","Другой домен, компьютер вне домена, Samba AD DC или отдельная учётная запись для аудита."],
- f_dom:["Domain","Домен"], f_dc:["Domain controller (optional)","Контроллер домена (необязательно)"], f_user:["User","Пользователь"], f_pw:["Password","Пароль"],
+ f_dom:["Domain","Домен"], f_dc:["Domain controller or IP (optional)","Контроллер домена или IP (необязательно)"], f_user:["User","Пользователь"], f_pw:["Password","Пароль"],
+ f_dcname:["DC name for the certificate (the IP above has no DNS name)","Имя КД для сертификата (у IP выше нет DNS-имени)"],
  f_tls:["Connection security","Защита подключения"], o_ldaps:["LDAPS (636)","LDAPS (636)"], o_starttls:["StartTLS (389)","StartTLS (389)"],
  f_pin:["Certificate fingerprint (only if the DC certificate is not trusted here)","Отпечаток сертификата (только если сертификат КД здесь не доверенный)"],
  f_hint:["A normal user account covers ~80% of checks. The password is used once in memory and never saved.","Обычной учётной записи достаточно для ~80% проверок. Пароль используется один раз в памяти и нигде не сохраняется."],
@@ -147,7 +148,8 @@ async function connect(kind) {
   const btn = $("connect"); btn.disabled = true; $("demo").disabled = true; btn.textContent = t("connecting");
   let body = {mode: kind, smbconf: !!(detected && detected.smbconf)};
   if (kind === "manual") {
-    body = {mode: "manual", domain: $("m_domain").value.trim(), server: $("m_server").value.trim(), user: $("m_user").value.trim(),
+    body = {mode: "manual", domain: $("m_domain").value.trim(), server: $("m_server").value.trim(), server_name: $("m_servername").value.trim(),
+      user: $("m_user").value.trim(),
       password: $("m_password").value, security: $("m_security").value, pin: $("m_pin").value.trim(), smbconf: !!(detected && detected.smbconf)};
   }
   const r = await api("/api/connect", body);
@@ -160,6 +162,11 @@ async function connect(kind) {
   $("progress").classList.add("hidden");
   show("scan");
 }
+// Reveal the "DC name for the certificate" field only when the controller is
+// given as an IP (so TLS/Kerberos can still be matched by name).
+const isIP = s => /^\d{1,3}(\.\d{1,3}){3}$/.test(s.trim()) || s.trim().includes(":") && /^[0-9a-fA-F:]+$/.test(s.trim());
+$("m_server").addEventListener("input", () => { $("servernamerow").classList.toggle("hidden", !isIP($("m_server").value)); });
+
 $("connect").addEventListener("click", () => connect(mode));
 $("demo").addEventListener("click", () => connect("demo"));
 

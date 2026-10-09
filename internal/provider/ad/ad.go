@@ -141,6 +141,7 @@ func dial(ctx context.Context, t provider.Target) (*ldapx.Conn, error) {
 	}
 	return ldapx.Dial(ctx, ldapx.Options{
 		Server:            t.Server,
+		ServerName:        t.ServerName,
 		TLS:               ldapx.TLSMode(t.TLS),
 		InsecurePlaintext: t.InsecurePlaintext,
 		PinSHA256:         t.PinSHA256,

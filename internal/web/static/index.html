@@ -42,7 +42,8 @@
     <div class="copt" data-mode="manual" id="optmanual"><span class="rdot"></span><div class="ctext"><div class="ct" data-t="c_man">Enter domain and credentials</div><div class="cd" data-t="c_man_d">Another domain, a non-joined machine, Samba AD DC, or a dedicated audit account.</div></div></div>
     <form class="mform hidden" id="mform" autocomplete="off">
       <label><span data-t="f_dom">Domain</span><input class="inp mono" id="m_domain" placeholder="corp.example.com" spellcheck="false"></label>
-      <label><span data-t="f_dc">Domain controller (optional)</span><input class="inp mono" id="m_server" placeholder="dc01.corp.example.com" spellcheck="false"></label>
+      <label><span data-t="f_dc">Domain controller or IP (optional)</span><input class="inp mono" id="m_server" placeholder="dc01.corp.example.com or 10.0.0.10" spellcheck="false"></label>
+      <label class="hidden" id="servernamerow"><span data-t="f_dcname">DC name for the certificate (the IP above has no DNS name)</span><input class="inp mono" id="m_servername" placeholder="dc01.corp.example.com" spellcheck="false"></label>
       <label><span data-t="f_user">User</span><input class="inp mono" id="m_user" placeholder="audit@corp.example.com" spellcheck="false"></label>
       <label><span data-t="f_pw">Password</span><input class="inp" id="m_password" type="password" autocomplete="new-password"></label>
       <label class="wide"><span data-t="f_tls">Connection security</span><select class="inp" id="m_security"><option value="auto" data-t="o_auto">Automatic — LDAPS, then StartTLS, then LDAP with Kerberos sealing (recommended)</option><option value="ldaps" data-t="o_ldaps">LDAPS (636)</option><option value="starttls" data-t="o_starttls">StartTLS (389)</option><option value="none" data-t="o_none">Unencrypted LDAP (389) — lab only, sends the password in clear</option></select></label>

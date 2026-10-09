@@ -75,8 +75,9 @@ func usage(w *os.File) {
 Usage:
   dirauditor                                   # start the wizard in your browser (double-click)
   dirauditor ui       [--no-browser] [--packs DIR] [--out DIR]
-  dirauditor scan     --server HOST [--domain DOMAIN] [--packs DIR] [--out DIR] [--insecure-plaintext]
+  dirauditor scan     --server HOST|IP [--server-name DC_FQDN] [--domain DOMAIN] [--packs DIR] [--out DIR] [--insecure-plaintext]
                       [--smbconf /etc/samba/smb.conf | --local]   # on a Samba DC: include its configuration
+                      # --server takes an IP when DNS can't resolve the DC; add --server-name so TLS/Kerberos still match
   dirauditor scan     --smbconf /etc/samba/smb.conf              # configuration-only audit, no LDAP
   dirauditor analyse  --snapshot FILE [--packs DIR] [--out DIR]
   dirauditor doctor   --domain DOMAIN [--server HOST]

@@ -256,14 +256,15 @@ func (s *Server) detect(w http.ResponseWriter, r *http.Request) {
 }
 
 type connectReq struct {
-	Mode     string `json:"mode"` // auto, manual, demo
-	Domain   string `json:"domain"`
-	Server   string `json:"server"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-	Security string `json:"security"` // auto, ldaps, starttls, none
-	Pin      string `json:"pin"`
-	SmbConf  bool   `json:"smbconf"` // include the local Samba DC configuration (when detected)
+	Mode       string `json:"mode"` // auto, manual, demo
+	Domain     string `json:"domain"`
+	Server     string `json:"server"`
+	ServerName string `json:"server_name"` // expected DC name when Server is an IP
+	User       string `json:"user"`
+	Password   string `json:"password"`
+	Security   string `json:"security"` // auto, ldaps, starttls, none
+	Pin        string `json:"pin"`
+	SmbConf    bool   `json:"smbconf"` // include the local Samba DC configuration (when detected)
 }
 
 type connectResp struct {
@@ -317,6 +318,7 @@ func (s *Server) connect(w http.ResponseWriter, r *http.Request) {
 		t.Domain, t.Server = d.Domain, d.Server
 	case "manual":
 		t.Domain, t.Server, t.BindUser, t.BindPassword = strings.TrimSpace(q.Domain), strings.TrimSpace(q.Server), strings.TrimSpace(q.User), q.Password
+		t.ServerName = strings.TrimSpace(q.ServerName)
 		if t.Server == "" && t.Domain != "" {
 			t.Server = findDC(r.Context(), t.Domain)
 		}
