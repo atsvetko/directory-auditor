@@ -67,6 +67,7 @@ func main() {
 		"name": {"lab"}, "objectSid": {dom}, "ms-DS-MachineAccountQuota": {"10"}, "minPwdLength": {"7"}, "lockoutThreshold": {"0"},
 		"pwdProperties": {"1"}, "pwdHistoryLength": {"24"}, "maxPwdAge": {"-36288000000000"}, "minPwdAge": {"-864000000000"},
 		"lockoutDuration": {"-18000000000"}, "lockOutObservationWindow": {"-18000000000"}, "msDS-Behavior-Version": {"7"},
+		"gPLink": {"[LDAP://CN={31B2F340-016D-11D2-945F-00C04FB984F9},CN=Policies,CN=System," + base + ";0]"},
 		"nTSecurityDescriptor": {sd(false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""},
 			ace{dom + "-1105", 0x00000100, "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"}, // DSA-0014: j.doe has Get-Changes-All
 			ace{"S-1-5-9", 0x00000100, "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"},     // Enterprise DCs: expected
@@ -193,6 +194,18 @@ func main() {
 		"trustPartner": {"partner.example"}, "trustDirection": {"3"}, "trustType": {"2"}, "trustAttributes": {"72"}, "securityIdentifier": {"S-1-5-21-9-8-7"}})
 	add("CN=old.example,CN=System,"+base, []string{"top", "leaf", "trustedDomain"}, map[string][]string{
 		"trustPartner": {"old.example"}, "trustDirection": {"0"}, "trustType": {"2"}, "trustAttributes": {"4"}, "securityIdentifier": {"S-1-5-21-1-1-1"}})
+	// Wave 2c fixtures.
+	add("CN=Schema,CN=Configuration,"+base, []string{"top", "dMD"}, map[string][]string{ // DSA-0069: schema 2012 R2
+		"objectVersion": {"69"}})
+	add("CN=DFSR-GlobalSettings,CN=System,"+base, []string{"top", "msDFSR-GlobalSettings"}, map[string][]string{ // DSA-0070: Prepared, FRS still live
+		"msDFSR-Flags": {"16"}})
+	add("CN=WeakAdminPSO,CN=Password Settings Container,CN=System,"+base, []string{"top", "msDS-PasswordSettings"}, map[string][]string{ // DSA-0071
+		"cn": {"WeakAdminPSO"}, "msDS-MinimumPasswordLength": {"6"}, "msDS-PasswordSettingsPrecedence": {"10"},
+		"msDS-PSOAppliesTo": {"CN=Domain Admins,CN=Users," + base}})
+	add("CN={31B2F340-016D-11D2-945F-00C04FB984F9},CN=Policies,CN=System,"+base, []string{"top", "container", "groupPolicyContainer"}, map[string][]string{ // DSA-0072
+		"displayName": {"Default Domain Policy"}, "gPCFileSysPath": {"\\\\lab.example\\sysvol\\lab.example\\Policies\\{31B2F340-016D-11D2-945F-00C04FB984F9}"},
+		"nTSecurityDescriptor": {sd(false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""}, ace{dom + "-1201", 0x00040000, ""})}}) // Helpdesk has WriteDacl
+
 	// Wave 2b fixtures.
 	msaClass := []string{"top", "person", "organizationalPerson", "user", "computer", "msDS-ManagedServiceAccount"}
 	add("CN=svc-msa,CN=Managed Service Accounts,"+base, msaClass, map[string][]string{ // DSA-0064: MSA password 200 d old

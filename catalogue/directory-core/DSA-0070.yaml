@@ -1,0 +1,64 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0070
+title:
+  en: SYSVOL still replicated by the legacy File Replication Service
+  ru: SYSVOL всё ещё реплицируется устаревшей службой File Replication Service
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  The domain head, read against the SYSVOL replication state (DFSR-GlobalSettings and the NTFRS replica set)
+attributes:
+- name
+condition: >-
+  SYSVOL has not reached the DFSR "Eliminated" state: either CN=DFSR-GlobalSettings,CN=System has an msDFSR-Flags
+  value that is present and not 48 (migration prepared or redirected, FRS still replicating), or that value is absent
+  while the legacy NTFRS replica set "Domain System Volume (SYSVOL share)" still exists (migration never started).
+threshold: any occurrence
+rationale: >-
+  FRS, the pre-2008 replication engine for SYSVOL, is unsupported, fragile and insecure: it has no useful integrity
+  checking and a history of silent divergence that leaves domain controllers serving different logon scripts and
+  policies. SYSVOL carries Group Policy and startup scripts that run on every machine, so a domain still on FRS
+  cannot trust that content is consistent, and it signals a domain that has not been maintained since 2008.
+remediation:
+  en: >-
+    Migrate SYSVOL replication from FRS to DFSR with dfsrmig, advancing through Prepared and Redirected to the Eliminated
+    state, then confirm every domain controller reports Eliminated. Do this before raising the domain functional
+    level, and keep a backup of SYSVOL first.
+  ru: >-
+    Перенесите репликацию SYSVOL с FRS на DFSR с помощью dfsrmig, последовательно проходя состояния Prepared и Redirected
+    до Eliminated, затем убедитесь, что все контроллеры домена сообщают Eliminated. Сделайте это до повышения функционального
+    уровня домена и предварительно сохраните резервную копию SYSVOL.
+attack:
+- id: T1484.001
+  name: 'Domain or Tenant Policy Modification: Group Policy Modification'
+anssi:
+- vuln_sysvol_ntfrs
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=domainDNS)
+references:
+- title: >-
+    Microsoft — DFSR SYSVOL migration FAQ (msDFSR-Flags on DFSR-GlobalSettings; Eliminated = 48)
+  url: >-
+    https://learn.microsoft.com/en-us/archive/blogs/askds/dfsr-sysvol-migration-faq-useful-trivia-that-may-save-your-follicles
+- title: Microsoft — SYSVOL Migration States
+  url: >-
+    https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-r2-and-2008/dd641052(v=ws.10)
+notes: >-
+  48 = Eliminated (dfsrmig state 3); 16 Prepared, 32 Redirected still use FRS. After the final cleanup msDFSR-Flags
+  is unset and the NTFRS replica set removed, so an absent flag with no NTFRS replica set is treated as migrated
+  (no finding). Reads two config/system objects via the domain head.
+condition_cel: >-
+  obj.dn.lowerAscii() == obj.base.lowerAscii() && ((objattr("CN=DFSR-GlobalSettings,CN=System,<default>", "msDFSR-Flags")
+  != "" && intval(objattr("CN=DFSR-GlobalSettings,CN=System,<default>", "msDFSR-Flags")) != 48) || (objattr("CN=DFSR-GlobalSettings,CN=System,<default>",
+  "msDFSR-Flags") == "" && objexists("CN=Domain System Volume (SYSVOL share),CN=File Replication Service,CN=System,<default>")))
+expect:
+- DC=lab,DC=example

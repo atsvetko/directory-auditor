@@ -25,8 +25,8 @@ Implemented entries carry `condition_cel` (the pack condition, evaluated by the 
 ./internal/catalogue` runs every implemented entry against its snapshot, so a check is proven before
 the pack is written. Packs are still written only from entries with `verified_by` filled.
 
-Status: 68 directory-core, 23 FreeIPA and 21 Samba entries, all `draft` (awaiting human
-verification). All 112 carry `condition_cel` and are exercised by `go test ./internal/catalogue`
+Status: 72 directory-core, 23 FreeIPA and 21 Samba entries, all `draft` (awaiting human
+verification). All 116 carry `condition_cel` and are exercised by `go test ./internal/catalogue`
 against `testdata/synthetic-*.json.zst` (`synthetic-samba-hardened` is the negative control on
 which no entry may fire) and, in CI, against a live Samba AD DC on every push and a live FreeIPA
 server nightly (`testdata/lab/*-expect.yaml`, `tools/lab/`).

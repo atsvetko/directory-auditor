@@ -245,10 +245,11 @@ func EvaluateWith(snap *snapshot.Snapshot, packs []Pack, opts EvalOptions) (*Res
 	currentTier0, currentIndex, currentBase = t0, indexSnapshot(snap), snap.Meta.BaseDN
 	currentT0Parents = tier0Parents(t0.DNs())
 	currentReachers, currentReachPath = controlGraph(snap, t0)
+	currentGPOToTier0 = gpoTier0Links(snap, t0, currentT0Parents, snap.Meta.BaseDN)
 	defer func() {
 		currentTier0, currentIndex, currentSIDs, currentBase = nil, nil, nil, ""
 		currentSchemaGUIDs, currentT0Parents, currentHosts, currentDNSDomain = nil, nil, nil, ""
-		currentNames, currentReachers, currentReachPath = nil, nil, nil
+		currentNames, currentReachers, currentReachPath, currentGPOToTier0 = nil, nil, nil, nil
 	}()
 	now := snap.Collected.Unix()
 	inv := Inventory{Objects: len(snap.Objects), Collected: snap.Collected, Identity: snap.Meta.Identity,

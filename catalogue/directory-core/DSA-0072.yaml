@@ -1,0 +1,77 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0072
+title:
+  en: GPO linked to Tier-0 scope is editable outside Tier 0
+  ru: >-
+    Объект групповой политики, привязанный к нулевому уровню, можно изменять вне нулевого уровня
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  Group Policy objects (groupPolicyContainer) linked to the domain, the Domain Controllers OU, a site, or an OU
+  holding Tier-0 objects, and their security descriptors
+attributes:
+- displayName
+condition: >-
+  A GPO is linked (through gPLink) to the domain head, the Domain Controllers OU, an AD site, or an OU or container
+  that holds a Tier-0 object, and an allow ACE on the GPO grants a principal that is not Tier 0 (SELF and CREATOR
+  OWNER excluded) full control, WriteDacl, WriteOwner, GenericWrite, or write to all properties.
+threshold: any occurrence
+rationale: >-
+  A Group Policy object that applies to domain controllers or to other Tier-0 systems runs its settings — scripts,
+  scheduled tasks, group membership, registry — as SYSTEM on those machines. Whoever can edit such a GPO can therefore
+  run code on Tier 0 without ever touching a Tier-0 object's own ACL, which is why GPO edit rights are a favourite,
+  and often overlooked, escalation path. The danger is the combination: an edit right that would be harmless on
+  an unlinked GPO becomes domain control once the GPO is linked above Tier-0 systems.
+remediation:
+  en: >-
+    Remove the edit right, or unlink the GPO from the Tier-0 scope. Keep GPOs that apply to domain controllers and
+    Tier-0 OUs editable only by Tier-0 administrators, delegate GPO editing only on GPOs linked to ordinary OUs,
+    and audit changes to both the GPO ACLs and the links.
+  ru: >-
+    Удалите право на изменение или отвяжите объект групповой политики от нулевого уровня. Делайте так, чтобы объекты
+    групповой политики, применяемые к контроллерам домена и подразделениям нулевого уровня, могли изменять только
+    администраторы нулевого уровня; делегируйте изменение групповых политик только на объектах, привязанных к обычным
+    подразделениям, и ведите аудит изменений как ACL политик, так и их привязок.
+attack:
+- id: T1484.001
+  name: 'Domain or Tenant Policy Modification: Group Policy Modification'
+- id: T1222.001
+  name: >-
+    File and Directory Permissions Modification: Windows File and Directory Permissions Modification
+anssi:
+- vuln_permissions_gpo_priv
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=groupPolicyContainer)
+references:
+- title: Microsoft Learn — GP-Link attribute (gPLink)
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-gplink
+- title: Microsoft Learn — Group Policy objects in Active Directory (groupPolicyContainer)
+  url: >-
+    https://learn.microsoft.com/en-us/previous-versions/windows/desktop/policy/group-policy-objects
+- title: Microsoft Learn — Enterprise access model (privileged access)
+  url: >-
+    https://learn.microsoft.com/en-us/security/privileged-access-workstations/privileged-access-access-model
+notes: >-
+  Completes the GPO side of ANSSI alongside DSA-0058 (which covers who can link GPOs). 'Affects Tier 0' is resolved
+  from the gPLink of every collected container; linking to a site counts because every DC is in a site. A GPO whose
+  own DACL is unreadable yields a not-collected state, not a pass.
+evidence_principals: >-
+  aces(obj).filter(a, a.allow && a.effective && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"]) && (mask_has(a.mask,
+  0x10000000) || mask_has(a.mask, 0xF01FF) || mask_has(a.mask, 0x40000) || mask_has(a.mask, 0x80000) || mask_has(a.mask,
+  0x40000000) || (mask_has(a.mask, 0x20) && a.object_type == ""))).map(a, a.trustee)
+condition_cel: >-
+  gpo_affects_tier0(obj) && sd_readable(obj) && aces(obj).exists(a, a.allow && a.effective && !a.trustee_tier0 &&
+  !(a.trustee in ["S-1-5-10", "S-1-3-0"]) && (mask_has(a.mask, 0x10000000) || mask_has(a.mask, 0xF01FF) || mask_has(a.mask,
+  0x40000) || mask_has(a.mask, 0x80000) || mask_has(a.mask, 0x40000000) || (mask_has(a.mask, 0x20) && a.object_type
+  == "")))
+expect:
+- CN={31B2F340-016D-11D2-945F-00C04FB984F9},CN=Policies,CN=System,DC=lab,DC=example

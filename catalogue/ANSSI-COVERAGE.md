@@ -12,13 +12,13 @@ sources; this page only maps identifiers. A point is **covered** when an entry d
 
 | ANSSI level | Points | Covered | Partial | Covered + partial |
 |---|---:|---:|---:|---:|
-| 1 | 37 | 27 | 0 | 73% |
-| 2 | 18 | 13 | 0 | 72% |
+| 1 | 37 | 28 | 0 | 76% |
+| 2 | 18 | 16 | 0 | 89% |
 | 3 | 17 | 5 | 2 | 41% |
 | 4 | 4 | 1 | 0 | 25% |
-| **All** | **76** | **46** | **2** | **63%** |
+| **All** | **76** | **50** | **2** | **68%** |
 
-Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 7 · wave 3 (level-3/4) 15 · wave 4 (AD CS) 6 · wave 5 (DNS) 2.
+Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 3 · wave 3 (level-3/4) 15 · wave 4 (AD CS) 6 · wave 5 (DNS) 2.
 
 ## Control points
 
@@ -50,7 +50,7 @@ Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 7 · wave 3
 | 1,2 | `vuln_permissions_dfsr_sysvol` | Dangerous ACLs expose DFSR settings objects of the SYSVOL share (attack path) | ⬜ planned | wave 4 — needs DFSR settings objects of the SYSVOL replication group |
 | 1,2 | `vuln_permissions_dpapi` | Dangerous ACLs expose DPAPI key objects (attack path) | ✅ covered | DSA-0067 |
 | 1,2 | `vuln_permissions_gmsa_keys` | Dangerous ACLs expose gMSA key objects (attack path) | ✅ covered | DSA-0068 |
-| 1 | `vuln_permissions_gpo_priv` | Dangerous ACLs expose GPOs applied to privileged group members (attack path) | ⬜ planned | wave 2 — needs groupPolicyContainer objects and their DACLs |
+| 1 | `vuln_permissions_gpo_priv` | Dangerous ACLs expose GPOs applied to privileged group members (attack path) | ✅ covered | DSA-0072 |
 | 1 | `vuln_permissions_msdns` | Dangerous ACLs expose MicrosoftDNS server objects (attack path) | ⬜ planned | wave 5 — needs MicrosoftDNS server and zone objects and their DACLs |
 | 1,2 | `vuln_permissions_naming_context` | Dangerous ACLs expose a naming context root (attack path) | ✅ covered | DSA-0014, DSA-0015, DSA-0049 |
 | 1,2 | `vuln_permissions_schema` | Dangerous ACLs expose schema objects (attack path) | ⬜ planned | wave 4 — needs schema partition objects and their DACLs |
@@ -61,7 +61,7 @@ Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 7 · wave 3
 | 1 | `vuln_trusts_domain_notfiltered` | Unfiltered outbound domain trust relationship | ✅ covered | DSA-0018 |
 | 1 | `vuln_trusts_forest_sidhistory` | Outbound forest trust relationships with sID History enabled | ✅ covered | DSA-0018 |
 | 1 | `vuln_user_accounts_dormant` | Dormant accounts | ✅ covered | DSA-0036 |
-| 2 | `vuln_adupdate_bad` | Bad Active Directory versions | ⬜ planned | wave 2 — needs schema and forest/domain preparation versions |
+| 2 | `vuln_adupdate_bad` | Bad Active Directory versions | ✅ covered | DSA-0069 |
 | 2 | `vuln_compatible_2000_anonymous` | The "Pre-Windows 2000 Compatible Access" group includes "Anonymous" | ✅ covered | DSA-0038 |
 | 2,3,4 | `vuln_dc_crypto` | DC/RODC supported encryption algorithms | ✅ covered | DSA-0063 |
 | 2 | `vuln_dont_expire` | Accounts with never-expiring passwords | ✅ covered | DSA-0041 |
@@ -74,10 +74,10 @@ Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 7 · wave 3
 | 2 | `vuln_password_change_server_no_change_90` | Servers with passwords unchanged for more than 90 days | ✅ covered | DSA-0043 |
 | 2 | `vuln_permissions_gpo_container_priv` | Dangerous ACLs expose privileged object containers (attack path) | ✅ covered | DSA-0058 |
 | 2 | `vuln_privileged_members_no_admincount` | Privileged groups members having an adminCount attribute which is null or 0 | ✅ covered | DSA-0040, DSA-0221 |
-| 2 | `vuln_privileged_members_password` | Privileged group members with weak password policy | ⬜ planned | wave 2 — needs fine-grained password policies (msDS-PasswordSettings) and their targets |
+| 2 | `vuln_privileged_members_password` | Privileged group members with weak password policy | ✅ covered | DSA-0071 |
 | 2 | `vuln_rodc_priv_revealed` | Privileged users revealed on RODC | ⬜ planned | wave 2 — needs RODC revealed lists (msDS-RevealedList) |
 | 2 | `vuln_sidhistory_dangerous` | Accounts or groups with unexpected SID history | ✅ covered | DSA-0017 |
-| 2 | `vuln_sysvol_ntfrs` | SYSVOL replication through NTFRS | ⬜ planned | wave 2 — needs DFSR migration state / NTFRS replica set objects |
+| 2 | `vuln_sysvol_ntfrs` | SYSVOL replication through NTFRS | ✅ covered | DSA-0070 |
 | 2 | `vuln_trusts_accounts` | Trust account passwords unchanged for more than a year | ✅ covered | DSA-0065 |
 | 3 | `vuln_compatible_2000_not_default` | Use of the "Pre-Windows 2000 Compatible Access" group | ✅ covered | DSA-0039 |
 | 3 | `vuln_kerberos_properties_encryption` | Service accounts supported encryption algorithms | 🟡 partial | DSA-0003, DSA-0012 — wave 3: DSA-0003/0012 cover weak types; ANSSI checks service accounts' declared types |

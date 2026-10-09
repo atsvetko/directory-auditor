@@ -1,0 +1,66 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0071
+title:
+  en: Weak fine-grained password policy applied to a privileged member
+  ru: Слабая настраиваемая политика паролей применена к привилегированному участнику
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  Password Settings Objects (msDS-PasswordSettings) that apply directly to a Tier-0 principal
+attributes:
+- cn
+- msDS-MinimumPasswordLength
+- msDS-PSOAppliesTo
+condition: >-
+  A Password Settings Object sets msDS-MinimumPasswordLength below 12 and its msDS-PSOAppliesTo lists a Tier-0 principal
+  (a protected group or an administrator). A PSO applied directly to a principal overrides the default domain policy,
+  so the weak length is the one in force.
+threshold: any occurrence
+rationale: >-
+  Fine-grained password policies override the default domain policy for the principals they target. A PSO with a
+  short minimum length attached to an administrator, or to a privileged group, quietly weakens exactly the accounts
+  that most need a strong password — and because it is set per-object, it is invisible to anyone reviewing only
+  the default domain policy. Administrators need the longest passwords, not the shortest.
+remediation:
+  en: >-
+    Raise msDS-MinimumPasswordLength on the listed policy to at least the organisation's administrator standard
+    (14+), or remove the PSO so the accounts fall under a strong default policy. Confirm no other weak PSO applies
+    to a privileged group, and prefer phishing-resistant authentication for Tier-0 accounts.
+  ru: >-
+    Поднимите msDS-MinimumPasswordLength в указанной политике минимум до корпоративного стандарта для администраторов
+    (14+) или удалите PSO, чтобы учётные записи подпадали под строгую политику по умолчанию. Убедитесь, что к привилегированным
+    группам не применяется другая слабая PSO, и предпочитайте для учётных записей нулевого уровня устойчивую к фишингу
+    аутентификацию.
+attack:
+- id: T1110
+  name: Brute Force
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+anssi:
+- vuln_privileged_members_password
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=msDS-PasswordSettings)
+references:
+- title: Microsoft — Create a Password Settings Object (msDS-PasswordSettings, msDS-PSOAppliesTo)
+  url: >-
+    https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-R2-and-2008/cc754461(v=ws.10)
+- title: Microsoft Learn — ms-DS-MinimumPasswordLength attribute
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-msds-minimumpasswordlength
+notes: >-
+  Only directly-applied PSOs (msDS-PSOAppliesTo contains the principal) are evaluated, so the finding is always
+  the effective policy — no false positive from a stronger PSO winning. PSOs applied only through nested group membership
+  are a known gap (conservative). Threshold 12; tunable. The default domain policy is DSA-0021.
+condition_cel: >-
+  intattr(obj, "msDS-MinimumPasswordLength") > 0 && intattr(obj, "msDS-MinimumPasswordLength") < 12 && attrs(obj,
+  "msDS-PSOAppliesTo").exists(d, tier0_sid(objattr(d, "objectSid")))
+expect:
+- CN=WeakAdminPSO,CN=Password Settings Container,CN=System,DC=lab,DC=example

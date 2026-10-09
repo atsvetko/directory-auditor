@@ -1,0 +1,59 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0069
+title:
+  en: Forest schema not prepared for a supported Windows Server
+  ru: Схема леса не подготовлена для поддерживаемой версии Windows Server
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The schema naming-context head (objectVersion)
+attributes:
+- objectVersion
+condition: >-
+  The schema objectVersion is below 87 (the schema level of Windows Server 2016). A lower value means adprep /forestprep
+  has not been run for 2016 or later, so the forest is missing the schema additions — and the security hardening
+  — of every release since.
+threshold: any occurrence
+rationale: >-
+  Each Windows Server release extends the AD schema, and the extensions carry security features: protected-user
+  and claims attributes, Windows LAPS attributes, authentication-policy objects and more. The schema version therefore
+  shows whether the forest has been updated at all. A schema below 2016 means those features cannot exist, and it
+  almost always accompanies domain controllers that are themselves out of support.
+remediation:
+  en: >-
+    Run adprep /forestprep (and /domainprep in each domain) from the installation media of a supported Windows Server,
+    or let the promotion of a new enough domain controller update the schema. Take a system-state backup of the
+    schema master first and confirm there is no schema-dependent application that would break.
+  ru: >-
+    Выполните adprep /forestprep (и /domainprep в каждом домене) с установочного носителя поддерживаемой версии
+    Windows Server либо дайте схему обновить повышению достаточно нового контроллера домена. Сначала снимите резервную
+    копию состояния системы хозяина схемы и убедитесь, что нет зависящего от схемы приложения, которое из-за этого
+    сломается.
+attack:
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+anssi:
+- vuln_adupdate_bad
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=dMD)
+references:
+- title: Microsoft Learn — Find the current Active Directory schema version (objectVersion table)
+  url: >-
+    https://learn.microsoft.com/en-us/troubleshoot/windows-server/identity/find-current-schema-version
+- title: Microsoft Learn — Find Active Directory schema
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/deploy/find-active-directory-schema
+notes: >-
+  objectVersion → OS: 87 = 2016, 88 = 2019/2022, 91 = 2025 (Microsoft). The threshold is below 87, aligned with
+  the forest functional level floor of DSA-0062. Read from the schema NC head.
+condition_cel: intattr(obj, "objectVersion") > 0 && intattr(obj, "objectVersion") < 87
+expect:
+- CN=Schema,CN=Configuration,DC=lab,DC=example

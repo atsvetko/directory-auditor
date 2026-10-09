@@ -18,12 +18,8 @@ plan:
 # --- wave 1 — done (DSA-0030…0044) -------------------------------------------------------------------
 # --- wave 2 -------------------------------------------------------------------------------------------
 - {id: vuln_display_specifier,               status: collect, wave: 2, needs: "CN=DisplaySpecifiers in the configuration partition"}
-- {id: vuln_permissions_gpo_priv,            status: collect, wave: 2, needs: "groupPolicyContainer objects and their DACLs"}
-- {id: vuln_privileged_members_password,     status: collect, wave: 2, needs: "fine-grained password policies (msDS-PasswordSettings) and their targets"}
 - {id: vuln_password_change_cluster_no_change_3years, status: gap, wave: 2, note: "cluster name objects identified by their SPNs"}
 - {id: vuln_rodc_priv_revealed,              status: collect, wave: 2, needs: "RODC revealed lists (msDS-RevealedList)"}
-- {id: vuln_sysvol_ntfrs,                    status: collect, wave: 2, needs: "DFSR migration state / NTFRS replica set objects"}
-- {id: vuln_adupdate_bad,                    status: collect, wave: 2, needs: "schema and forest/domain preparation versions"}
 # --- wave 3 -------------------------------------------------------------------------------------------
 - {id: vuln_protected_users,                 status: partial, wave: 3, note: "DSA-0007 covers delegation protection; ANSSI checks Protected Users membership itself"}
 - {id: vuln_kerberos_properties_encryption,  status: partial, wave: 3, note: "DSA-0003/0012 cover weak types; ANSSI checks service accounts' declared types"}

@@ -51,6 +51,8 @@ import (
 //	                                              outside the snapshot's DNS domain count as known
 //	reaches_tier0(obj)                            a non-Tier-0 principal has a control path to a Tier-0
 //	                                              object (transitive ACL + group membership graph)
+//	gpo_affects_tier0(obj)                        this GPO is linked to the domain, the DC OU, a site,
+//	                                              or an OU/container that holds a Tier-0 object
 func helperOptions() []cel.EnvOption {
 	mapT := cel.MapType(cel.StringType, cel.DynType)
 	aceList := cel.ListType(cel.MapType(cel.StringType, cel.DynType))
@@ -209,6 +211,13 @@ func helperOptions() []cel.EnvOption {
 					sid := firstAttr(o, "objectSid")
 					return types.Bool(sid != "" && currentReachers[strings.ToUpper(sid)])
 				}))),
+		cel.Function("gpo_affects_tier0",
+			cel.Overload("gpo_affects_tier0_map", []*cel.Type{mapT}, cel.BoolType,
+				cel.UnaryBinding(func(o ref.Val) ref.Val {
+					m, _ := o.Value().(map[string]any)
+					dn, _ := m["dn"].(string)
+					return types.Bool(currentGPOToTier0[strings.ToLower(dn)])
+				}))),
 		cel.Function("aces",
 			cel.Overload("aces_map", []*cel.Type{mapT}, aceList,
 				cel.UnaryBinding(func(o ref.Val) ref.Val { return aceVals(o, "nTSecurityDescriptor") }))),
@@ -319,6 +328,7 @@ var (
 	currentNames       map[string]string // upper(SID) -> display name (sAMAccountName or CN)
 	currentReachers    map[string]bool   // upper(SID) -> has a control path to a Tier-0 object
 	currentReachPath   map[string]string // upper(SID) -> that path, for the finding evidence
+	currentGPOToTier0  map[string]bool   // lower(GPO DN) -> linked to a Tier-0-affecting container
 )
 
 func indexSnapshot(snap *snapshot.Snapshot) map[string]*snapshot.Object {
@@ -728,4 +738,64 @@ func controlGraph(snap *snapshot.Snapshot, t0 *tier0.Set) (map[string]bool, map[
 		}
 	}
 	return reachers, path
+}
+
+// gpoTier0Links builds the set of GPO DNs that are linked (via gPLink) to a
+// container whose policy reaches Tier 0: the domain head, the Domain Controllers
+// OU, any AD site (every DC lives in one), or any OU/container that holds a
+// Tier-0 object. Whoever can edit such a GPO can run code on Tier-0 systems, so
+// DSA-0072 only flags a dangerous GPO ACL when the GPO lands here.
+func gpoTier0Links(snap *snapshot.Snapshot, t0 *tier0.Set, t0parents map[string]bool, base string) map[string]bool {
+	out := map[string]bool{}
+	lbase := strings.ToLower(base)
+	for i := range snap.Objects {
+		o := &snap.Objects[i]
+		ldn := strings.ToLower(o.DN)
+		affects := ldn == lbase ||
+			strings.HasPrefix(ldn, "ou=domain controllers,") ||
+			t0parents[ldn] ||
+			hasClass(o, "site")
+		if !affects {
+			continue
+		}
+		for _, link := range gplinkDNs(o.Attr("gPLink")) {
+			out[link] = true
+		}
+	}
+	return out
+}
+
+func hasClass(o *snapshot.Object, class string) bool {
+	for _, c := range o.Class {
+		if strings.EqualFold(c, class) {
+			return true
+		}
+	}
+	return false
+}
+
+// gplinkDNs extracts the lower-cased GPO DNs from a gPLink value, which is a
+// run of "[LDAP://<DN>;<flags>]" segments.
+func gplinkDNs(v string) []string {
+	var out []string
+	for _, seg := range strings.Split(v, "[") {
+		seg = strings.TrimSuffix(strings.TrimSpace(seg), "]")
+		if seg == "" {
+			continue
+		}
+		if i := strings.LastIndexByte(seg, ';'); i >= 0 {
+			seg = seg[:i]
+		}
+		seg = strings.TrimPrefix(seg, "LDAP://")
+		if j := strings.Index(seg, "://"); j >= 0 { // a server-qualified LDAP://dc/DN form
+			seg = seg[j+3:]
+		}
+		if k := strings.IndexByte(seg, '/'); k >= 0 { // strip any server prefix before the DN
+			seg = seg[k+1:]
+		}
+		if seg != "" {
+			out = append(out, strings.ToLower(seg))
+		}
+	}
+	return out
 }

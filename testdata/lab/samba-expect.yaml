@@ -42,6 +42,8 @@ allow:
   - DSA-0062   # forest functional level below 2016 (Samba default is lower)
   - DSA-0063   # DC crypto: fires if the Samba DC advertises RC4 or omits AES
   - DSA-0066   # dSHeuristics dwAdminSDExMask: fires only if set on the live DC
+  - DSA-0069   # schema version below 2016 (Samba's AD schema is typically lower)
+  - DSA-0072   # GPO editable outside Tier 0: fires if a live GPO ACL allows it
   - DSA-0027   # DnsAdmins membership (fires only if the live lab populates the group)
   - DSA-0028   # secrets in readable attributes (depends on the live lab's descriptions)
   - DSA-0029   # control over protected non-Tier-0 objects (depends on the live lab's ACLs)
