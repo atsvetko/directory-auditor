@@ -109,11 +109,14 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) (code int) {
 		}
 		t.BindPassword = pw
 	}
-	p, dialect, err := provider.Pick(ctx, providerName, t)
+	p, dialect, note, err := provider.Pick(ctx, providerName, t)
 	if err != nil {
 		fmt.Fprintln(errw, "error:", err)
 		fmt.Fprintln(errw, "hint: run `dirauditor doctor --domain <domain> --server <dc>` to see why")
 		return 1
+	}
+	if note != "" {
+		fmt.Fprintln(errw, "note:", note)
 	}
 	if dialect != "" {
 		fmt.Fprintf(errw, "detected: %s (%s)\n", p.Name(), dialect)

@@ -337,7 +337,7 @@ func (s *Server) connect(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	defer cancel()
-	p, _, err := provider.Pick(ctx, "auto", t)
+	p, _, _, err := provider.Pick(ctx, "auto", t)
 	if err != nil {
 		writeJSON(w, 200, connectResp{Error: err.Error(), Hint: diagnose(ctx, t)})
 		return

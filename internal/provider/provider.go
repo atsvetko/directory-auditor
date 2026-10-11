@@ -71,33 +71,69 @@ func Get(name string) (Provider, bool) {
 	return p, ok
 }
 
-// Pick returns the provider named by name, or, for "auto" / "", the first
-// registered provider whose Detect matches the server. Each Detect is one
-// dial plus a rootDSE read; nothing is bound.
-func Pick(ctx context.Context, name string, t Target) (Provider, string, error) {
-	if name != "" && name != "auto" {
-		p, ok := Get(name)
-		if !ok {
-			return nil, "", fmt.Errorf("unknown provider %q (have %s)", name, Names())
-		}
-		return p, "", nil
-	}
-	var errs []string
+// identify runs each registered provider's Detect (one dial plus a rootDSE
+// read, nothing bound) and returns the first whose fingerprint matches, so the
+// real system type is known before any credentials are used.
+func identify(ctx context.Context, t Target) (Provider, string, error) {
+	var firstErr error
 	for _, n := range Names() {
 		p, _ := Get(n)
 		ok, dialect, err := p.Detect(ctx, t)
 		if err != nil {
-			errs = append(errs, n+": "+err.Error())
+			if firstErr == nil {
+				firstErr = err
+			}
 			continue
 		}
 		if ok {
 			return p, dialect, nil
 		}
 	}
-	if len(errs) > 0 {
-		return nil, "", fmt.Errorf("could not identify the directory: %s", errs[0])
+	return nil, "", firstErr
+}
+
+// Pick chooses the provider for a target. It always fingerprints the server
+// first (Detect), so the directory's actual type decides the provider and the
+// right check list applies — a binding credential is never enough on its own.
+//
+//   - auto / "": the detected provider, or an error if none matches.
+//   - an explicit name that matches the detected type: that provider (confirmed).
+//   - an explicit name that CONFLICTS with the detected type: the detected
+//     provider is used instead (the report must reflect reality) and note says so.
+//   - an explicit name when detection is inconclusive: the named provider, as a
+//     fallback, with note explaining detection could not confirm it.
+//
+// note is a human-readable message for the caller to surface; it is empty when
+// the choice is unambiguous.
+func Pick(ctx context.Context, name string, t Target) (p Provider, dialect, note string, err error) {
+	det, dialect, derr := identify(ctx, t)
+
+	if name != "" && name != "auto" {
+		req, ok := Get(name)
+		if !ok {
+			return nil, "", "", fmt.Errorf("unknown provider %q (have %s)", name, Names())
+		}
+		switch {
+		case det != nil && det.Name() == name:
+			return det, dialect, "", nil
+		case det != nil:
+			return det, dialect, fmt.Sprintf("requested --provider %s, but the server is %s — using %s so the right checks apply", name, det.Name(), det.Name()), nil
+		default:
+			msg := fmt.Sprintf("could not confirm the directory type; using --provider %s as given", name)
+			if derr != nil {
+				msg += " (" + derr.Error() + ")"
+			}
+			return req, "", msg, nil
+		}
 	}
-	return nil, "", fmt.Errorf("the server is not a directory type this build supports (%s)", Names())
+
+	if det != nil {
+		return det, dialect, "", nil
+	}
+	if derr != nil {
+		return nil, "", "", fmt.Errorf("could not identify the directory: %s", derr.Error())
+	}
+	return nil, "", "", fmt.Errorf("the server is not a directory type this build supports (%s)", Names())
 }
 
 // Names lists registered providers, sorted.
