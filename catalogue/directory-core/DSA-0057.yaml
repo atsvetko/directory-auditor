@@ -5,6 +5,7 @@ title:
   en: LAPS password attribute is not marked confidential
   ru: Атрибут пароля LAPS не помечен как конфиденциальный
 domain: directory-core
+providers: [ad]   # Samba AD DC does not implement this feature
 tier: 0
 severity: high
 quick: true

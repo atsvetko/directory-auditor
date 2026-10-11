@@ -22,9 +22,17 @@ import (
 
 // Entry is one catalogue record.
 type Entry struct {
-	ID          string            `yaml:"id"`
-	Title       map[string]string `yaml:"title"`
-	Domain      string            `yaml:"domain"`
+	ID    string            `yaml:"id"`
+	Title map[string]string `yaml:"title"`
+	// Domain groups entries by subject (directory-core, dns, gpo, pki, …) and, for
+	// an entry without an explicit Providers list, decides which providers run it:
+	// samba -> [samba], freeipa -> [freeipa], anything else -> [ad, samba].
+	Domain string `yaml:"domain"`
+	// Providers overrides that default. Set it to narrow a shared (AD-schema)
+	// check to the providers it actually applies to — e.g. [ad] for a check about
+	// a feature a Samba AD DC does not implement (LAPS, gMSA/KDS, MSA, Entra
+	// Seamless SSO, FRS/DFSR SYSVOL). Empty means "use the domain default".
+	Providers   []string          `yaml:"providers"`
 	Tier        int               `yaml:"tier"`
 	Severity    string            `yaml:"severity"`
 	Quick       bool              `yaml:"quick"`
@@ -104,6 +112,11 @@ func (e *Entry) Validate() error {
 		add("unknown domain %q", e.Domain)
 	} else if e.Path != "" && filepath.Base(filepath.Dir(e.Path)) != e.Domain {
 		add("entry is in folder %s but domain is %s", filepath.Base(filepath.Dir(e.Path)), e.Domain)
+	}
+	for _, p := range e.Providers {
+		if p != "ad" && p != "samba" && p != "freeipa" {
+			add("providers entry %q invalid (use ad, samba or freeipa)", p)
+		}
 	}
 	if e.Tier < 0 || e.Tier > 2 {
 		add("tier must be 0, 1 or 2")
@@ -221,14 +234,24 @@ func LoadFS(fsys fs.FS, display string) ([]Entry, error) {
 // entry can be tried against a real directory before anyone signs off on it.
 // The result is marked Preview so reports label it. ok is false for entries
 // without a condition.
+// providerList returns the providers that run this entry: its explicit
+// Providers override if set, otherwise the default derived from the domain
+// (samba -> [samba], freeipa -> [freeipa], anything else -> [ad, samba]).
+func (e Entry) providerList() []string {
+	if len(e.Providers) > 0 {
+		return e.Providers
+	}
+	if p, ok := map[string][]string{"freeipa": {"freeipa"}, "samba": {"samba"}}[e.Domain]; ok {
+		return p
+	}
+	return []string{"ad", "samba"}
+}
+
 func (e Entry) Pack() (check.Pack, bool) {
 	if strings.TrimSpace(e.ConditionCEL) == "" {
 		return check.Pack{}, false
 	}
-	providers := map[string][]string{"freeipa": {"freeipa"}, "samba": {"samba"}}[e.Domain]
-	if providers == nil {
-		providers = []string{"ad", "samba"}
-	}
+	providers := e.providerList()
 	filter, _ := e.QuerySketch["filter"].(string)
 	if filter == "" {
 		filter = "(objectClass=*)"
@@ -340,10 +363,7 @@ func Library() ([]LibraryItem, error) {
 	points := anssi.Index()
 	out := make([]LibraryItem, 0, len(entries))
 	for _, e := range entries {
-		providers := map[string][]string{"freeipa": {"freeipa"}, "samba": {"samba"}}[e.Domain]
-		if providers == nil {
-			providers = []string{"ad", "samba"}
-		}
+		providers := e.providerList()
 		fw := map[string][]Mapping{}
 		for _, a := range e.Attack {
 			fw["MITRE ATT&CK"] = append(fw["MITRE ATT&CK"], Mapping{

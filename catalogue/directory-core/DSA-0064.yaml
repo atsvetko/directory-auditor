@@ -5,6 +5,7 @@ title:
   en: Managed service accounts whose password has not changed in 90 days
   ru: Управляемые учётные записи служб, чей пароль не менялся 90 дней
 domain: directory-core
+providers: [ad]   # Samba AD DC does not implement this feature
 tier: 0
 severity: medium
 quick: true

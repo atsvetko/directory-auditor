@@ -28,7 +28,33 @@ func WriteHTML(w io.Writer, r *check.Result, lang string) error {
 	return page.Execute(w, map[string]any{"R": r, "Lang": lang, "Sev": check.SortedSeverities(r.Counts)})
 }
 
-var page = template.Must(template.New("report").Parse(`<!doctype html>
+// DirectoryType maps a provider/dialect to a human label for the report and UI.
+// The dialect is more specific (a Samba AD DC scanned with the ad provider has
+// provider "ad" but dialect "samba"), so it wins when present.
+func DirectoryType(provider, dialect string) string {
+	k := dialect
+	if k == "" {
+		k = provider
+	}
+	switch k {
+	case "samba":
+		return "Samba AD DC"
+	case "freeipa":
+		return "FreeIPA"
+	case "389ds":
+		return "389 Directory Server"
+	case "synthetic":
+		return "Synthetic (demo)"
+	case "ad":
+		return "Active Directory"
+	default:
+		return "Active Directory"
+	}
+}
+
+var page = template.Must(template.New("report").Funcs(template.FuncMap{
+	"dirtype": DirectoryType,
+}).Parse(`<!doctype html>
 <html lang="{{.Lang}}">
 <head>
 <meta charset="utf-8">
@@ -46,6 +72,7 @@ var page = template.Must(template.New("report").Parse(`<!doctype html>
   .fail{color:#a33;font-weight:700} .pass{color:#1f7a3f;font-weight:700} .skip{color:#8a94a3}
   .banner{background:#fff4e5;border:1px solid #f0c36d;padding:8px 12px;margin:12px 0;font-size:14px}
   .preview{background:#eef4fa;border:1px solid #9fbbd8;padding:8px 12px;margin:12px 0;font-size:14px}
+  .dirtype{display:inline-block;background:#0f4c81;color:#fff;font-size:13px;font-weight:600;padding:3px 10px;border-radius:4px;margin:2px 0 8px}
   .tag{display:inline-block;font-size:11px;line-height:16px;padding:0 5px;border-radius:3px;background:#dde8f3;color:#0f4c81;margin-left:6px;vertical-align:middle}
   td.id .tag{display:block;margin:3px 0 0;width:max-content}
   code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
@@ -53,7 +80,8 @@ var page = template.Must(template.New("report").Parse(`<!doctype html>
 </head>
 <body>
 <h1>Directory Auditor</h1>
-<div class="muted">{{if eq .Lang "ru"}}Цель{{else}}Target{{end}}: <code>{{.R.Target}}</code> · {{.R.Provider}}{{if .R.Dialect}}/{{.R.Dialect}}{{end}} · {{if eq .Lang "ru"}}уровень{{else}}tier{{end}} {{.R.Tier}} · {{if .R.Inventory.Transport}}{{.R.Inventory.Transport}} · {{end}}{{.R.AnalysedAt.Format "2006-01-02 15:04 UTC"}} · {{if eq .Lang "ru"}}снимок{{else}}snapshot{{end}} <code>{{printf "%.16s" .R.SnapshotHash}}…</code></div>
+<div class="dirtype">{{if eq .Lang "ru"}}Тип каталога{{else}}Directory type{{end}}: {{dirtype .R.Provider .R.Dialect}}</div>
+<div class="muted">{{if eq .Lang "ru"}}Цель{{else}}Target{{end}}: <code>{{.R.Target}}</code> · {{if eq .Lang "ru"}}уровень{{else}}tier{{end}} {{.R.Tier}} · {{if .R.Inventory.Transport}}{{.R.Inventory.Transport}} · {{end}}{{.R.AnalysedAt.Format "2006-01-02 15:04 UTC"}} · {{if eq .Lang "ru"}}снимок{{else}}snapshot{{end}} <code>{{printf "%.16s" .R.SnapshotHash}}…</code></div>
 {{if .R.Unsigned}}<div class="banner">{{if eq .Lang "ru"}}Внимание: загружены неподписанные пакеты проверок (режим разработки).{{else}}Warning: unsigned check packs were loaded (development mode).{{end}}</div>{{end}}
 {{if .R.Inventory.Unencrypted}}<div class="banner">{{if eq .Lang "ru"}}Внимание: подключение к каталогу не было зашифровано ({{.R.Inventory.Transport}}) — данные прошли по сети в открытом виде (режим стенда).{{else}}Warning: the directory session was not encrypted ({{.R.Inventory.Transport}}) — data crossed the network in clear (lab mode).{{end}}</div>{{end}}
 {{if .R.Preview}}<div class="preview">{{if eq .Lang "ru"}}<b>Предварительные проверки:</b> {{.R.Preview}} записей каталога оценены как проверки. Они не подписаны и ещё не проверены человеком (статус «черновик»); в таблице отмечены как <span class="tag">preview</span>. Считайте их находки поводом для проверки, а не подтверждённым результатом.{{else}}<b>Preview checks:</b> {{.R.Preview}} catalogue entries were evaluated as checks. They are unsigned and not yet verified by a human (status draft); the table marks them <span class="tag">preview</span>. Treat their findings as leads to confirm, not as verified results.{{end}}</div>{{end}}

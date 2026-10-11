@@ -41,7 +41,7 @@ func writeSambaLab(path string, hardened bool) error {
 		"dnsHostName": "dc1.samba.example", "supportedCapabilities": "1.2.840.113556.1.4.800;1.2.840.113556.1.4.1670;1.2.840.113556.1.4.1791",
 	}
 	s := &snapshot.Snapshot{Schema: snapshot.SchemaVersion, Collected: collected, Meta: snapshot.Meta{
-		Provider: "ad", Dialect: "samba", Target: "dc1.samba.example", Domain: "samba.example", BaseDN: base,
+		Provider: "samba", Dialect: "samba", Target: "dc1.samba.example", Domain: "samba.example", BaseDN: base,
 		Identity: "audit@samba.example", Tier: 2, Tool: "mksynth", QueryCount: 10, DomainSID: dom, RootDSE: root,
 		Extra: map[string]string{"smbconf": "/etc/samba/smb.conf", "smbconf_source": "testparm", "samba_version": ver},
 	}}

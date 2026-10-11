@@ -5,6 +5,7 @@ title:
   en: SYSVOL still replicated by the legacy File Replication Service
   ru: SYSVOL всё ещё реплицируется устаревшей службой File Replication Service
 domain: directory-core
+providers: [ad]   # Samba AD DC does not implement this feature
 tier: 0
 severity: medium
 quick: true

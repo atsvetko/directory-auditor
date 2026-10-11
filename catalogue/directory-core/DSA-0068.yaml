@@ -5,6 +5,7 @@ title:
   en: KDS root key readable outside Tier 0 (Golden gMSA exposure)
   ru: Корневой ключ KDS доступен для чтения вне нулевого уровня (риск Golden gMSA)
 domain: directory-core
+providers: [ad]   # Samba AD DC does not implement this feature
 tier: 0
 severity: high
 quick: true

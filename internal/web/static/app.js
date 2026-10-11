@@ -213,8 +213,9 @@ function renderResult() {
   $("score").textContent = r.score;
   $("r_target").textContent = inv.domain || r.target;
   const when = (inv.collected_at || r.analysed_at || "").replace("T", " ").slice(0, 16) + " UTC";
-  const kind = {samba: "Samba AD DC", freeipa: "FreeIPA / IdM", "389ds": "389 Directory Server"}[r.dialect] || "Active Directory";
-  $("r_sub").textContent = [kind, (lang === "ru" ? "уровень " : "tier ") + r.tier, when, (inv.identity || ""), (inv.transport || "")].filter(Boolean).join(" · ");
+  const kind = {samba: "Samba AD DC", freeipa: "FreeIPA / IdM", "389ds": "389 Directory Server"}[r.dialect || r.provider] || "Active Directory";
+  $("r_kind").textContent = (lang === "ru" ? "Тип каталога: " : "Directory type: ") + kind;
+  $("r_sub").textContent = [(lang === "ru" ? "уровень " : "tier ") + r.tier, when, (inv.identity || ""), (inv.transport || "")].filter(Boolean).join(" · ");
   $("r_unenc").classList.toggle("hidden", !inv.unencrypted);
   $("pc_meta").innerHTML = esc(inv.domain || r.target) + "<br>" + esc(when) + "<br>" + esc(inv.identity || "");
   $("unsigned").classList.toggle("hidden", !r.unsigned_packs);

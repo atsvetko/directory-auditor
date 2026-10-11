@@ -6,6 +6,7 @@ title:
   ru: >-
     Пароли групповых управляемых учётных записей служб доступны широкому кругу или субъектам вне нулевого уровня
 domain: directory-core
+providers: [ad]   # Samba AD DC does not implement this feature
 tier: 0
 severity: high
 quick: true
