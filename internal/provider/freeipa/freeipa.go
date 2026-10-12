@@ -199,7 +199,7 @@ func bind(c *ldapx.Conn, t provider.Target, base string) (string, error) {
 
 func dial(ctx context.Context, t provider.Target) (*ldapx.Conn, error) {
 	if t.Server == "" {
-		return nil, errors.New("freeipa: --server is required")
+		return nil, errors.New("freeipa: no server: pass --domain (found through DNS) or --server")
 	}
 	return ldapx.Dial(ctx, ldapx.Options{Server: t.Server, ServerName: t.ServerName, TLS: ldapx.TLSMode(t.TLS),
 		InsecurePlaintext: t.InsecurePlaintext, PinSHA256: t.PinSHA256, MaxQPS: t.MaxQPS, Timeout: 20 * time.Second, Domain: t.Domain})

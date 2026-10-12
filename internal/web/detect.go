@@ -2,17 +2,15 @@ package web
 
 import (
 	"github.com/atsvetko/directory-auditor/internal/local/smbconf"
+	"github.com/atsvetko/directory-auditor/internal/provider"
 
 	"bufio"
 	"context"
-	"net"
 	"os"
 	"os/exec"
 	"os/user"
 	"runtime"
-	"sort"
 	"strings"
-	"time"
 )
 
 // Detection is what the Connect step pre-fills.
@@ -68,20 +66,14 @@ func Detect(ctx context.Context) Detection {
 	return d
 }
 
-// findDC returns the first DC from DNS SRV, preferring the DC-specific record.
+// findDC returns the domain's DC from DNS SRV (shared with `scan`: the
+// DC-specific locator record first, the first DC that answers wins).
 func findDC(ctx context.Context, domain string) string {
-	r := &net.Resolver{}
-	for _, name := range []string{"_ldap._tcp.dc._msdcs." + domain, "_ldap._tcp." + domain} {
-		c, cancel := context.WithTimeout(ctx, 4*time.Second)
-		_, addrs, err := r.LookupSRV(c, "", "", name)
-		cancel()
-		if err != nil || len(addrs) == 0 {
-			continue
-		}
-		sort.SliceStable(addrs, func(i, j int) bool { return addrs[i].Priority < addrs[j].Priority })
-		return strings.TrimSuffix(addrs[0].Target, ".")
+	h, _, err := provider.DiscoverDC(ctx, domain)
+	if err != nil {
+		return ""
 	}
-	return ""
+	return h
 }
 
 func krb5Conf() string {

@@ -95,6 +95,16 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) (code int) {
 		}
 		return finish(snap, o, out, errw)
 	}
+	// Only the domain given: find its DC through DNS SRV before asking for a
+	// password, so a wrong domain or a host outside the domain's DNS fails fast.
+	if t.Server == "" && t.Domain != "" {
+		note, err := provider.ResolveServer(ctx, &t)
+		if err != nil {
+			fmt.Fprintln(errw, "error:", err)
+			return 1
+		}
+		fmt.Fprintln(errw, "note:", note)
+	}
 	if t.BindUser != "" {
 		var pw string
 		var err error

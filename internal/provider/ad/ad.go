@@ -192,7 +192,7 @@ func bind(c *ldapx.Conn, t provider.Target) (string, error) {
 
 func dial(ctx context.Context, t provider.Target) (*ldapx.Conn, error) {
 	if t.Server == "" {
-		return nil, fmt.Errorf("--server is required (DNS SRV discovery arrives with doctor)")
+		return nil, fmt.Errorf("ad: no domain controller: pass --domain (found through DNS) or --server")
 	}
 	return ldapx.Dial(ctx, ldapx.Options{
 		Server:            t.Server,
