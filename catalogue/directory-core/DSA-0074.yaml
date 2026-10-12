@@ -1,0 +1,74 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0074
+title:
+  en: A delegated managed service account (dMSA) supersedes a Tier-0 account
+  ru: Делегированная управляемая учётная запись службы (dMSA) замещает учётную запись нулевого уровня
+domain: directory-core
+providers: [ad]   # dMSA exists only in the Windows Server 2025 schema; Samba AD DC does not implement it
+tier: 0
+severity: critical
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: msDS-DelegatedManagedServiceAccount objects and the account named in msDS-ManagedAccountPrecededByLink
+attributes:
+- msDS-ManagedAccountPrecededByLink
+- msDS-DelegatedMSAState
+- sAMAccountName
+condition: >-
+  A dMSA has msDS-ManagedAccountPrecededByLink pointing at an account that is Tier 0 (built-in Administrator, a
+  member of a privileged group, a domain controller, krbtgt and the other members of catalogue/TIER0.md).
+threshold: any occurrence
+rationale: >-
+  The predecessor link tells the KDC whose identity and group memberships the dMSA inherits. Migrating a genuine
+  Tier-0 account to a dMSA is not a supported administrative pattern, so a dMSA that names one is either an
+  unfinished experiment that hands domain control to whoever controls the dMSA, or the trace of a privilege
+  escalation or persistence attempt. On a DC with the August 2025 update the succession is honoured only when the
+  Tier-0 account also carries the reciprocal link (msDS-SupersededManagedAccountLink and
+  msDS-SupersededServiceAccountState = 2); on an unpatched DC the dMSA side alone is enough.
+remediation:
+  en: >-
+    Treat as a possible compromise: identify who created the dMSA and who set the link (security events 5137 and
+    5136 on the DCs), disable or delete the dMSA, clear msDS-SupersededManagedAccountLink and
+    msDS-SupersededServiceAccountState on the Tier-0 account, reset that account's password (twice for krbtgt), and
+    install the August 2025 cumulative update on every Windows Server 2025 DC. Remove the creation rights reported
+    by DSA-0073.
+  ru: >-
+    Рассматривайте как возможную компрометацию: установите, кто создал dMSA и кто задал ссылку (события
+    безопасности 5137 и 5136 на КД), отключите или удалите dMSA, очистите атрибуты
+    msDS-SupersededManagedAccountLink и msDS-SupersededServiceAccountState у учётной записи нулевого уровня,
+    смените её пароль (для krbtgt — дважды) и установите накопительное обновление за август 2025 г. на все КД под
+    Windows Server 2025. Отзовите права на создание, найденные проверкой DSA-0073.
+attack:
+- id: T1098
+  name: Account Manipulation
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+- id: T1558
+  name: Steal or Forge Kerberos Tickets
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=msDS-DelegatedManagedServiceAccount)
+references:
+- title: Microsoft Learn — Delegated Managed Service Accounts overview
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/delegated-managed-service-accounts/delegated-managed-service-accounts-overview
+- title: Microsoft Security Response Center — CVE-2025-53779 (Windows Kerberos elevation of privilege)
+  url: https://msrc.microsoft.com/update-guide/vulnerability/CVE-2025-53779
+- title: Jorge de Almeida Pinto — From BadSuccessor to PatchedSuccessor (September 2025)
+  url: https://jorgequestforknowledge.wordpress.com/2025/09/02/from-badsuccessor-to-patchedsuccessor/
+- title: 'Unit 42 — When good accounts go bad: exploiting delegated managed service accounts'
+  url: https://unit42.paloaltonetworks.com/badsuccessor-attack-vector/
+notes: >-
+  The finding names the dMSA; the evidence shows the superseded account and the migration state (1 = in progress,
+  2 = completed). Whether the reciprocal link is present on the target is visible on the target object
+  (msDS-SupersededManagedAccountLink) in the snapshot.
+condition_cel: >-
+  obj.class.exists(c, c.lowerAscii() == "msds-delegatedmanagedserviceaccount")
+  && attrs(obj, "msDS-ManagedAccountPrecededByLink").exists(l, tier0_sid(objattr(l, "objectSid")))
+expect:
+- CN=dmsa-evil,OU=ServiceDelegation,DC=lab,DC=example

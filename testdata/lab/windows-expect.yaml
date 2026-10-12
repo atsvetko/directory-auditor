@@ -16,6 +16,8 @@ must:
   DSA-0028: ["CN=t_contractor,CN=Users,DC=da,DC=test"]   # cleartext password in description (masked in the report)
   DSA-0042: ["CN=Guest,CN=Users,DC=da,DC=test"]   # built-in Guest enabled
   DSA-0071: ["CN=WeakAdminPSO,CN=Password Settings Container,CN=System,DC=da,DC=test"]   # weak PSO applied to Domain Admins
+  DSA-0073: ["OU=ServiceDelegation,DC=da,DC=test"]   # helpdesk may create dMSAs (Windows Server 2025 schema only)
+  DSA-0074: ["CN=dmsa-evil,OU=ServiceDelegation,DC=da,DC=test"]   # dMSA claims to supersede the built-in Administrator
 allow:
   - DSA-0002
   - DSA-0003

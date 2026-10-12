@@ -1,0 +1,76 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0073
+title:
+  en: Non-privileged accounts can create delegated managed service accounts (dMSA)
+  ru: Непривилегированные учётные записи могут создавать делегированные управляемые учётные записи служб (dMSA)
+domain: directory-core
+providers: [ad]   # dMSA exists only in the Windows Server 2025 schema; Samba AD DC does not implement it
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Organizational units and top-level containers, their DACLs, and the schema class msDS-DelegatedManagedServiceAccount
+attributes:
+- nTSecurityDescriptor
+condition: >-
+  The schema contains the msDS-DelegatedManagedServiceAccount class (Windows Server 2025 schema), and an OU or
+  top-level container grants an allow ACE that is in effect on the container itself, to a principal outside Tier 0,
+  with Create Child (0x1) for all child classes or for the dMSA class specifically, or with Generic All.
+threshold: any occurrence
+rationale: >-
+  A delegated managed service account is designed to replace an existing service account: the dMSA records the
+  account it supersedes, and the KDC then issues the dMSA tickets carrying the old account's identity and group
+  memberships. Before the August 2025 update the KDC trusted that link on the dMSA alone, so anyone allowed to create
+  a dMSA in any OU could name the domain Administrator as its predecessor and receive its privileges. The update
+  requires the superseded account to link back to the dMSA, so a full takeover now also needs write access to the
+  target account; but the right to create a dMSA remains the first step of every such chain, combines with any
+  write permission over a privileged-adjacent account, and is rarely needed outside Tier 0. Delegations that let
+  help desks create "all child objects" in an OU grant it silently.
+remediation:
+  en: >-
+    Remove Create Child (all classes or msDS-DelegatedManagedServiceAccount) and Generic All for non-Tier-0
+    principals on the listed OUs and containers; delegate object creation for specific classes (user, group,
+    computer) only. Install the August 2025 cumulative update (CVE-2025-53779) on every Windows Server 2025 DC, and
+    audit dMSA creation and changes to msDS-ManagedAccountPrecededByLink (see DSA-0074).
+  ru: >-
+    Отзовите у субъектов вне нулевого уровня право Create Child (для всех классов или для
+    msDS-DelegatedManagedServiceAccount) и Generic All на перечисленных OU и контейнерах; делегируйте создание
+    только конкретных классов объектов (user, group, computer). Установите накопительное обновление за август 2025 г.
+    (CVE-2025-53779) на все КД под Windows Server 2025 и включите аудит создания dMSA и изменения атрибута
+    msDS-ManagedAccountPrecededByLink (см. DSA-0074).
+attack:
+- id: T1136.002
+  name: 'Create Account: Domain Account'
+- id: T1098
+  name: Account Manipulation
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (|(objectClass=organizationalUnit)(objectClass=container))
+references:
+- title: Microsoft Learn — Delegated Managed Service Accounts overview
+  url: >-
+    https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/delegated-managed-service-accounts/delegated-managed-service-accounts-overview
+- title: Microsoft Security Response Center — CVE-2025-53779 (Windows Kerberos elevation of privilege)
+  url: https://msrc.microsoft.com/update-guide/vulnerability/CVE-2025-53779
+- title: Akamai — BadSuccessor is dead? Analyzing the BadSuccessor patch (August 2025)
+  url: https://www.akamai.com/blog/security-research/2025/aug/badsuccessor-is-dead-analyzing-badsuccessor-patch
+- title: 'Unit 42 — When good accounts go bad: exploiting delegated managed service accounts'
+  url: https://unit42.paloaltonetworks.com/badsuccessor-attack-vector/
+notes: >-
+  Silent on forests without the Windows Server 2025 schema (the class GUID is read from the schema, never assumed).
+  The descriptor includes ACEs inherited from the domain head, so a domain-wide delegation is reported on every OU
+  it reaches. The KDC update level of a DC cannot be read over LDAP and is not assessed here.
+condition_cel: >-
+  schema_guid("msDS-DelegatedManagedServiceAccount") != "" && sd_readable(obj)
+  && obj.class.exists(c, c.lowerAscii() in ["organizationalunit", "container"])
+  && aces(obj).exists(a, a.allow && a.effective && !a.trustee_tier0
+  && !(a.trustee in ["S-1-3-0", "S-1-5-10"])
+  && (mask_has(a.mask, 0x10000000)
+  || (mask_has(a.mask, 0x1) && (a.object_type == "" || a.object_type == schema_guid("msDS-DelegatedManagedServiceAccount")))))
+expect:
+- OU=ServiceDelegation,DC=lab,DC=example

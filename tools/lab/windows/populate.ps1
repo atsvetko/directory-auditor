@@ -145,6 +145,45 @@ try {
         Set-GPPermission -Name $gpoName -TargetName 'helpdesk' -TargetType User -PermissionLevel GpoEditDeleteModifySecurity | Out-Null
     }
 
+    # --- DSA-0073 / DSA-0074: delegated MSAs (Windows Server 2025 schema only) --
+    $dmsaClass = Get-ADObject -SearchBase (Get-ADRootDSE).schemaNamingContext `
+        -LDAPFilter '(lDAPDisplayName=msDS-DelegatedManagedServiceAccount)' -Properties schemaIDGUID -ErrorAction SilentlyContinue
+    if ($dmsaClass) {
+        $ouDn = "OU=ServiceDelegation,$base"
+        if (-not (Get-ADOrganizationalUnit -Filter "Name -eq 'ServiceDelegation'" -ErrorAction SilentlyContinue)) {
+            if ($PSCmdlet.ShouldProcess($ouDn, 'New-ADOrganizationalUnit')) {
+                New-ADOrganizationalUnit -Name 'ServiceDelegation' -Path $base -ProtectedFromAccidentalDeletion $false
+            }
+        }
+        if ($PSCmdlet.ShouldProcess($ouDn, 'grant helpdesk CreateChild for the dMSA class')) {
+            $sid = (Get-ADUser 'helpdesk').SID
+            $acl = Get-Acl -Path "AD:$ouDn"
+            $ace = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
+                $sid, 'CreateChild', 'Allow', [guid]$dmsaClass.schemaIDGUID, [DirectoryServices.ActiveDirectorySecurityInheritance]::None)
+            $acl.AddAccessRule($ace)
+            Set-Acl -Path "AD:$ouDn" -AclObject $acl
+        }
+        # A dMSA needs a KDS root key; backdate it so it is usable at once on a single-DC lab.
+        if (-not (Get-KdsRootKey -ErrorAction SilentlyContinue)) {
+            if ($PSCmdlet.ShouldProcess('KDS', 'Add-KdsRootKey (backdated, lab only)')) {
+                Add-KdsRootKey -EffectiveTime ((Get-Date).AddHours(-10)) | Out-Null
+            }
+        }
+        if (-not (Get-ADServiceAccount -Filter "Name -eq 'dmsa-evil'" -ErrorAction SilentlyContinue)) {
+            if ($PSCmdlet.ShouldProcess('dmsa-evil', 'New-ADServiceAccount -CreateDelegatedServiceAccount')) {
+                New-ADServiceAccount -Name 'dmsa-evil' -DNSHostName "dmsa-evil.$DomainName" -CreateDelegatedServiceAccount -Path $ouDn
+            }
+        }
+        # The vulnerability under test: the dMSA names the built-in Administrator as its predecessor.
+        if ($PSCmdlet.ShouldProcess('dmsa-evil', 'link to Administrator (migration state 2)')) {
+            $adminDn = (Get-ADUser -Identity 'Administrator').DistinguishedName
+            Set-ADObject -Identity "CN=dmsa-evil,$ouDn" -Replace @{
+                'msDS-ManagedAccountPrecededByLink' = $adminDn; 'msDS-DelegatedMSAState' = 2 }
+        }
+    } else {
+        Write-Host '  dMSA fixtures skipped: this forest has no Windows Server 2025 schema'
+    }
+
     Write-Host ''
     Write-Host 'self-check — objects created:'
     'svc_sql','svc_legacy','rev_user','des_user','t_contractor','neverexpire_user','ex_admin','helpdesk',$AuditUser |

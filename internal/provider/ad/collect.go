@@ -48,6 +48,10 @@ var accountAttrs = []string{
 	"description", "info", "comment", "userPassword", "unixUserPassword", "ms-Mcs-AdmPwd",
 	// Explicit certificate mappings (DSA-0052, DSA-0053).
 	"altSecurityIdentities",
+	// dMSA migration back-link on the superseded account (DSA-0074): with the
+	// August 2025 fix the KDC honours a dMSA succession only when the target
+	// carries these too, so their presence is what makes a link effective.
+	"msDS-SupersededManagedAccountLink", "msDS-SupersededServiceAccountState",
 }
 
 // Plan is the tier-0 (ordinary user) collection plan.
@@ -94,6 +98,15 @@ var Plan = []Query{
 		Filter:  "(|(lDAPDisplayName=ms-Mcs-AdmPwd)(lDAPDisplayName=msLAPS-Password)(lDAPDisplayName=msLAPS-EncryptedPassword)(lDAPDisplayName=msLAPS-EncryptedPasswordHistory)(lDAPDisplayName=msLAPS-EncryptedDSRMPassword)(lDAPDisplayName=msLAPS-EncryptedDSRMPasswordHistory))",
 		Attrs:   []string{"objectClass", "lDAPDisplayName", "searchFlags", "schemaIDGUID"},
 		Purpose: "LAPS password attributes: confidentiality flag and schema GUIDs for ACL matching (DSA-0056, DSA-0057)"},
+	{Name: "schema-dmsa", Base: "<schema>", Scope: ldapx.ScopeOneLevel, Classes: []string{"classSchema"},
+		Filter:  "(lDAPDisplayName=msDS-DelegatedManagedServiceAccount)",
+		Attrs:   []string{"objectClass", "lDAPDisplayName", "schemaIDGUID"},
+		Purpose: "dMSA class GUID for create-child ACL matching; absent before the Windows Server 2025 schema (DSA-0073)"},
+	{Name: "dmsa", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(objectClass=msDS-DelegatedManagedServiceAccount)", SD: true,
+		Classes: []string{"msDS-DelegatedManagedServiceAccount"},
+		Attrs: []string{"objectClass", "sAMAccountName", "objectSid", "msDS-ManagedAccountPrecededByLink", "msDS-DelegatedMSAState",
+			"whenCreated", "whenChanged"},
+		Purpose: "delegated MSAs and the account each one claims to supersede (DSA-0074)"},
 	{Name: "trust-accounts", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(sAMAccountType=805306370)", Classes: []string{"user"},
 		Attrs:   []string{"objectClass", "sAMAccountName", "objectSid", "pwdLastSet", "whenCreated", "userAccountControl"},
 		Purpose: "interdomain trust (TRUSTDOMAIN$) account password age (DSA-0065)"},

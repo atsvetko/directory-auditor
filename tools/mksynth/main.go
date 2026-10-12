@@ -234,6 +234,23 @@ func main() {
 		"sAMAccountName": {"gmsa-web$"}, "objectSid": {dom + "-1008"}, "primaryGroupID": {"515"}, "sAMAccountType": {"805306369"},
 		"userAccountControl": {"4096"}, "pwdLastSet": {ft(5)},
 		"msDS-GroupMSAMembership": {sd(false, ace{dom + "-515", 0x000F01FF, ""})}}) // every domain computer may read the password
+	// Windows Server 2025 dMSA fixtures (DSA-0073, DSA-0074).
+	dmsaGUID := "6c2e9a14-5b7d-4e8f-a1c3-9d0b2f4e6a87" // invented: the product reads the real GUID from the schema
+	add("CN=ms-DS-Delegated-Managed-Service-Account,CN=Schema,CN=Configuration,"+base, []string{"top", "classSchema"}, map[string][]string{
+		"lDAPDisplayName": {"msDS-DelegatedManagedServiceAccount"}, "schemaIDGUID": {dmsaGUID}})
+	add("OU=ServiceDelegation,"+base, ou, map[string][]string{ // DSA-0073: Helpdesk may create dMSAs here
+		"nTSecurityDescriptor": {sd(false, ace{dom + "-512", 0x000F01FF, ""}, ace{dom + "-1201", 0x00000001, dmsaGUID})}})
+	add("OU=Staff,"+base, ou, map[string][]string{ // negative: Helpdesk may create users only, not dMSAs
+		"nTSecurityDescriptor": {sd(false, ace{dom + "-512", 0x000F01FF, ""}, ace{dom + "-1201", 0x00000001, "bf967aba-0de6-11d0-a285-00aa003049e2"})}})
+	dmsaClass := append(append([]string{}, computer...), "msDS-DelegatedManagedServiceAccount")
+	add("CN=dmsa-evil,OU=ServiceDelegation,"+base, dmsaClass, map[string][]string{ // DSA-0074: claims to supersede the built-in Administrator
+		"sAMAccountName": {"dmsa-evil$"}, "objectSid": {dom + "-1130"}, "primaryGroupID": {"515"}, "sAMAccountType": {"805306369"},
+		"userAccountControl": {"4096"}, "pwdLastSet": {ft(1)}, "msDS-DelegatedMSAState": {"2"},
+		"msDS-ManagedAccountPrecededByLink": {"CN=Administrator,CN=Users," + base}})
+	add("CN=dmsa-app,OU=ServiceDelegation,"+base, dmsaClass, map[string][]string{ // negative: ordinary account migrated to a dMSA
+		"sAMAccountName": {"dmsa-app$"}, "objectSid": {dom + "-1131"}, "primaryGroupID": {"515"}, "sAMAccountType": {"805306369"},
+		"userAccountControl": {"4096"}, "pwdLastSet": {ft(1)}, "msDS-DelegatedMSAState": {"2"},
+		"msDS-ManagedAccountPrecededByLink": {"CN=j.doe,CN=Users," + base}})
 	s.Skipped = []snapshot.Skipped{{Query: "sysvol", Reason: "tier", Detail: "tier 1 not requested"}}
 
 	for _, path := range []string{*out, "internal/demo/synthetic-lab.json.zst"} {
