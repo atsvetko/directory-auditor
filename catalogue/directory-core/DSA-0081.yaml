@@ -1,0 +1,54 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0081
+title:
+  en: Distributed COM Users or Performance Log Users have members
+  ru: В группах Distributed COM Users или Performance Log Users есть участники
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Built-in domain-local groups Distributed COM Users (S-1-5-32-562) and Performance Log Users (S-1-5-32-559)
+attributes:
+- member
+- objectSid
+condition: >-
+  Either group has one or more direct members.
+threshold: one or more members
+rationale: >-
+  In a domain these built-in groups apply on every domain controller. Distributed COM Users may launch and
+  activate DCOM objects on the DCs remotely; Performance Log Users may schedule performance logging there, which
+  also requires DCOM activation. Both open a remote-execution surface on Tier-0 servers to accounts that are not
+  administrators, and that surface has been used both for lateral movement and for local privilege escalation
+  bugs. Neither group is needed on DCs in a normal deployment.
+remediation:
+  en: >-
+    Remove the members. If a monitoring product needs performance data from the DCs, grant it the narrowest right
+    its vendor documents and record the exception; do not add it to either group domain-wide.
+  ru: >-
+    Исключите участников. Если системе мониторинга нужны данные производительности с контроллеров домена,
+    предоставьте ей минимальное право, указанное производителем, и задокументируйте исключение; не добавляйте её в
+    эти группы на уровне домена.
+attack:
+- id: T1021.003
+  name: 'Remote Services: Distributed Component Object Model'
+- id: T1068
+  name: Exploitation for Privilege Escalation
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=group)
+references:
+- title: Microsoft Learn — Active Directory security groups (Distributed COM Users, Performance Log Users)
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups
+- title: Microsoft Learn — Well-known SIDs
+  url: https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids
+- title: MITRE ATT&CK — T1021.003 Distributed Component Object Model
+  url: https://attack.mitre.org/techniques/T1021/003/
+notes: >-
+  Groups are already collected. The groups are matched by SID, never by name, so localised domains are covered.
+  Severity stays medium: the groups grant reach, not administrative rights by themselves.

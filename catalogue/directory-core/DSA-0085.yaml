@@ -1,0 +1,63 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0085
+title:
+  en: Smart-card-only accounts whose NT hash is not rotated
+  ru: Хеш NT учётных записей со входом только по смарт-карте не обновляется
+domain: directory-core
+providers: [ad]   # automatic rolling of NTLM secrets is a Windows Server 2016 domain feature
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Enabled user accounts with SMARTCARD_REQUIRED (0x40000) in userAccountControl; the domain head
+attributes:
+- userAccountControl
+- pwdLastSet
+- msDS-ExpirePasswordsOnSmartCardOnlyAccounts
+- msDS-Behavior-Version
+- maxPwdAge
+condition: >-
+  An enabled smart-card-required account has pwdLastSet older than 60 days, and either the domain does not roll
+  these secrets (msDS-ExpirePasswordsOnSmartCardOnlyAccounts on the domain head is absent or not TRUE, or the
+  domain functional level is below Windows Server 2016), or the account has DONT_EXPIRE_PASSWORD (0x10000) set, or
+  pwdLastSet is older than the domain maxPwdAge plus one day (rolling is configured but is not happening).
+threshold: hash older than 60 days without working rotation
+rationale: >-
+  When smart card logon is required the domain sets a random password the user never sees, but the NT hash
+  derived from it still works for NTLM and Kerberos RC4. Without rotation that hash stays valid for years; anyone
+  who dumps it once can authenticate as the user indefinitely, smart card or not. Windows Server 2016 domains can
+  roll it automatically at the password-age interval.
+remediation:
+  en: >-
+    On a Windows Server 2016 or later domain functional level, enable rolling of expiring NTLM secrets for
+    smart-card-only accounts (domain properties in Active Directory Administrative Center) and clear
+    DONT_EXPIRE_PASSWORD on those accounts. On older levels, rotate the hash by script at least every 60 days by
+    toggling the smart-card-required flag.
+  ru: >-
+    При функциональном уровне домена Windows Server 2016 и выше включите автоматическую смену секретов NTLM для
+    учётных записей со входом только по смарт-карте (свойства домена в Центре администрирования Active Directory) и
+    снимите у этих учётных записей флаг DONT_EXPIRE_PASSWORD. На более низких уровнях обновляйте хеш сценарием не
+    реже чем раз в 60 дней, переключая флаг обязательного входа по смарт-карте.
+attack:
+- id: T1550.002
+  name: 'Use Alternate Authentication Material: Pass the Hash'
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (&(sAMAccountType=805306368)(userAccountControl:1.2.840.113556.1.4.803:=262144))
+references:
+- title: Microsoft Learn — What's new in Active Directory Domain Services (rolling of public-key-only users' NTLM secrets)
+  url: https://learn.microsoft.com/en-us/windows-server/identity/whats-new-active-directory-domain-services
+- title: DISA — Active Directory Domain STIG, V-243476 (NT hash rotation for smart-card-enforced accounts)
+  url: https://www.stigviewer.com/stigs/active_directory_domain_v3/2024-09-13/finding/V-243476
+- title: ANSSI / CERT-FR — Active Directory control points (vuln_smartcard_expire_passwords)
+  url: https://www.cert.ssi.gouv.fr/uploads/ad_checklist.html
+notes: >-
+  Collector: msDS-ExpirePasswordsOnSmartCardOnlyAccounts must be added to the domain-head query. Open point:
+  confirm the attribute name and its location against the Windows Server 2016 schema documentation. ANSSI point
+  vuln_smartcard_expire_passwords is planned (status gap, wave 3) — tag it when implemented. If the extensible
+  match filter does not parse in the engine, filter on userAccountControl in the condition instead.

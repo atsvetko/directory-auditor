@@ -1,0 +1,59 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0082
+title:
+  en: Account lockout is enabled but too permissive
+  ru: Блокировка учётных записей включена, но настроена слишком мягко
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Domain naming-context head (default domain password policy)
+attributes:
+- lockoutThreshold
+- lockoutDuration
+- lockOutObservationWindow
+condition: >-
+  lockoutThreshold is greater than 0 (DSA-0020 covers 0) and at least one of the following holds:
+  lockoutThreshold is greater than 10; lockoutDuration is shorter than 15 minutes (a value meaning "until an
+  administrator unlocks" is not short); lockOutObservationWindow is shorter than 15 minutes. Both durations are
+  stored as negative 100-nanosecond intervals and are compared by absolute value.
+threshold: threshold > 10, or duration < 15 min, or observation window < 15 min
+rationale: >-
+  Lockout limits online password guessing. A high threshold or a short window lets an attacker spray a few common
+  passwords against every account every quarter of an hour without locking anyone out; a short lockout duration
+  lets the same account be guessed again almost at once. Microsoft's security baseline uses a threshold of 10
+  with 15-minute duration and window, and stricter benchmarks go lower.
+remediation:
+  en: >-
+    In the Default Domain Policy set the account lockout threshold to 10 or fewer, and the lockout duration and
+    the reset counter to 15 minutes or more. Check that fine-grained password policies do not undo this for
+    groups of users.
+  ru: >-
+    В политике Default Domain Policy задайте пороговое значение блокировки не более 10, а продолжительность
+    блокировки и время до сброса счётчика — не менее 15 минут. Проверьте, что детальные политики паролей не
+    ослабляют эти значения для отдельных групп пользователей.
+attack:
+- id: T1110.001
+  name: 'Brute Force: Password Guessing'
+- id: T1110.003
+  name: 'Brute Force: Password Spraying'
+engine: declarative
+query_sketch:
+  base: default
+  scope: base
+  filter: (objectClass=domainDNS)
+references:
+- title: Microsoft Learn — Account lockout threshold (security policy setting)
+  url: https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/security-policy-settings/account-lockout-threshold
+- title: Microsoft Learn — Account lockout duration (security policy setting)
+  url: https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/security-policy-settings/account-lockout-duration
+- title: MITRE ATT&CK — T1110.003 Password Spraying
+  url: https://attack.mitre.org/techniques/T1110/003/
+notes: >-
+  Collector: lockoutThreshold and lockoutDuration are already read on the domain head; lockOutObservationWindow
+  must be added. Fine-grained password policies with weaker lockout are a separate check (extend DSA-0071).
+  Thresholds are ours, set from the Microsoft baseline; confirm them at verification.

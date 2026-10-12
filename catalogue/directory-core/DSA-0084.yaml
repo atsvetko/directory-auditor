@@ -1,0 +1,54 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0084
+title:
+  en: Recently created Tier-0 accounts
+  ru: Недавно созданные учётные записи нулевого уровня
+domain: directory-core
+tier: 0
+severity: low
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: User and computer accounts that are Tier 0 (catalogue/TIER0.md), excluding domain controllers
+attributes:
+- whenCreated
+- objectSid
+- userAccountControl
+- sAMAccountName
+condition: >-
+  A Tier-0 user or non-DC computer account has whenCreated less than 30 days before the snapshot time.
+  Domain controller accounts (SERVER_TRUST_ACCOUNT or PARTIAL_SECRETS_ACCOUNT in userAccountControl) are excluded.
+threshold: created within 30 days
+rationale: >-
+  Creating a new account and adding it to a privileged group is one of the simplest ways to keep access after a
+  compromise. A new privileged account is not wrong in itself, but every one should match a change request. The
+  finding is a review list, which is why its severity is low.
+remediation:
+  en: >-
+    Match each account with an approved change. For any account without one, disable it, investigate who
+    created it and added it to the group (events 4720 and 4728/4732/4756 on the DCs), and treat it as an incident
+    if no owner is found.
+  ru: >-
+    Сопоставьте каждую учётную запись с согласованной заявкой на изменение. Учётную запись без заявки
+    заблокируйте, выясните, кто её создал и добавил в группу (события 4720 и 4728/4732/4756 на контроллерах
+    домена), и при отсутствии владельца обрабатывайте как инцидент.
+attack:
+- id: T1136.002
+  name: 'Create Account: Domain Account'
+- id: T1098
+  name: Account Manipulation
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (|(sAMAccountType=805306368)(sAMAccountType=805306369))
+references:
+- title: Microsoft Learn — Monitoring Active Directory for signs of compromise
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/monitoring-active-directory-for-signs-of-compromise
+- title: MITRE ATT&CK — T1136.002 Create Account, Domain Account
+  url: https://attack.mitre.org/techniques/T1136/002/
+notes: >-
+  Already collected. Recent addition of an older account to a privileged group needs replication metadata
+  (msDS-ReplValueMetaData) and belongs to group В (changes over a period), not here.

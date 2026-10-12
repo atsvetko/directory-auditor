@@ -1,0 +1,55 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0086
+title:
+  en: Resource-based constrained delegation configured on the krbtgt account
+  ru: Ограниченное делегирование на основе ресурсов настроено у учётной записи krbtgt
+domain: directory-core
+tier: 0
+severity: critical
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The krbtgt account and RODC krbtgt_<n> accounts
+attributes:
+- msDS-AllowedToActOnBehalfOfOtherIdentity
+- sAMAccountName
+condition: >-
+  msDS-AllowedToActOnBehalfOfOtherIdentity is present on krbtgt or on any krbtgt_<n> account.
+threshold: any value
+rationale: >-
+  The attribute lists the principals allowed to obtain service tickets to the account on behalf of any user. Set
+  on krbtgt, it lets each listed principal ask the KDC, through S4U2Self and S4U2Proxy, for a ticket to the krbtgt
+  service in the name of any user — effectively a ticket-granting ticket for a domain administrator, renewable at
+  will. It is a known persistence technique and has no legitimate use; DSA-0006 covers Tier-0 computers but not
+  this user account.
+remediation:
+  en: >-
+    Clear the attribute on the account, identify who set it (event 5136 on the DCs) and investigate the listed
+    principals as compromised. Reset the krbtgt password twice, with replication in between, to invalidate tickets
+    that may already have been issued.
+  ru: >-
+    Очистите атрибут у учётной записи, установите, кто его задал (событие 5136 на контроллерах домена), и
+    расследуйте перечисленных в нём субъектов как скомпрометированных. Смените пароль krbtgt дважды с паузой на
+    репликацию, чтобы сделать недействительными уже выданные билеты.
+attack:
+- id: T1558
+  name: Steal or Forge Kerberos Tickets
+- id: T1098
+  name: Account Manipulation
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (&(sAMAccountType=805306368)(msDS-AllowedToActOnBehalfOfOtherIdentity=*))
+references:
+- title: Microsoft Learn — Kerberos constrained delegation overview (resource-based constrained delegation)
+  url: https://learn.microsoft.com/en-us/windows-server/security/kerberos/kerberos-constrained-delegation-overview
+- title: Elad Shamir — Wagging the Dog, abusing resource-based constrained delegation (January 2019)
+  url: https://shenaniganslabs.io/2019/01/28/Wagging-the-Dog.html
+- title: MITRE ATT&CK — T1558 Steal or Forge Kerberos Tickets
+  url: https://attack.mitre.org/techniques/T1558/
+notes: >-
+  Already collected (accountAttrs). krbtgt is matched by sAMAccountName as in TIER0.md; RODC krbtgt accounts by the
+  krbtgt_ prefix together with msDS-KrbTgtLinkBl. The evidence resolves the SIDs in the descriptor to names.

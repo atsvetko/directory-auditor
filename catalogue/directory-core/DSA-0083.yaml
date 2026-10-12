@@ -1,0 +1,53 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0083
+title:
+  en: The built-in Administrator account was used recently
+  ru: Встроенная учётная запись Administrator использовалась недавно
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The built-in domain Administrator account (RID 500)
+attributes:
+- lastLogonTimestamp
+- objectSid
+- userAccountControl
+condition: >-
+  The account whose SID ends in -500 has a lastLogonTimestamp less than 30 days before the snapshot time.
+threshold: last logon within 30 days
+rationale: >-
+  The built-in Administrator cannot be locked out, is the first name every attacker tries, and its use cannot be
+  tied to a person. Microsoft's guidance is to keep it for build and disaster-recovery only, behind restrictions,
+  and to administer with named accounts. Regular logons mean either that daily administration still runs under
+  it or that someone else is using it.
+remediation:
+  en: >-
+    Find where the account logs on (events 4624 and 4768 on the DCs) and move that work to named Tier-0 accounts.
+    Then apply the Microsoft hardening for the account: account is sensitive and cannot be delegated, smart card
+    required for interactive logon, logon denied from the network and through Remote Desktop on member servers and
+    workstations, and use audited.
+  ru: >-
+    Определите, откуда выполняется вход под этой учётной записью (события 4624 и 4768 на контроллерах домена), и
+    перенесите эту работу на именные учётные записи нулевого уровня. Затем примените рекомендации Microsoft по её
+    защите: запрет делегирования, обязательная смарт-карта для интерактивного входа, запрет входа по сети и через
+    удалённый рабочий стол на рядовых серверах и рабочих станциях, аудит использования.
+attack:
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (sAMAccountType=805306368)
+references:
+- title: Microsoft Learn — Appendix D, securing built-in Administrator accounts in Active Directory
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-d--securing-built-in-administrator-accounts-in-active-directory
+- title: Microsoft Learn — lastLogonTimestamp attribute
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-lastlogontimestamp
+notes: >-
+  Already collected. lastLogonTimestamp is replicated with up to 14 days of delay, so the check can miss a very
+  recent first logon but never reports a logon that did not happen. Interactive and service logons both update it.
