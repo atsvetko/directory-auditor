@@ -367,6 +367,37 @@ func main() {
 		}
 		add("CN="+r.name+",OU=Domain Controllers,"+base, computer, attrs)
 	}
+	// DSA-0301, DSA-0302: AD-integrated DNS zones in both application partitions and the legacy container.
+	// Default-like ACEs (negative controls) on every zone: SYSTEM, Domain Admins, Enterprise DCs, DnsAdmins
+	// full control, Authenticated Users create-child, CREATOR OWNER full control.
+	zoneACEs := func(extra ...ace) []ace {
+		return append([]ace{{"S-1-5-18", 0x000F01FF, ""}, {dom + "-512", 0x000F01FF, ""}, {"S-1-5-9", 0x000F01FF, ""},
+			{dom + "-1101", 0x000F01FF, ""}, {"S-1-5-11", 0x00000001, ""}, {"S-1-3-0", 0x000F01FF, ""}, {"S-1-1-0", 0x00020094, ""}}, extra...)
+	}
+	zone := []string{"top", "dnsZone"}
+	ddz, fdz := "CN=MicrosoftDNS,DC=DomainDnsZones,"+base, "CN=MicrosoftDNS,DC=ForestDnsZones,"+base
+	for _, z := range []struct {
+		dn, name string
+		update   byte
+		aces     []ace
+	}{
+		{"DC=lab.example," + ddz, "lab.example", 2, zoneACEs(ace{dom + "-1201", 0x00040000, ""})}, // DSA-0301: Helpdesk WRITE_DAC; secure updates only
+		{"DC=_msdcs.lab.example," + fdz, "_msdcs.lab.example", 1, zoneACEs()},                     // DSA-0302: nonsecure updates
+		{"DC=0.10.in-addr.arpa," + ddz, "0.10.in-addr.arpa", 1, zoneACEs( // DSA-0302: reverse zone, same severity
+			ace{dom + "-1105", 0x00000020, "bf967a86-0de6-11d0-a285-00aa003049e2"})}, // negative DSA-0301: write to one property only
+		{"DC=RootDNSServers," + ddz, "RootDNSServers", 0, zoneACEs(ace{"S-1-1-0", 0x00080000, ""})}, // DSA-0301: Everyone WRITE_OWNER on a trust-anchor zone
+		{"DC=legacy.lab.example,CN=MicrosoftDNS,CN=System," + base, "legacy.lab.example", 0, zoneACEs( // DSA-0301: legacy container, Domain Users GENERIC_ALL
+			ace{dom + "-513", 0x10000000, ""})},
+		{"DC=branch.lab.example," + ddz, "branch.lab.example", 2, zoneACEs(ace{dom + "-1201", 0x00000010, ""}, // negative both: read-property, create-child only
+			ace{dom + "-1201", 0x00000001, ""})},
+	} {
+		add(z.dn, zone, map[string][]string{"name": {z.name}, "whenChanged": {gt(20)},
+			"dNSProperty":          {dnsProp(0x01, 1, 0, 0, 0), dnsProp(0x02, z.update), dnsProp(0x10, 168, 0, 0, 0)}, // zone type primary, allow-update, no-refresh 168 h
+			"nTSecurityDescriptor": {sdOwned(dom+"-512", false, z.aces...)}})
+	}
+	add("DC=nosd.lab.example,"+ddz, zone, map[string][]string{"name": {"nosd.lab.example"}, // negative both: descriptor not readable, allow-update absent
+		"dNSProperty": {dnsProp(0x01, 1, 0, 0, 0)}})
+
 	s.Skipped = []snapshot.Skipped{{Query: "sysvol", Reason: "tier", Detail: "tier 1 not requested"}}
 
 	for _, path := range []string{*out, "internal/demo/synthetic-lab.json.zst"} {
@@ -377,6 +408,18 @@ func main() {
 	}
 	h, _ := snapshot.Hash(s)
 	fmt.Printf("wrote %s (%d objects, sha256 %s)\n", *out, len(s.Objects), h[:16])
+}
+
+// dnsProp encodes one dNSProperty value as [MS-DNSP] 2.3.2.1 lays it out
+// (DataLength, NameLength, Flag, Version, Id, Data, Name; little-endian), base64
+// as the collector stores binary attributes. Test data only.
+func dnsProp(id uint32, data ...byte) string {
+	b := make([]byte, 20, 21+len(data))
+	binary.LittleEndian.PutUint32(b[0:], uint32(len(data)))
+	binary.LittleEndian.PutUint32(b[4:], 1)
+	binary.LittleEndian.PutUint32(b[12:], 1)
+	binary.LittleEndian.PutUint32(b[16:], id)
+	return base64.StdEncoding.EncodeToString(append(append(b, data...), 0))
 }
 
 // setAttr sets one attribute on an object already added to the snapshot.

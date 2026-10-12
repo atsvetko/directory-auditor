@@ -16,7 +16,7 @@ object: >-
   dnsZone objects in DC=DomainDnsZones and DC=ForestDnsZones application partitions and in the legacy
   CN=MicrosoftDNS,CN=System container of the domain partition
 attributes:
-- nTSecurityDescriptor (DACL)
+- nTSecurityDescriptor
 - name
 condition: >-
   An allow ACE on a zone object grants a principal outside Tier 0 and other than DnsAdmins any of GENERIC_ALL,
@@ -41,10 +41,12 @@ attack:
   name: Adversary-in-the-Middle
 - id: T1584.002
   name: 'Compromise Infrastructure: DNS Server'
+anssi:
+- vuln_permissions_msdns
 engine: declarative
 query_sketch:
-  base: DC=DomainDnsZones,<root>
-  scope: subtree
+  base: CN=MicrosoftDNS,<each DNS application partition found under CN=Partitions>; CN=MicrosoftDNS,CN=System,<default>
+  scope: one
   filter: (objectClass=dnsZone)
 references:
 - title: Microsoft Learn — DNS-Zone class (AD schema)
@@ -56,5 +58,28 @@ references:
 notes: >-
   New block DSA-0301…0399 for the dns domain (catalogue/README.md). Collector: none of the DNS partitions is read
   today; the provider must discover them from the partitions container (CN=Partitions in the configuration
-  partition) rather than assume their names. ANSSI point vuln_permissions_msdns is planned (wave 5) — tag it when
-  implemented. Record-level checks (wildcard and WPAD records, records anyone can overwrite) are a separate entry.
+  partition) rather than assume their names. Record-level checks (wildcard and WPAD records, records anyone can overwrite) are a separate entry.
+  Implementation notes: the collector reads the crossRefs under CN=Partitions (query partitions) and searches one
+  level under CN=MicrosoftDNS of every non-domain application partition below this domain or the forest root
+  (dns-zones), plus the legacy container (dns-zones-legacy), with owner and DACL. Only effective ACEs count:
+  inherit-only ACEs apply to the records (dnsNode), which are out of scope here. Tier 0 is the TIER0.md set
+  (trustee_tier0). DnsAdmins is recognised as DSA-0027/0059 do, by sAMAccountName, through the trustee SID of a
+  collected group of this domain (helper sid_account); a DnsAdmins of another domain stays a finding. SELF and
+  CREATOR OWNER are excluded as in DSA-0059 (placeholders, not principals). Write to all properties is WRITE_PROP
+  (0x20) with no object type; WRITE_PROP on one named property is not matched. A non-Tier-0 owner of a zone is not
+  judged here (DSA-0076 covers owners of Tier-0 objects only) — open point. ANSSI vuln_permissions_msdns is tagged and
+  marked partial in frameworks/anssi-plan.yaml: the CN=MicrosoftDNS containers themselves are not read (open point).
+evidence_principals: >-
+  aces(obj).filter(a, a.allow && a.effective && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"]) &&
+  sid_account(a.trustee).lowerAscii() != "dnsadmins" && (mask_has(a.mask, 0x10000000) || mask_has(a.mask, 0x40000000)
+  || mask_has(a.mask, 0x40000) || mask_has(a.mask, 0x80000) || (mask_has(a.mask, 0x20) && a.object_type ==
+  ""))).map(a, a.trustee)
+condition_cel: >-
+  obj.class.exists(c, c.lowerAscii() == "dnszone") && sd_readable(obj) && aces(obj).exists(a, a.allow && a.effective
+  && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"]) && sid_account(a.trustee).lowerAscii() != "dnsadmins"
+  && (mask_has(a.mask, 0x10000000) || mask_has(a.mask, 0x40000000) || mask_has(a.mask, 0x40000) || mask_has(a.mask,
+  0x80000) || (mask_has(a.mask, 0x20) && a.object_type == "")))
+expect:
+- DC=lab.example,CN=MicrosoftDNS,DC=DomainDnsZones,DC=lab,DC=example
+- DC=RootDNSServers,CN=MicrosoftDNS,DC=DomainDnsZones,DC=lab,DC=example
+- DC=legacy.lab.example,CN=MicrosoftDNS,CN=System,DC=lab,DC=example

@@ -65,6 +65,10 @@ import (
 //	                                              foreign-security-principal DN; "" otherwise
 //	has_tier0_member("CN=G,…")                    a Tier-0 principal is a member of that group, directly,
 //	                                              through nesting or through primaryGroupID
+//	sid_account("S-1-5-21-…-1101")                sAMAccountName of the collected object with that objectSid;
+//	                                              "" when no collected object has it
+//	dns_zone_property(obj, 0x2)                   scalar value of a dNSProperty entry by property id
+//	                                              ([MS-DNSP] 2.3.2.1, see dnsprop.go); -1 when not set
 func helperOptions() []cel.EnvOption {
 	mapT := cel.MapType(cel.StringType, cel.DynType)
 	aceList := cel.ListType(cel.MapType(cel.StringType, cel.DynType))
@@ -260,6 +264,16 @@ func helperOptions() []cel.EnvOption {
 		cel.Function("has_tier0_member",
 			cel.Overload("has_tier0_member_string", []*cel.Type{cel.StringType}, cel.BoolType,
 				cel.UnaryBinding(func(dn ref.Val) ref.Val { return types.Bool(hasTier0Member(string(dn.(types.String)))) }))),
+		cel.Function("sid_account",
+			cel.Overload("sid_account_string", []*cel.Type{cel.StringType}, cel.StringType,
+				cel.UnaryBinding(func(s ref.Val) ref.Val {
+					return types.String(currentSAM[strings.ToUpper(string(s.(types.String)))])
+				}))),
+		cel.Function("dns_zone_property",
+			cel.Overload("dns_zone_property_map_int", []*cel.Type{mapT, cel.IntType}, cel.IntType,
+				cel.BinaryBinding(func(o, id ref.Val) ref.Val {
+					return types.Int(dnsZoneProperty(allAttr(o, "dNSProperty"), uint32(id.(types.Int))))
+				}))),
 		cel.Function("aces",
 			cel.Overload("aces_map", []*cel.Type{mapT}, aceList,
 				cel.UnaryBinding(func(o ref.Val) ref.Val { return aceVals(o, "nTSecurityDescriptor") }))),
@@ -451,17 +465,22 @@ var (
 	currentReachPath   map[string]string             // upper(SID) -> that path, for the finding evidence
 	currentGPOToTier0  map[string]bool               // lower(GPO DN) -> linked to a Tier-0-affecting container
 	currentByPrimary   map[string][]*snapshot.Object // upper(group SID) -> accounts with it as primary group
+	currentSAM         map[string]string             // upper(SID) -> sAMAccountName ("" entries omitted)
 )
 
 func indexSnapshot(snap *snapshot.Snapshot) map[string]*snapshot.Object {
 	idx := make(map[string]*snapshot.Object, len(snap.Objects))
 	sids := make(map[string]bool, len(snap.Objects))
 	currentNames = map[string]string{}
+	currentSAM = map[string]string{}
 	for i := range snap.Objects {
 		idx[strings.ToLower(snap.Objects[i].DN)] = &snap.Objects[i]
 		if sid := snap.Objects[i].Attr("objectSid"); sid != "" {
 			sids[strings.ToUpper(sid)] = true
 			name := snap.Objects[i].Attr("sAMAccountName")
+			if name != "" {
+				currentSAM[strings.ToUpper(sid)] = name
+			}
 			if name == "" {
 				name = shortDN(snap.Objects[i].DN)
 			}

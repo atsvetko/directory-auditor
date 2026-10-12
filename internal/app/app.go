@@ -399,9 +399,9 @@ func PrintQueries(w io.Writer) {
 	}
 	fmt.Fprintln(w, "  tier-1 probe   base=cn=users,cn=accounts,<default> scope=one filter=(uid=*) size-limit=3, before binding (DSA-0123)")
 	fmt.Fprintln(w, "\nLDAP searches (AD / Samba provider, tier 0 — ordinary user):")
-	for _, q := range append(ad.Plan, ad.SDBaseQuery) {
+	for _, q := range append(ad.Plan, ad.SDBaseQuery, ad.DNSZoneQuery) {
 		b := q.Base
-		if b != "default" && b != "<each Tier-0 DN>" && !strings.HasSuffix(b, "<config>") {
+		if b != "default" && !strings.HasSuffix(b, ">") {
 			b += ",<default>"
 		}
 		sd := ""

@@ -73,6 +73,9 @@ allow:
   - DSA-0079   # schema head ACL: Samba's provisioned default not yet observed
   - DSA-0088   # rogue DC traces: confirm Samba sets serverReference on its server object
   - DSA-0089   # RODC password replication: no RODC in the lab; fires only if the Denied group lacks a default member
+  # Group A DNS (DSA-0301, 0302), first live run pending
+  - DSA-0301   # zone ACLs: Samba's provisioned zone descriptors not yet observed
+  - DSA-0302   # nonsecure updates: depends on the allow-update property samba-tool sets on the zones
 tier0_must_include:
   - "CN=svc-backup,CN=Users,DC=lab,DC=example"      # nested: Domain Admins > Tier0 Ops > svc-backup
   - "CN=Tier0 Ops,CN=Users,DC=lab,DC=example"

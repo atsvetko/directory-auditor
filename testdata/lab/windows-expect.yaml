@@ -99,6 +99,8 @@ allow:
   - DSA-0087
   - DSA-0088
   - DSA-0089
+  - DSA-0301
+  - DSA-0302
 tier0_must_include:
   - CN=Administrator,CN=Users,DC=da,DC=test
   - CN=krbtgt,CN=Users,DC=da,DC=test

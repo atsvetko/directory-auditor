@@ -38,5 +38,5 @@ plan:
 - {id: vuln_permissions_schema,              status: partial, wave: 4, note: "DSA-0079 covers the schema head; explicit ACEs on classSchema and attributeSchema objects are still to be read"}
 - {id: vuln_permissions_dfsr_sysvol,         status: collect, wave: 4, needs: "DFSR settings objects of the SYSVOL replication group"}
 # --- wave 5: DNS --------------------------------------------------------------------------------------
-- {id: vuln_dnszone_bad_prop,                status: collect, wave: 5, needs: "DNS application partitions (DomainDnsZones/ForestDnsZones) and dNSProperty decoding"}
-- {id: vuln_permissions_msdns,               status: collect, wave: 5, needs: "MicrosoftDNS server and zone objects and their DACLs"}
+- {id: vuln_dnszone_bad_prop,                status: partial, wave: 5, note: "DSA-0302 covers nonsecure dynamic updates; zone-transfer settings are not readable over LDAP (tier-1 probe, group Г)"}
+- {id: vuln_permissions_msdns,               status: partial, wave: 5, note: "DSA-0301 covers the zone objects; the CN=MicrosoftDNS containers and DNS server objects are not read yet"}

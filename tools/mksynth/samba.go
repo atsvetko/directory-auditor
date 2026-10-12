@@ -25,7 +25,7 @@ func writeSambaHardened(path string) error {
 
 func writeSambaLab(path string, hardened bool) error {
 	base := "DC=samba,DC=example"
-	dom := "S-1-5-21-4444444444-5555555555-6666666666"
+	dom := "S-1-5-21-1444444444-1555555555-1666666666" // each sub-authority fits in uint32
 	collected := time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC)
 	ft := func(daysAgo int) string {
 		return fmt.Sprintf("%d", collected.AddDate(0, 0, -daysAgo).UnixNano()/100+116444736000000000)
@@ -111,6 +111,28 @@ func writeSambaLab(path string, hardened bool) error {
 	add("CN=DC1,OU=Domain Controllers,"+base, append(append([]string{}, user...), "computer"), map[string][]string{
 		"sAMAccountName": {"DC1$"}, "objectSid": {dom + "-1000"}, "primaryGroupID": {"516"}, "userAccountControl": {"532480"}, "sAMAccountType": {"805306369"},
 		"operatingSystem": {"Samba"}, "dNSHostName": {"dc1.samba.example"}, "pwdLastSet": {ft(20)}})
+
+	// DSA-0301, DSA-0302: Samba provisions AD-integrated zones in the same partitions as Windows.
+	// The weak lab accepts nonsecure updates on its domain zone (matching "allow dns updates =
+	// nonsecure" below); the hardened lab is secure-only. Zone DACLs are default-like in both.
+	add("CN=DnsAdmins,CN=Users,"+base, []string{"top", "group"}, map[string][]string{"sAMAccountName": {"DnsAdmins"}, "objectSid": {dom + "-1101"}})
+	update := byte(1)
+	if hardened {
+		update = 2
+	}
+	zoneSD := sdOwned(dom+"-512", false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""}, ace{"S-1-5-9", 0x000F01FF, ""},
+		ace{dom + "-1101", 0x000F01FF, ""}, ace{"S-1-5-11", 0x00000001, ""}, ace{"S-1-1-0", 0x00020094, ""})
+	for _, z := range []struct{ dn, name string }{
+		{"DC=samba.example,CN=MicrosoftDNS,DC=DomainDnsZones," + base, "samba.example"},
+		{"DC=_msdcs.samba.example,CN=MicrosoftDNS,DC=ForestDnsZones," + base, "_msdcs.samba.example"},
+	} {
+		u := update
+		if z.name != "samba.example" {
+			u = 2 // negative DSA-0302: _msdcs stays secure-only in both labs
+		}
+		add(z.dn, []string{"top", "dnsZone"}, map[string][]string{"name": {z.name},
+			"dNSProperty": {dnsProp(0x01, 1, 0, 0, 0), dnsProp(0x02, u)}, "nTSecurityDescriptor": {zoneSD}})
+	}
 
 	// Local configuration as the smb.conf collector would record it (testparm
 	// values; parametric options as set in the file).

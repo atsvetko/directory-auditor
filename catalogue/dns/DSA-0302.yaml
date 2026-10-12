@@ -36,10 +36,12 @@ remediation:
 attack:
 - id: T1557
   name: Adversary-in-the-Middle
-engine: complex:dnsproperty
+anssi:
+- vuln_dnszone_bad_prop
+engine: declarative
 query_sketch:
-  base: DC=DomainDnsZones,<root>
-  scope: subtree
+  base: CN=MicrosoftDNS,<each DNS application partition found under CN=Partitions>; CN=MicrosoftDNS,CN=System,<default>
+  scope: one
   filter: (objectClass=dnsZone)
 references:
 - title: Microsoft Open Specifications — MS-DNSP 2.2.6.1.1 DNS_ZONE_UPDATE
@@ -52,7 +54,21 @@ references:
   url: https://www.cert.ssi.gouv.fr/uploads/ad_checklist.html
 notes: >-
   dNSProperty is a multi-valued binary attribute; each value is a structure with a property id and data, decoded
-  by the engine (complex:dnsproperty), never by string matching. Open point: confirm the property id 0x00000002
+  by the engine, never by string matching. Open point: confirm the property id 0x00000002
   against the MS-DNSP section on dnsProperty. Zone transfer settings are not stored in a form LDAP can read
-  reliably and are planned as a tier-1 probe (group Г), not here. ANSSI point vuln_dnszone_bad_prop is planned
-  (wave 5) — tag it when implemented.
+  reliably and are planned as a tier-1 probe (group Г), not here. Implementation notes: the spec named engine
+  complex:dnsproperty; the decoding is now a CEL helper, dns_zone_property(obj, id) (internal/check/dnsprop.go,
+  unit-tested), so the entry is declarative. It reads each value as [MS-DNSP] 2.3.2.1 lays it out (little-endian
+  DataLength, NameLength, Flag, Version, Id, then Data and one Name byte) and returns Data as an integer for the
+  matching id, or -1 when the zone carries no such property; an absent allow-update property is not a finding
+  (the DNS server then treats updates as off). Property id 0x00000002 = DSPROPERTY_ZONE_ALLOW_UPDATE and the
+  values 0/1/2 = ZONE_UPDATE_OFF/UNSECURE/SECURE were confirmed by the implementer from MS-DNSP; the human
+  verifier should still check them against 2.3.2.1.1 and 2.2.6.1.1. Evidence shows the decoded properties ("id
+  0x2 = 1"). The Samba smb.conf "allow dns updates" switch, which overrides the zone setting on a Samba DC, is
+  DSA-0207. ANSSI vuln_dnszone_bad_prop is tagged and marked partial in frameworks/anssi-plan.yaml: zone-transfer
+  settings are not readable over LDAP (see above).
+condition_cel: obj.class.exists(c, c.lowerAscii() == "dnszone") && dns_zone_property(obj, 2) == 1
+expect:
+- DC=_msdcs.lab.example,CN=MicrosoftDNS,DC=ForestDnsZones,DC=lab,DC=example
+- DC=0.10.in-addr.arpa,CN=MicrosoftDNS,DC=DomainDnsZones,DC=lab,DC=example
+- DC=samba.example,CN=MicrosoftDNS,DC=DomainDnsZones,DC=samba,DC=example

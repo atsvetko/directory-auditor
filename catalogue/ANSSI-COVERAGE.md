@@ -12,11 +12,11 @@ sources; this page only maps identifiers. A point is **covered** when an entry d
 
 | ANSSI level | Points | Covered | Partial | Covered + partial |
 |---|---:|---:|---:|---:|
-| 1 | 37 | 28 | 1 | 78% |
+| 1 | 37 | 28 | 3 | 84% |
 | 2 | 18 | 17 | 0 | 94% |
 | 3 | 17 | 9 | 3 | 71% |
 | 4 | 4 | 2 | 0 | 50% |
-| **All** | **76** | **56** | **4** | **79%** |
+| **All** | **76** | **56** | **6** | **82%** |
 
 Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 2 · wave 3 (level-3/4) 10 · wave 4 (AD CS) 6 · wave 5 (DNS) 2.
 
@@ -37,7 +37,7 @@ Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 2 · wave 3
 | 1 | `vuln_delegation_t4d` | Unconstrained authentication delegation | ✅ covered | DSA-0004 |
 | 1 | `vuln_display_specifier` | Dangerous Display Specifiers | ⬜ planned | wave 2 — needs CN=DisplaySpecifiers in the configuration partition |
 | 1 | `vuln_dnsadmins` | Dangerous permissions on the DnsAdmins group | ✅ covered | DSA-0027, DSA-0059 |
-| 1,3 | `vuln_dnszone_bad_prop` | Misconfigured DNS zones | ⬜ planned | wave 5 — needs DNS application partitions (DomainDnsZones/ForestDnsZones) and dNSProperty decoding |
+| 1,3 | `vuln_dnszone_bad_prop` | Misconfigured DNS zones | 🟡 partial | DSA-0302 — wave 5: DSA-0302 covers nonsecure dynamic updates; zone-transfer settings are not readable over LDAP (tier-1 probe, group Г) |
 | 1 | `vuln_dont_expire_priv` | Privileged accounts with never-expiring passwords | ✅ covered | DSA-0009 |
 | 1,2,3 | `vuln_dsheuristics_bad` | Dangerous dsHeuristics settings | ✅ covered | DSA-0025, DSA-0066 |
 | 1,3,4 | `vuln_functional_level` | Insufficient forest and domains functional levels | ✅ covered | DSA-0024, DSA-0062 |
@@ -51,7 +51,7 @@ Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 2 · wave 3
 | 1,2 | `vuln_permissions_dpapi` | Dangerous ACLs expose DPAPI key objects (attack path) | ✅ covered | DSA-0067 |
 | 1,2 | `vuln_permissions_gmsa_keys` | Dangerous ACLs expose gMSA key objects (attack path) | ✅ covered | DSA-0068 |
 | 1 | `vuln_permissions_gpo_priv` | Dangerous ACLs expose GPOs applied to privileged group members (attack path) | ✅ covered | DSA-0072 |
-| 1 | `vuln_permissions_msdns` | Dangerous ACLs expose MicrosoftDNS server objects (attack path) | ⬜ planned | wave 5 — needs MicrosoftDNS server and zone objects and their DACLs |
+| 1 | `vuln_permissions_msdns` | Dangerous ACLs expose MicrosoftDNS server objects (attack path) | 🟡 partial | DSA-0301 — wave 5: DSA-0301 covers the zone objects; the CN=MicrosoftDNS containers and DNS server objects are not read yet |
 | 1,2 | `vuln_permissions_naming_context` | Dangerous ACLs expose a naming context root (attack path) | ✅ covered | DSA-0014, DSA-0015, DSA-0049 |
 | 1,2 | `vuln_permissions_schema` | Dangerous ACLs expose schema objects (attack path) | 🟡 partial | DSA-0079 — wave 4: DSA-0079 covers the schema head; explicit ACEs on classSchema and attributeSchema objects are still to be read |
 | 1 | `vuln_primary_group_id_1000` | Accounts with PrimaryGroupID lower than 1000 | ✅ covered | DSA-0034 |

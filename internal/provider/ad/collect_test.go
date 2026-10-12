@@ -141,7 +141,7 @@ func TestCollect(t *testing.T) {
 }
 
 func TestPlanFiltersParse(t *testing.T) {
-	for _, q := range append(Plan, SDBaseQuery) {
+	for _, q := range append(Plan, SDBaseQuery, DNSZoneQuery) {
 		if _, err := ldap.CompileFilter(q.Filter); err != nil {
 			t.Errorf("%s: %v", q.Name, err)
 		}
@@ -181,6 +181,79 @@ func TestRODCNotCollected(t *testing.T) {
 		got[s.Query] = s.Detail
 	}
 	if !strings.HasPrefix(got["rodc-prp"], "1 ") || !strings.HasPrefix(got["rodc-revealed-list"], "2 ") {
+		t.Errorf("skipped = %+v", snap.Skipped)
+	}
+}
+
+// TestDNSZones: the DNS application partitions are discovered from the
+// crossRefs, not assumed; zones are read one level under each CN=MicrosoftDNS
+// with the descriptor and the binary dNSProperty; a partition without the
+// container is not an error, and an unreadable one is recorded.
+func TestDNSZones(t *testing.T) {
+	cfg := "CN=Configuration," + base
+	parts := "CN=Partitions," + cfg
+	xref := func(cn, nc, flags string) ldapx.Entry {
+		a := map[string][]string{"objectClass": {"top", "crossRef"}, "nCName": {nc}}
+		if flags != "" {
+			a["systemFlags"] = []string{flags}
+		}
+		return entry("CN="+cn+","+parts, a, nil)
+	}
+	prop := []byte{1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 1, 0}
+	f := &fake{results: map[string][]ldapx.Entry{
+		parts + "|(objectClass=crossRef)": {
+			xref("LAB", base, "3"), xref("Enterprise Configuration", cfg, "1"), xref("Enterprise Schema", "CN=Schema,"+cfg, "1"),
+			xref("ddz", "DC=DomainDnsZones,"+base, "5"), xref("fdz", "DC=ForestDnsZones,"+base, "5"),
+			xref("apps", "DC=AppPart,"+base, "5"),   // no CN=MicrosoftDNS: noSuchObject, silently empty
+			xref("ext", "DC=other,DC=example", "5"), // outside this forest root: not read
+			xref("child", "DC=child,"+base, "3"),    // a domain: not read
+			xref("locked", "DC=Locked,"+base, ""),   // flags unreadable: kept
+		},
+		"CN=MicrosoftDNS,DC=DomainDnsZones," + base + "|(objectClass=dnsZone)": {entry("DC=lab.example,CN=MicrosoftDNS,DC=DomainDnsZones,"+base,
+			map[string][]string{"objectClass": {"top", "dnsZone"}, "name": {"lab.example"}},
+			map[string][][]byte{"dNSProperty": {prop}, "nTSecurityDescriptor": {sd(sid(5, 18))}})},
+		"CN=MicrosoftDNS,CN=System," + base + "|(objectClass=dnsZone)": {entry("DC=old.example,CN=MicrosoftDNS,CN=System,"+base,
+			map[string][]string{"objectClass": {"top", "dnsZone"}, "name": {"old.example"}}, nil)},
+	}, errs: map[string]error{
+		"CN=MicrosoftDNS,DC=AppPart," + base + "|(objectClass=dnsZone)": ldap.NewError(ldap.LDAPResultNoSuchObject, errors.New("no such object")),
+		"CN=MicrosoftDNS,DC=Locked," + base + "|(objectClass=dnsZone)":  ldap.NewError(ldap.LDAPResultInsufficientAccessRights, errors.New("denied")),
+	}}
+	snap, err := collect(context.Background(), searcher{RootDSE: f.RootDSE, SearchWith: f.SearchWith, Queries: f.Queries, Requests: f.Requests}, metaForTest(), func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	searched := map[string]bool{}
+	for _, c := range f.calls {
+		if c.filter == "(objectClass=dnsZone)" {
+			searched[c.base] = true
+			if c.sdflags != ldapx.SDFlagsOwner|ldapx.SDFlagsDACL {
+				t.Errorf("zone read %v without OWNER|DACL", c)
+			}
+		}
+	}
+	for _, want := range []string{"DomainDnsZones", "ForestDnsZones", "AppPart", "Locked"} {
+		if !searched["CN=MicrosoftDNS,DC="+want+","+base] {
+			t.Errorf("partition %s not searched; searched %v", want, searched)
+		}
+	}
+	if !searched["CN=MicrosoftDNS,CN=System,"+base] || len(searched) != 5 {
+		t.Errorf("zone searches = %v", searched)
+	}
+	var zone *snapshot.Object
+	for i := range snap.Objects {
+		if strings.HasPrefix(snap.Objects[i].DN, "DC=lab.example,") {
+			zone = &snap.Objects[i]
+		}
+	}
+	if zone == nil || zone.Attr("dNSProperty") != base64.StdEncoding.EncodeToString(prop) || zone.Attr("nTSecurityDescriptor") == "" {
+		t.Fatalf("zone = %+v", zone)
+	}
+	var locked, appPart bool
+	for _, s := range snap.Skipped {
+		locked = locked || (s.Query == "dns-zones DC=Locked,"+base && s.Reason == "permission")
+		appPart = appPart || strings.Contains(s.Query, "AppPart")
+	}
+	if !locked || appPart {
 		t.Errorf("skipped = %+v", snap.Skipped)
 	}
 }

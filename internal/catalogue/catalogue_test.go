@@ -45,6 +45,8 @@ func TestImplementedEntries(t *testing.T) {
 		"freeipa":        {"../../testdata/synthetic-freeipa.json.zst"},
 		"samba":          {"../../testdata/synthetic-samba.json.zst"},
 		"directory-core": {"../../testdata/synthetic-lab.json.zst", "../../testdata/synthetic-samba.json.zst"},
+		// AD-integrated DNS zones exist in both AD and Samba AD DC directories.
+		"dns": {"../../testdata/synthetic-lab.json.zst", "../../testdata/synthetic-samba.json.zst"},
 	}
 	loaded := map[string]*snapshot.Snapshot{}
 	ran := 0
@@ -104,8 +106,8 @@ func TestImplementedEntries(t *testing.T) {
 }
 
 // TestHardenedLabIsClean is the negative control: on a Samba DC configured at
-// or above every recommended value, no implemented Samba or directory-core
-// entry may fire, except informational ones listed here.
+// or above every recommended value, no implemented Samba, directory-core or
+// DNS entry may fire.
 func TestHardenedLabIsClean(t *testing.T) {
 	entries, err := LoadDir("../../catalogue")
 	if err != nil {
@@ -116,7 +118,7 @@ func TestHardenedLabIsClean(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
-		if e.ConditionCEL == "" || (e.Domain != "samba" && e.Domain != "directory-core") {
+		if e.ConditionCEL == "" || (e.Domain != "samba" && e.Domain != "directory-core" && e.Domain != "dns") {
 			continue
 		}
 		filter, _ := e.QuerySketch["filter"].(string)

@@ -250,6 +250,7 @@ func EvaluateWith(snap *snapshot.Snapshot, packs []Pack, opts EvalOptions) (*Res
 		currentTier0, currentIndex, currentSIDs, currentBase = nil, nil, nil, ""
 		currentSchemaGUIDs, currentT0Parents, currentHosts, currentDNSDomain = nil, nil, nil, ""
 		currentNames, currentReachers, currentReachPath, currentGPOToTier0, currentByPrimary = nil, nil, nil, nil, nil
+		currentSAM = nil
 	}()
 	now := snap.Collected.Unix()
 	inv := Inventory{Objects: len(snap.Objects), Collected: snap.Collected, Identity: snap.Meta.Identity,
@@ -356,6 +357,10 @@ func runPack(snap *snapshot.Snapshot, p *Pack, cr *CheckResult, now int64, t0 *t
 					continue
 				}
 				v := strings.Join(values(o, a), "; ")
+				// dNSProperty is binary; show the decoded property ids and values.
+				if strings.EqualFold(a, "dNSProperty") && v != "" {
+					v = describeDNSProperties(values(o, a))
+				}
 				if p.Secret && !showSecrets && v != "" {
 					v = maskSecret(v)
 				}

@@ -36,7 +36,14 @@ var (
 	sidAttrs  = []string{"objectSid", "sIDHistory", "securityIdentifier", "ms-DS-CreatorSID"}
 	guidAttrs = []string{"objectGUID", "schemaIDGUID"}
 	sdAttrs   = []string{"nTSecurityDescriptor", "msDS-AllowedToActOnBehalfOfOtherIdentity", "msDS-GroupMSAMembership"}
+	// binAttrs are other binary attributes, stored base64 and decoded by the
+	// engine: dNSProperty holds [MS-DNSP] 2.3.2.1 property structures.
+	binAttrs = []string{"dNSProperty"}
 )
+
+// zoneAttrs are read from every dnsZone object (DSA-0301, DSA-0302). Records
+// (dnsNode objects) are not read.
+var zoneAttrs = []string{"objectClass", "name", "dNSProperty", "whenChanged"}
 
 var accountAttrs = []string{
 	"objectClass", "objectCategory", "sAMAccountType", "sAMAccountName", "userPrincipalName", "objectSid", "objectGUID", "sIDHistory",
@@ -158,6 +165,15 @@ var Plan = []Query{
 	{Name: "gpo", Base: "CN=Policies,CN=System", Scope: ldapx.ScopeOneLevel, Filter: "(objectClass=groupPolicyContainer)", SD: true, Classes: []string{"groupPolicyContainer"},
 		Attrs:   []string{"objectClass", "displayName", "gPCFileSysPath"},
 		Purpose: "control rights and owners of GPOs linked to Tier-0 scope (DSA-0072, DSA-0076)"},
+	{Name: "partitions", Base: "CN=Partitions,<config>", Scope: ldapx.ScopeOneLevel, Filter: "(objectClass=crossRef)",
+		// Without the partitions list no application-partition zone is read, so
+		// a failure here marks dnsZone as not collected too.
+		Classes: []string{"crossRef", "dnsZone"},
+		Attrs:   []string{"objectClass", "nCName", "dnsRoot", "systemFlags"},
+		Purpose: "naming contexts of the forest, to find the DNS application partitions read by dns-zones (DSA-0301, DSA-0302)"},
+	{Name: "dns-zones-legacy", Base: "CN=MicrosoftDNS,CN=System", Scope: ldapx.ScopeOneLevel, Filter: "(objectClass=dnsZone)", SD: true,
+		Attrs:   zoneAttrs,
+		Purpose: "AD-integrated DNS zones stored in the domain partition (Windows 2000 layout): who controls them, dynamic-update setting (DSA-0301, DSA-0302)"},
 	{Name: "protected-sd", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(adminCount=1)", SD: true,
 		Attrs:   []string{"objectClass"},
 		Purpose: "ACLs, owners and inheritance state of protected objects (DSA-0015, DSA-0019, DSA-0076)"},
@@ -167,6 +183,67 @@ var Plan = []Query{
 // descriptor was not already collected (members that SDProp does not cover).
 var SDBaseQuery = Query{Name: "tier0-sd", Base: "<each Tier-0 DN>", Scope: ldapx.ScopeBase, Filter: "(objectClass=*)", SD: true,
 	Attrs: []string{"objectClass"}, Purpose: "ACLs and owners of Tier-0 objects not marked adminCount=1 (DSA-0015, DSA-0076)"}
+
+// DNSZoneQuery describes the per-partition reads of AD-integrated DNS zones.
+// The partitions are not assumed by name: every application partition listed
+// under CN=Partitions (crossRef with FLAG_CR_NTDS_NC and without
+// FLAG_CR_NTDS_DOMAIN) whose naming context lies under this domain or the
+// forest root is searched one level below its CN=MicrosoftDNS container —
+// normally DC=DomainDnsZones and DC=ForestDnsZones.
+var DNSZoneQuery = Query{Name: "dns-zones", Base: "CN=MicrosoftDNS,<each DNS application partition>", Scope: ldapx.ScopeOneLevel,
+	Filter: "(objectClass=dnsZone)", SD: true, Classes: []string{"dnsZone"}, Attrs: zoneAttrs,
+	Purpose: "AD-integrated DNS zones in the application partitions: who controls them, dynamic-update setting (DSA-0301, DSA-0302)"}
+
+// crossRef systemFlags bits ([MS-ADTS] 6.1.1.2.1.1.5).
+const (
+	crNTDSNC     = 0x1 // FLAG_CR_NTDS_NC: an AD naming context
+	crNTDSDomain = 0x2 // FLAG_CR_NTDS_DOMAIN: a domain naming context
+)
+
+// dnsPartitions returns the naming contexts of the application partitions to
+// search for DNS zones: crossRefs that name an AD naming context that is not a
+// domain (FLAG_CR_NTDS_NC set, FLAG_CR_NTDS_DOMAIN clear), excluding the
+// configuration and schema partitions, and limited to partitions under this
+// domain or the forest root (other domains' partitions are usually not held
+// by the DC we talk to). A crossRef whose systemFlags could not be read is
+// kept unless it names the domain, configuration or schema partition.
+func dnsPartitions(objs []snapshot.Object, defaultNC, rootNC, configNC, schemaNC string) []string {
+	under := func(dn, nc string) bool {
+		return nc != "" && strings.HasSuffix(strings.ToLower(dn), ","+strings.ToLower(nc))
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, o := range objs {
+		if !hasClass(o, "crossRef") {
+			continue
+		}
+		nc := o.Attr("nCName")
+		l := strings.ToLower(nc)
+		if nc == "" || seen[l] || strings.EqualFold(nc, defaultNC) || strings.EqualFold(nc, configNC) || strings.EqualFold(nc, schemaNC) ||
+			strings.EqualFold(nc, rootNC) {
+			continue
+		}
+		if f, err := strconv.ParseInt(o.Attr("systemFlags"), 10, 64); err == nil && (f&crNTDSNC == 0 || f&crNTDSDomain != 0) {
+			continue
+		}
+		if !under(nc, defaultNC) && !under(nc, rootNC) {
+			continue
+		}
+		seen[l] = true
+		out = append(out, nc)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func hasClass(o snapshot.Object, class string) bool {
+	for _, c := range o.Class {
+		if strings.EqualFold(c, class) {
+			return true
+		}
+	}
+	return false
+}
 
 // searcher is the subset of *ldapx.Conn the collector uses; tests supply a fake.
 //
@@ -242,6 +319,39 @@ func collect(ctx context.Context, c searcher, meta snapshot.Meta, progress func(
 		}
 	}
 
+	// DNS zones in the application partitions found under CN=Partitions.
+	if configNC == "" {
+		configNC = "CN=Configuration," + base
+	}
+	if schemaNC == "" {
+		schemaNC = "CN=Schema," + configNC
+	}
+	rootNC := root["rootDomainNamingContext"]
+	if rootNC == "" {
+		rootNC = base
+	}
+	for _, nc := range dnsPartitions(snap.Objects, base, rootNC, configNC, schemaNC) {
+		progress("reading DNS zones in " + nc)
+		entries, err := run(ctx, c, DNSZoneQuery, "CN=MicrosoftDNS,"+nc)
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, err
+			}
+			// A partition without a MicrosoftDNS container holds no zones.
+			if ldap.IsErrorWithCode(err, ldap.LDAPResultNoSuchObject) {
+				continue
+			}
+			sk := skipped(DNSZoneQuery, err)
+			sk.Query += " " + nc
+			snap.Skipped = append(snap.Skipped, sk)
+			continue
+		}
+		for _, e := range entries {
+			merge(e)
+			sdSeen[strings.ToLower(e.DN)] = true
+		}
+	}
+
 	// Domain SID from the head object; needed for Tier-0 resolution.
 	if i, ok := index[strings.ToLower(base)]; ok {
 		snap.Meta.DomainSID = snap.Objects[i].Attr("objectSid")
@@ -311,7 +421,7 @@ func collect(ctx context.Context, c searcher, meta snapshot.Meta, progress func(
 
 func run(ctx context.Context, c searcher, q Query, base string) ([]ldapx.Entry, error) {
 	attrs := q.Attrs
-	opts := ldapx.SearchOptions{Binary: append(append(append([]string{}, sidAttrs...), guidAttrs...), sdAttrs...)}
+	opts := ldapx.SearchOptions{Binary: append(append(append(append([]string{}, sidAttrs...), guidAttrs...), sdAttrs...), binAttrs...)}
 	if q.SD {
 		attrs = append(append([]string{}, attrs...), "nTSecurityDescriptor")
 		opts.SDFlags = sdFlags
