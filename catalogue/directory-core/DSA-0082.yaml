@@ -57,3 +57,10 @@ notes: >-
   Collector: lockoutThreshold and lockoutDuration are already read on the domain head; lockOutObservationWindow
   must be added. Fine-grained password policies with weaker lockout are a separate check (extend DSA-0071).
   Thresholds are ours, set from the Microsoft baseline; confirm them at verification.
+condition_cel: >-
+  intattr(obj, "lockoutThreshold") > 0 && (intattr(obj, "lockoutThreshold") > 10
+  || (hasattr(obj, "lockoutDuration") && !(attr(obj, "lockoutDuration") in ["0", "-9223372036854775808"])
+  && intattr(obj, "lockoutDuration") > -9000000000)
+  || (hasattr(obj, "lockOutObservationWindow") && intattr(obj, "lockOutObservationWindow") > -9000000000))
+expect:
+- DC=lab,DC=example

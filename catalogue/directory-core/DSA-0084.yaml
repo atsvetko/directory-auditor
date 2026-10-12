@@ -52,3 +52,9 @@ references:
 notes: >-
   Already collected. Recent addition of an older account to a privileged group needs replication metadata
   (msDS-ReplValueMetaData) and belongs to group В (changes over a period), not here.
+condition_cel: >-
+  tier0(obj) && !flags(obj, "userAccountControl", 8192) && !flags(obj, "userAccountControl", 67108864)
+  && age_days(obj, "whenCreated") >= 0 && age_days(obj, "whenCreated") < 30
+expect:
+- CN=hidden.da,CN=Users,DC=lab,DC=example
+- CN=SQL01,OU=Servers,DC=lab,DC=example

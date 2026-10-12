@@ -49,3 +49,8 @@ references:
 notes: >-
   Groups and their members are already collected. In a child domain the group does not exist; the check runs
   where the group with RID 518 is found. The finding lists the members.
+condition_cel: >-
+  attr(obj, "objectSid").startsWith("S-1-5-21-") && sid_rid(attr(obj, "objectSid")) == 518 && size(attrs(obj,
+  "member")) > 0
+expect:
+- CN=Schema Admins,CN=Users,DC=lab,DC=example

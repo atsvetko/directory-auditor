@@ -59,3 +59,24 @@ notes: >-
   never fires early. Open point: confirm every date against the Microsoft Lifecycle pages at verification and
   keep the table in one place shared with DSA-0031. Inactive computers are excluded; stale computer accounts are a
   separate finding.
+condition_cel: >-
+  !flags(obj, "userAccountControl", 2) && !flags(obj, "userAccountControl", 8192) && !flags(obj,
+  "userAccountControl", 67108864) && age_days(obj, "lastLogonTimestamp") >= 0 && age_days(obj, "lastLogonTimestamp") < 90
+  && (attr(obj, "operatingSystem").lowerAscii().contains("windows xp")
+  || attr(obj, "operatingSystem").lowerAscii().contains("windows vista")
+  || attr(obj, "operatingSystem").lowerAscii().contains("windows 7")
+  || attr(obj, "operatingSystem").lowerAscii().contains("windows 8")
+  || (attr(obj, "operatingSystem").lowerAscii().contains("windows 10") && !attr(obj, "operatingSystem").lowerAscii().contains("ltsc")
+  && !attr(obj, "operatingSystem").lowerAscii().contains("ltsb") && obj.now > 1760511599)
+  || (attr(obj, "operatingSystem").lowerAscii().contains("windows 11") && ((attr(obj, "operatingSystemVersion").contains("(22000)")
+  && obj.now > 1728457199) || (attr(obj, "operatingSystemVersion").contains("(22621)") && obj.now > 1760511599)
+  || (attr(obj, "operatingSystemVersion").contains("(22631)") && obj.now > 1794383999)))
+  || (attr(obj, "operatingSystem").lowerAscii().contains("server") && (attr(obj, "operatingSystem").contains("2000")
+  || attr(obj, "operatingSystem").contains("2003") || attr(obj, "operatingSystem").contains("2008")
+  || attr(obj, "operatingSystem").contains("2012") || (attr(obj, "operatingSystem").contains("2016") && obj.now > 1799852399))))
+expect:
+- CN=WS-XP,OU=Workstations,DC=lab,DC=example
+- CN=WS-W7,OU=Workstations,DC=lab,DC=example
+- CN=WS-W10,OU=Workstations,DC=lab,DC=example
+- CN=WS-W11A,OU=Workstations,DC=lab,DC=example
+- CN=SRV2012,OU=Workstations,DC=lab,DC=example

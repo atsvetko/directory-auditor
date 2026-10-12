@@ -13,7 +13,7 @@ verified_by: ''
 verified_on: ''
 object: Domain naming-context head (and the configuration and schema heads when collected)
 attributes:
-- nTSecurityDescriptor (DACL)
+- nTSecurityDescriptor
 condition: >-
   An allow ACE on the naming-context head grants a principal outside Tier 0 the Reanimate-Tombstones control
   access right (rightsGuid 45ec5156-db7e-47bb-b53f-dbeb2d03c40f), all control access rights, or GENERIC_ALL.
@@ -50,3 +50,12 @@ notes: >-
   The domain-head descriptor is already collected (query domain-head). Holders of DS-Replication-Get-Changes-All
   and other Tier-0 principals are excluded the same way as in DSA-0014. The right is checked by GUID, never by
   display name.
+evidence_principals: >-
+  aces(obj).filter(a, a.allow && a.effective && !a.trustee_tier0 && (mask_has(a.mask, 0x10000000) ||
+  (mask_has(a.mask, 0x100) && (a.object_type == "" || a.object_type == "45ec5156-db7e-47bb-b53f-dbeb2d03c40f")))).map(a,
+  a.trustee)
+condition_cel: >-
+  sd_readable(obj) && aces(obj).exists(a, a.allow && a.effective && !a.trustee_tier0 && (mask_has(a.mask, 0x10000000)
+  || (mask_has(a.mask, 0x100) && (a.object_type == "" || a.object_type == "45ec5156-db7e-47bb-b53f-dbeb2d03c40f"))))
+expect:
+- DC=lab,DC=example

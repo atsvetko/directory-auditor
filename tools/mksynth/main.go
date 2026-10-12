@@ -47,6 +47,9 @@ func main() {
 	ft := func(daysAgo int) string { // FILETIME
 		return strconv.FormatInt(collected.AddDate(0, 0, -daysAgo).UnixNano()/100+116444736000000000, 10)
 	}
+	gt := func(daysAgo int) string { // GeneralizedTime
+		return collected.AddDate(0, 0, -daysAgo).Format("20060102150405.0Z")
+	}
 	s := &snapshot.Snapshot{
 		Schema:    snapshot.SchemaVersion,
 		Collected: collected,
@@ -64,47 +67,59 @@ func main() {
 	s.Meta.RootDSE = root
 	s.Objects = append(s.Objects, snapshot.RootDSEObject(root))
 	add(base, []string{"top", "domain", "domainDNS"}, map[string][]string{
-		"name": {"lab"}, "objectSid": {dom}, "ms-DS-MachineAccountQuota": {"10"}, "minPwdLength": {"7"}, "lockoutThreshold": {"0"},
+		"name": {"lab"}, "objectSid": {dom}, "ms-DS-MachineAccountQuota": {"10"}, "minPwdLength": {"7"}, "lockoutThreshold": {"50"}, // DSA-0082: lockout on, threshold 50
+		"msDS-ExpirePasswordsOnSmartCardOnlyAccounts": {"TRUE"}, // DSA-0085: rolling configured (FL 2016), see sc.admin
 		"pwdProperties": {"1"}, "pwdHistoryLength": {"24"}, "maxPwdAge": {"-36288000000000"}, "minPwdAge": {"-864000000000"},
-		"lockoutDuration": {"-18000000000"}, "lockOutObservationWindow": {"-18000000000"}, "msDS-Behavior-Version": {"7"},
+		"lockoutDuration": {"-3000000000"}, "lockOutObservationWindow": {"-18000000000"}, "msDS-Behavior-Version": {"7"}, // DSA-0082: 5-min duration
 		"gPLink": {"[LDAP://CN={31B2F340-016D-11D2-945F-00C04FB984F9},CN=Policies,CN=System," + base + ";0]"},
 		"nTSecurityDescriptor": {sd(false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""},
-			ace{dom + "-1105", 0x00000100, "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"}, // DSA-0014: j.doe has Get-Changes-All
-			ace{"S-1-5-9", 0x00000100, "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"},     // Enterprise DCs: expected
-			ace{dom + "-1201", 0x00000100, "9923a32a-3607-11d2-b9be-0000f87a36b2"}, // DSA-0049: Helpdesk may add replicas (DCs)
-			ace{dom + "-527", 0x000F01FF, ""})},                                    // DSA-0051: 2016-era full control for Enterprise Key Admins
+			ace{dom + "-1105", 0x00000100, "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"},   // DSA-0014: j.doe has Get-Changes-All
+			ace{"S-1-5-9", 0x00000100, "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"},       // Enterprise DCs: expected
+			ace{dom + "-1201", 0x00000100, "9923a32a-3607-11d2-b9be-0000f87a36b2"},   // DSA-0049: Helpdesk may add replicas (DCs)
+			ace{dom + "-527", 0x000F01FF, ""},                                        // DSA-0051: 2016-era full control for Enterprise Key Admins
+			ace{dom + "-1201", 0x00000100, "45ec5156-db7e-47bb-b53f-dbeb2d03c40f"})}, // DSA-0078: Helpdesk may reanimate tombstones
 	})
 	add("CN=Directory Service,CN=Windows NT,CN=Services,CN=Configuration,"+base, []string{"top", "nTDSService"},
-		map[string][]string{"dSHeuristics": {"000000000100000f"}, "tombstoneLifetime": {"180"}})
+		map[string][]string{"dSHeuristics": {"000000010100000f"}, "tombstoneLifetime": {"180"}})
 	users := []struct {
 		name, desc, uac, rid string
 		pwdAge               int
 		extra                map[string][]string
 	}{
-		{"Administrator", "Built-in account for administering the domain", "66048", "500", 900, nil},
+		{"Administrator", "Built-in account for administering the domain", "66048", "500", 900, map[string][]string{ // DSA-0083: logged on 5 d ago
+			"msDS-KeyCredentialLink": {keyCred("CN=Administrator,CN=Users," + base)}}}, // DSA-0075: key credential on a Tier-0 user
 		{"svc_backup", "backup service; password in wiki", "66048", "1104", 2400, map[string][]string{"servicePrincipalName": {"backup/fs01.lab.example"}, "adminCount": {"1"},
 			"altSecurityIdentities": {"X509:<I>DC=example,DC=lab,CN=lab-CA<S>CN=svc_backup"}}}, // DSA-0052 (Tier-0 mapping) + DSA-0053 (weak issuer+subject form)
-		{"j.doe", "", "512", "1105", 40, nil},
+		{"j.doe", "", "512", "1105", 40, map[string][]string{"msDS-KeyCredentialLink": {keyCred("CN=j.doe,CN=Users," + base)}}}, // negative DSA-0075: not Tier 0
 		{"m.smith", "", "514", "1106", 400, nil},
 		{"old.admin", "", "512", "1107", 700, map[string][]string{"adminCount": {"1"}, "nTSecurityDescriptor": {sd(true, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-1201", 0x000F01FF, ""})}}}, // DSA-0019 (orphaned adminCount) + DSA-0029 (Helpdesk GenericAll over a protected, non-Tier-0 object)
 		{"krbtgt", "Key Distribution Center Service Account", "514", "502", 1900, nil},
 		// One object per directory-core entry that needs a positive case:
 		{"j.legacy", "", "4194816", "1108", 30, nil}, // DSA-0001 DONT_REQ_PREAUTH
 		{"svc_sql", "", "66048", "1109", 800, map[string][]string{"servicePrincipalName": {"MSSQLSvc/db01.lab.example:1433"}, "msDS-SupportedEncryptionTypes": {"4"}}}, // DSA-0003 (old pw, RC4-only), DSA-0012
-		{"svc_web", "", "16777728", "1110", 20, map[string][]string{"msDS-AllowedToDelegateTo": {"cifs/fs01.lab.example"}}},                                            // DSA-0005 protocol transition (0x1000000)
-		{"svc_dc", "", "512", "1111", 20, map[string][]string{"msDS-AllowedToDelegateTo": {"ldap/DC01.lab.example"}}},                                                  // DSA-0005 target is a DC
+		{"svc_web", "", "16777728", "1110", 20, map[string][]string{"msDS-AllowedToDelegateTo": {"cifs/fs01.lab.example"}, // DSA-0005 protocol transition (0x1000000)
+			"msDS-AllowedToActOnBehalfOfOtherIdentity": {sd(false, ace{dom + "-1001", 0x000F01FF, ""})}}}, // negative DSA-0086: RBCD on an ordinary user
+		{"svc_dc", "", "512", "1111", 20, map[string][]string{"msDS-AllowedToDelegateTo": {"ldap/DC01.lab.example"}}}, // DSA-0005 target is a DC
 		{"kiosk", "", "544", "1112", 500, nil},                                                          // DSA-0010 PASSWD_NOTREQD (0x20)
 		{"svc_legacy", "", "640", "1113", 100, nil},                                                     // DSA-0011 reversible (0x80)
 		{"mig.user", "", "512", "1114", 60, map[string][]string{"sIDHistory": {"S-1-5-21-9-8-7-1055"}}}, // DSA-0017
 		{"des.user", "", "2097664", "1115", 60, nil},                                                    // DSA-0012 USE_DES_KEY_ONLY
 		{"t.contractor", "temp account, password=Welcome1!", "512", "1116", 30, nil},                    // DSA-0028 cleartext secret in description
 		// ANSSI wave 1 (DSA-0030…0044). Flags chosen so each object trips only its target checks.
-		{"hidden.da", "", "1049088", "1117", 10, map[string][]string{"primaryGroupID": {"512"}}},      // DSA-0034/0044: primary group = Domain Admins (NOT_DELEGATED keeps DSA-0007 quiet)
-		{"dormant.user", "", "512", "1118", 30, map[string][]string{"lastLogonTimestamp": {ft(400)}}}, // DSA-0036: no logon for 400 days
-		{"Guest", "", "512", "501", 30, map[string][]string{"primaryGroupID": {"514"}}},               // DSA-0042: built-in Guest enabled
+		{"hidden.da", "", "1049088", "1117", 10, map[string][]string{"primaryGroupID": {"512"}, "whenCreated": {gt(10)}}}, // DSA-0034/0044: primary group = Domain Admins (NOT_DELEGATED keeps DSA-0007 quiet); DSA-0084: created 10 d ago
+		{"dormant.user", "", "512", "1118", 30, map[string][]string{"lastLogonTimestamp": {ft(400)}}},                     // DSA-0036: no logon for 400 days
+		{"Guest", "", "512", "501", 30, map[string][]string{"primaryGroupID": {"514"}}},                                   // DSA-0042: built-in Guest enabled
 		// Wave 2a (DSA-0045…0060)
 		{"svc_print", "", "512", "1119", 20, map[string][]string{"msDS-AllowedToDelegateTo": {"cifs/oldfs.lab.example"}}},          // DSA-0054: delegation to a host no account owns
 		{"PARTNER$", "", "2048", "1120", 400, map[string][]string{"sAMAccountType": {"805306370"}, "lastLogonTimestamp": {ft(5)}}}, // DSA-0065: interdomain trust account, password 400 d old
+		// Group A (DSA-0075…0087).
+		{"krbtgt_12345", "Key Distribution Center service account for read-only DC", "514", "1140", 30, map[string][]string{ // DSA-0086: RBCD on an RODC krbtgt
+			"msDS-KrbTgtLinkBl":                        {"CN=RODC01,OU=Domain Controllers," + base},
+			"msDS-AllowedToActOnBehalfOfOtherIdentity": {sd(false, ace{dom + "-1105", 0x000F01FF, ""})}}},
+		{"sc.admin", "", "262656", "1141", 100, nil},                                    // DSA-0085: smart card required, rolling configured but hash 100 d old (> maxPwdAge 42 d + 1)
+		{"sc.fresh", "", "262656", "1142", 30, nil},                                     // negative DSA-0085: hash 30 d old
+		{"sc.off", "", "262658", "1143", 300, nil},                                      // negative DSA-0085: disabled
+		{"new.user", "", "512", "1144", 3, map[string][]string{"whenCreated": {gt(3)}}}, // negative DSA-0084: recent, not Tier 0
 	}
 	for _, u := range users {
 		attrs := map[string][]string{"sAMAccountName": {u.name}, "userAccountControl": {u.uac}, "pwdLastSet": {ft(u.pwdAge)},
@@ -136,6 +151,9 @@ func main() {
 		{"DnsAdmins", dom + "-1101", []string{"CN=j.doe,CN=Users," + base}, // DSA-0027: DLL-load to SYSTEM on the DC; DSA-0059: Helpdesk can write member
 			sd(false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""}, ace{dom + "-1201", 0x00000020, "bf9679c0-0de6-11d0-a285-00aa003049e2"})},
 		{"Group Policy Creator Owners", dom + "-520", []string{"CN=Administrator,CN=Users," + base, "CN=j.doe,CN=Users," + base}, ""}, // DSA-0046: a non-Tier-0 GPO creator
+		{"Schema Admins", dom + "-518", []string{"CN=Administrator,CN=Users," + base}, ""},                                            // DSA-0080: standing member
+		{"Distributed COM Users", "S-1-5-32-562", []string{"CN=j.doe,CN=Users," + base}, ""},                                          // DSA-0081: a member
+		{"Performance Log Users", "S-1-5-32-559", nil, ""},                                                                            // negative DSA-0081: empty
 	}
 	for _, g := range groups {
 		attrs := map[string][]string{"sAMAccountName": {g.name}, "objectSid": {g.sid}, "description": {g.name + " (synthetic)"}}
@@ -185,6 +203,27 @@ func main() {
 	add("CN=WS01,CN=Computers,"+base, computer,
 		map[string][]string{"sAMAccountName": {"WS01$"}, "objectSid": {dom + "-1002"}, "primaryGroupID": {"515"}, "sAMAccountType": {"805306369"},
 			"userAccountControl": {"4096"}, "pwdLastSet": {ft(5)}, "ms-DS-CreatorSID": {dom + "-1105"}})
+	// DSA-0087: member computers by OS, logon age and state (collected 2026-10-07).
+	for i, c := range []struct {
+		name, os, ver, uac string
+		logon              int
+	}{
+		{"WS-XP", "Windows XP Professional", "5.1 (2600)", "4096", 10},           // fires
+		{"WS-W7", "Windows 7 Enterprise", "6.1 (7601)", "4096", 10},              // fires
+		{"WS-W10", "Windows 10 Enterprise", "10.0 (19045)", "4096", 10},          // fires: servicing ended 2025-10-14
+		{"WS-W10LTSC", "Windows 10 Enterprise LTSC", "10.0 (17763)", "4096", 10}, // negative: LTSC
+		{"WS-W11A", "Windows 11 Enterprise", "10.0 (22000)", "4096", 10},         // fires: 21H2 ended 2024-10-08
+		{"WS-W11C", "Windows 11 Enterprise", "10.0 (22631)", "4096", 10},         // negative: 23H2 ends 2026-11-10
+		{"WS-W7OLD", "Windows 7 Professional", "6.1 (7601)", "4096", 200},        // negative: inactive
+		{"WS-W81OFF", "Windows 8.1 Pro", "6.3 (9600)", "4098", 10},               // negative: disabled
+		{"SRV2012", "Windows Server 2012 R2 Standard", "6.3 (9600)", "4096", 10}, // fires
+		{"SRV2016", "Windows Server 2016 Standard", "10.0 (14393)", "4096", 10},  // negative until 2027-01-13
+	} {
+		add(fmt.Sprintf("CN=%s,OU=Workstations,%s", c.name, base), computer, map[string][]string{
+			"sAMAccountName": {c.name + "$"}, "objectSid": {dom + "-" + strconv.Itoa(1150+i)}, "primaryGroupID": {"515"},
+			"sAMAccountType": {"805306369"}, "dNSHostName": {strings.ToLower(c.name) + ".lab.example"}, "operatingSystem": {c.os},
+			"operatingSystemVersion": {c.ver}, "userAccountControl": {c.uac}, "pwdLastSet": {ft(5)}, "lastLogonTimestamp": {ft(c.logon)}})
+	}
 	// DSA-0016: AdminSDHolder with a WriteDacl ACE for Helpdesk
 	// DSA-0050: inheritance left enabled on AdminSDHolder
 	add("CN=AdminSDHolder,CN=System,"+base, []string{"top", "container"}, map[string][]string{
@@ -251,6 +290,11 @@ func main() {
 		"sAMAccountName": {"dmsa-app$"}, "objectSid": {dom + "-1131"}, "primaryGroupID": {"515"}, "sAMAccountType": {"805306369"},
 		"userAccountControl": {"4096"}, "pwdLastSet": {ft(1)}, "msDS-DelegatedMSAState": {"2"},
 		"msDS-ManagedAccountPrecededByLink": {"CN=j.doe,CN=Users," + base}})
+	// DSA-0084: whenCreated on computers (the loop above sets none).
+	setAttr(s, "CN=SQL01,OU=Servers,"+base, "whenCreated", gt(12))                                                              // Tier-0 member server created 12 d ago: fires
+	setAttr(s, "CN=OLDDC,OU=Domain Controllers,"+base, "whenCreated", gt(12))                                                   // negative: a DC
+	setAttr(s, "CN=WS01,CN=Computers,"+base, "whenCreated", gt(12))                                                             // negative: not Tier 0
+	setAttr(s, "CN=DC01,OU=Domain Controllers,"+base, "msDS-KeyCredentialLink", keyCred("CN=DC01,OU=Domain Controllers,"+base)) // negative DSA-0075: DC key trust
 	s.Skipped = []snapshot.Skipped{{Query: "sysvol", Reason: "tier", Detail: "tier 1 not requested"}}
 
 	for _, path := range []string{*out, "internal/demo/synthetic-lab.json.zst"} {
@@ -261,6 +305,25 @@ func main() {
 	}
 	h, _ := snapshot.Hash(s)
 	fmt.Printf("wrote %s (%d objects, sha256 %s)\n", *out, len(s.Objects), h[:16])
+}
+
+// setAttr sets one attribute on an object already added to the snapshot.
+func setAttr(s *snapshot.Snapshot, dn, name string, vals ...string) {
+	for i := range s.Objects {
+		if strings.EqualFold(s.Objects[i].DN, dn) {
+			s.Objects[i].Attrs[name] = vals
+			return
+		}
+	}
+	panic("setAttr: no object " + dn)
+}
+
+// keyCred returns a synthetic msDS-KeyCredentialLink value in its DN-Binary
+// form (B:<hex length>:<hex>:<owner DN>). The blob is placeholder bytes, not a
+// parsable KEYCREDENTIALLINK_BLOB; checks only test for presence.
+func keyCred(owner string) string {
+	blob := strings.Repeat("00", 4) + "0200" + strings.Repeat("ab", 26)
+	return fmt.Sprintf("B:%d:%s:%s", len(blob), strings.ToUpper(blob), owner)
 }
 
 type ace struct {

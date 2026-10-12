@@ -52,21 +52,27 @@ var accountAttrs = []string{
 	// August 2025 fix the KDC honours a dMSA succession only when the target
 	// carries these too, so their presence is what makes a link effective.
 	"msDS-SupersededManagedAccountLink", "msDS-SupersededServiceAccountState",
+	// Raw public keys accepted for PKINIT logon as the account (DSA-0075). An
+	// ordinary user may not be allowed to read it; absence then means "not
+	// readable", not "no keys".
+	"msDS-KeyCredentialLink",
 }
 
 // Plan is the tier-0 (ordinary user) collection plan.
 var Plan = []Query{
 	{Name: "domain-head", Base: "default", Scope: ldapx.ScopeBase, Filter: "(objectClass=domainDNS)", SD: true, Classes: []string{"domainDNS", "domain"},
 		Attrs: []string{"objectClass", "name", "objectSid", "ms-DS-MachineAccountQuota", "minPwdLength",
-			"pwdHistoryLength", "maxPwdAge", "minPwdAge", "lockoutThreshold", "lockoutDuration",
-			"pwdProperties", "whenCreated", "msDS-Behavior-Version", "fSMORoleOwner", "gPLink"},
-		Purpose: "password policy, MAQ (DSA-0013), replication rights on the head (DSA-0014, DSA-0015)"},
+			"pwdHistoryLength", "maxPwdAge", "minPwdAge", "lockoutThreshold", "lockoutDuration", "lockOutObservationWindow",
+			"pwdProperties", "whenCreated", "msDS-Behavior-Version", "fSMORoleOwner", "gPLink",
+			"msDS-ExpirePasswordsOnSmartCardOnlyAccounts"},
+		Purpose: "password and lockout policy (DSA-0020…0023, DSA-0082), MAQ (DSA-0013), smart-card NT-hash rolling (DSA-0085), " +
+			"replication and reanimation rights on the head (DSA-0014, DSA-0015, DSA-0078)"},
 	{Name: "users", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(sAMAccountType=805306368)", Classes: []string{"user"},
 		Attrs:   accountAttrs,
-		Purpose: "account flags, SPNs, delegation, password age, SID history (DSA-0001…0012, 0017, 0019)"},
+		Purpose: "account flags, SPNs, delegation, password age, SID history, key credentials (DSA-0001…0012, 0017, 0019, 0075, 0083…0086)"},
 	{Name: "computers", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(sAMAccountType=805306369)", Classes: []string{"computer"},
 		Attrs:   append(append([]string{}, accountAttrs...), "operatingSystem", "operatingSystemVersion", "dNSHostName", "ms-DS-CreatorSID", "msDS-GroupMSAMembership"),
-		Purpose: "delegation, RBCD, DCs, machine-account creators, gMSA password readers (DSA-0004…0006, 0013, 0055)"},
+		Purpose: "delegation, RBCD, DCs, machine-account creators, gMSA password readers, member OS support (DSA-0004…0006, 0013, 0055, 0084, 0087)"},
 	{Name: "groups", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(objectClass=group)", Classes: []string{"group"},
 		Attrs:   []string{"objectClass", "sAMAccountName", "objectSid", "objectGUID", "sIDHistory", "member", "groupType", "adminCount", "whenChanged"},
 		Purpose: "Tier-0 membership resolution (catalogue/TIER0.md)"},
@@ -81,7 +87,7 @@ var Plan = []Query{
 		Purpose: "Tier-0 object ACL (DSA-0015)"},
 	{Name: "ds-heuristics", Base: "CN=Directory Service,CN=Windows NT,CN=Services,<config>", Scope: ldapx.ScopeBase, Filter: "(objectClass=*)", Classes: []string{"nTDSService"},
 		Attrs:   []string{"objectClass", "dSHeuristics", "tombstoneLifetime", "whenChanged"},
-		Purpose: "directory-wide switches such as anonymous LDAP operations (DSA-0025)"},
+		Purpose: "directory-wide switches such as anonymous LDAP operations and anonymous NSPI (DSA-0025, DSA-0066, DSA-0077)"},
 	{Name: "dnsadmins-sd", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(&(objectClass=group)(sAMAccountName=DnsAdmins))", SD: true,
 		Attrs:   []string{"objectClass", "sAMAccountName"},
 		Purpose: "who can change DnsAdmins membership (DSA-0059)"},

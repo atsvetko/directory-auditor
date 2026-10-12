@@ -84,3 +84,4 @@ condition_cel: hasattr(obj, "msDS-AllowedToActOnBehalfOfOtherIdentity") && (inta
   == "krbtgt")
 expect:
 - CN=DC01,OU=Domain Controllers,DC=lab,DC=example
+- CN=krbtgt_12345,CN=Users,DC=lab,DC=example

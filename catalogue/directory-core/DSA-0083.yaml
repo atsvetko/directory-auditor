@@ -51,3 +51,8 @@ references:
 notes: >-
   Already collected. lastLogonTimestamp is replicated with up to 14 days of delay, so the check can miss a very
   recent first logon but never reports a logon that did not happen. Interactive and service logons both update it.
+condition_cel: >-
+  attr(obj, "objectSid").startsWith("S-1-5-21-") && sid_rid(attr(obj, "objectSid")) == 500
+  && age_days(obj, "lastLogonTimestamp") >= 0 && age_days(obj, "lastLogonTimestamp") < 30
+expect:
+- CN=Administrator,CN=Users,DC=lab,DC=example

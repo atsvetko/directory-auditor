@@ -53,3 +53,9 @@ references:
 notes: >-
   Already collected (accountAttrs). krbtgt is matched by sAMAccountName as in TIER0.md; RODC krbtgt accounts by the
   krbtgt_ prefix together with msDS-KrbTgtLinkBl. The evidence resolves the SIDs in the descriptor to names.
+evidence_principals: aces_of(obj, "msDS-AllowedToActOnBehalfOfOtherIdentity").filter(a, a.allow).map(a, a.trustee)
+condition_cel: >-
+  hasattr(obj, "msDS-AllowedToActOnBehalfOfOtherIdentity") && (attr(obj, "sAMAccountName").lowerAscii() == "krbtgt"
+  || (attr(obj, "sAMAccountName").lowerAscii().startsWith("krbtgt_") && hasattr(obj, "msDS-KrbTgtLinkBl")))
+expect:
+- CN=krbtgt_12345,CN=Users,DC=lab,DC=example

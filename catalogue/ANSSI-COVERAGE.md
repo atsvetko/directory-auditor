@@ -15,10 +15,10 @@ sources; this page only maps identifiers. A point is **covered** when an entry d
 | 1 | 37 | 28 | 0 | 76% |
 | 2 | 18 | 16 | 0 | 89% |
 | 3 | 17 | 5 | 2 | 41% |
-| 4 | 4 | 1 | 0 | 25% |
-| **All** | **76** | **50** | **2** | **68%** |
+| 4 | 4 | 2 | 0 | 50% |
+| **All** | **76** | **51** | **2** | **70%** |
 
-Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 3 · wave 3 (level-3/4) 15 · wave 4 (AD CS) 6 · wave 5 (DNS) 2.
+Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 3 · wave 3 (level-3/4) 14 · wave 4 (AD CS) 6 · wave 5 (DNS) 2.
 
 ## Control points
 
@@ -98,5 +98,5 @@ Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 3 · wave 3
 | 3 | `vuln_trusts_tgt_deleg` | Inbound trust relationships with delegation | ✅ covered | DSA-0018 |
 | 4 | `vuln_group_loop` | Loops in group memberships | ⬜ planned | wave 3 — cycles in the group membership graph |
 | 4 | `vuln_silo_priv` | Privileged group members not in an authentication silo | ⬜ planned | wave 3 — needs authentication policy silos (msDS-AssignedAuthNPolicySilo) |
-| 4 | `vuln_smartcard_expire_passwords` | Missing password expiration for smart card users | ⬜ planned | wave 3 — SMARTCARD_REQUIRED accounts whose password never expires |
+| 4 | `vuln_smartcard_expire_passwords` | Missing password expiration for smart card users | ✅ covered | DSA-0085 |
 | 4 | `vuln_user_accounts_machineaccountquota` | Unrestricted domain join | ✅ covered | DSA-0013 |

@@ -35,7 +35,6 @@ plan:
 - {id: vuln_sd_failed_sd_read_on_priv,       status: gap,     wave: 3, note: "privileged objects whose security descriptor could not be read"}
 - {id: vuln_group_loop,                      status: gap,     wave: 3, note: "cycles in the group membership graph"}
 - {id: vuln_silo_priv,                       status: collect, wave: 3, needs: "authentication policy silos (msDS-AssignedAuthNPolicySilo)"}
-- {id: vuln_smartcard_expire_passwords,      status: gap,     wave: 3, note: "SMARTCARD_REQUIRED accounts whose password never expires"}
 # --- wave 4: AD CS ------------------------------------------------------------------------------------
 - {id: vuln_adcs_control,                    status: collect, wave: 4, needs: "Public Key Services containers (configuration partition) and their DACLs"}
 - {id: vuln_adcs_template_control,           status: collect, wave: 4, needs: "certificate template objects and their DACLs"}

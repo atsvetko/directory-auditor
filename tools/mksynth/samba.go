@@ -63,6 +63,7 @@ func writeSambaLab(path string, hardened bool) error {
 		policy["minPwdLength"], policy["pwdProperties"], policy["pwdHistoryLength"] = []string{"14"}, []string{"1"}, []string{"24"}
 		policy["maxPwdAge"], policy["lockoutThreshold"], policy["ms-DS-MachineAccountQuota"] = []string{"-36288000000000"}, []string{"10"}, []string{"0"}
 		heur = "0000000"
+		policy["msDS-ExpirePasswordsOnSmartCardOnlyAccounts"] = []string{"TRUE"} // DSA-0085: NT-hash rolling on
 	}
 	add(base, []string{"top", "domain", "domainDNS"}, policy)
 	add("CN=AdminSDHolder,CN=System,"+base, []string{"top", "container"}, map[string][]string{"whenChanged": {"20260101000000.0Z"}})
@@ -88,6 +89,23 @@ func writeSambaLab(path string, hardened bool) error {
 			dn = fmt.Sprintf("CN=%s,CN=Builtin,%s", g.name, base)
 		}
 		add(dn, []string{"top", "group"}, map[string][]string{"sAMAccountName": {g.name}, "objectSid": {g.sid}, "member": {"CN=Administrator,CN=Users," + base}})
+	}
+	if hardened {
+		// Negative controls for group A: Administrator last used 60 d ago (DSA-0083);
+		// a smart-card-only account whose hash rolled 20 d ago (DSA-0085); the
+		// forest-root and DC-reach groups present but empty (DSA-0080, DSA-0081).
+		for i := range s.Objects {
+			if s.Objects[i].DN == "CN=Administrator,CN=Users,"+base {
+				s.Objects[i].Attrs["lastLogonTimestamp"] = []string{ft(60)}
+			}
+		}
+		add("CN=sc.user,CN=Users,"+base, user, map[string][]string{
+			"sAMAccountName": {"sc.user"}, "userAccountControl": {"262656"}, "objectSid": {dom + "-1106"}, "primaryGroupID": {"513"},
+			"pwdLastSet": {ft(20)}, "sAMAccountType": {"805306368"}})
+		for _, g := range []struct{ dn, sid string }{{"CN=Schema Admins,CN=Users," + base, dom + "-518"},
+			{"CN=Distributed COM Users,CN=Builtin," + base, "S-1-5-32-562"}, {"CN=Performance Log Users,CN=Builtin," + base, "S-1-5-32-559"}} {
+			add(g.dn, []string{"top", "group"}, map[string][]string{"objectSid": {g.sid}})
+		}
 	}
 	add("CN=DC1,OU=Domain Controllers,"+base, append(append([]string{}, user...), "computer"), map[string][]string{
 		"sAMAccountName": {"DC1$"}, "objectSid": {dom + "-1000"}, "primaryGroupID": {"516"}, "userAccountControl": {"532480"}, "sAMAccountType": {"805306369"},

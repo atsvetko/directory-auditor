@@ -39,12 +39,14 @@ func TestSyntheticLab(t *testing.T) {
 		// accounts (Domain Controllers, 516) and hidden.da (Domain Admins, 512).
 		"CN=OLDDC" + dcs, "CN=STALEDC" + dcs, "CN=BADDC" + dcs, "CN=hidden.da" + base,
 		// Wave 2a: a member server nested in Tier0 Ops (DSA-0047).
-		"CN=SQL01,OU=Servers,DC=lab,DC=example"} {
+		"CN=SQL01,OU=Servers,DC=lab,DC=example",
+		// Group A: an RODC krbtgt account (DSA-0086), Tier 0 by name.
+		"CN=krbtgt_12345" + base} {
 		if !dns(0)[want] {
 			t.Errorf("T-1: %s not Tier 0; got %v", want, dns(0))
 		}
 	}
-	if len(dns(0)) != 9 {
+	if len(dns(0)) != 10 {
 		t.Errorf("T-1: unexpected Tier-0 users %v", dns(0))
 	}
 	if d := dns(1); len(d) != 1 || !d["CN=old.admin"+base] {

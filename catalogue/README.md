@@ -27,11 +27,12 @@ Implemented entries carry `condition_cel` (the pack condition, evaluated by the 
 the pack is written. Packs are still written only from entries with `verified_by` filled.
 
 Status: 89 directory-core, 2 DNS, 23 FreeIPA and 21 Samba entries, all `draft` (awaiting human
-verification). 118 of them carry `condition_cel` and are exercised by `go test ./internal/catalogue`
+verification). 129 of them carry `condition_cel` and are exercised by `go test ./internal/catalogue`
 against `testdata/synthetic-*.json.zst` (`synthetic-samba-hardened` is the negative control on
 which no entry may fire) and, in CI, against a live Samba AD DC on every push and a live FreeIPA
-server nightly (`testdata/lab/*-expect.yaml`, `tools/lab/`). The 17 group-A entries (DSA-0075…0089,
-DSA-0301, DSA-0302) are specs only: committed before any implementation, as clean-room rule 5 requires.
+server nightly (`testdata/lab/*-expect.yaml`, `tools/lab/`). Group A (DSA-0075…0089, DSA-0301,
+DSA-0302) was committed as specs before any implementation, as clean-room rule 5 requires; 11 of its 17
+entries are now implemented, and 6 remain specs only (DSA-0076, 0079, 0088, 0089, DSA-0301, DSA-0302).
 
 Every entry with `condition_cel` is also built into the binary (`embed.go` in this directory,
 `go:embed */*.yaml`) and evaluated as a **preview check** — unsigned, labelled in every report,

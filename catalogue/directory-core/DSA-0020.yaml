@@ -70,5 +70,4 @@ notes: >-
   whole domain this entry over-reports.
 condition_cel: intattr(obj, "lockoutThreshold") == 0
 expect:
-- DC=lab,DC=example
 - DC=samba,DC=example

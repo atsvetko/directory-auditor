@@ -52,3 +52,6 @@ references:
 notes: >-
   Groups are already collected. The groups are matched by SID, never by name, so localised domains are covered.
   Severity stays medium: the groups grant reach, not administrative rights by themselves.
+condition_cel: attr(obj, "objectSid") in ["S-1-5-32-562", "S-1-5-32-559"] && size(attrs(obj, "member")) > 0
+expect:
+- CN=Distributed COM Users,CN=Builtin,DC=lab,DC=example

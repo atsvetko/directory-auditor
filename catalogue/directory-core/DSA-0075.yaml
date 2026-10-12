@@ -63,3 +63,8 @@ notes: >-
   must report "not collected" for the affected objects rather than pass. Domain controllers are excluded because
   Windows Hello key-trust deployments register keys on DC computer objects legitimately; write access to the
   attribute on any Tier-0 object is already a DSA-0015 finding.
+condition_cel: >-
+  tier0(obj) && !flags(obj, "userAccountControl", 8192) && !flags(obj, "userAccountControl", 67108864)
+  && size(attrs(obj, "msDS-KeyCredentialLink")) > 0
+expect:
+- CN=Administrator,CN=Users,DC=lab,DC=example

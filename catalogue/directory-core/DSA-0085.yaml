@@ -44,6 +44,8 @@ remediation:
 attack:
 - id: T1550.002
   name: 'Use Alternate Authentication Material: Pass the Hash'
+anssi:
+- vuln_smartcard_expire_passwords
 engine: declarative
 query_sketch:
   base: default
@@ -61,3 +63,12 @@ notes: >-
   confirm the attribute name and its location against the Windows Server 2016 schema documentation. ANSSI point
   vuln_smartcard_expire_passwords is planned (status gap, wave 3) — tag it when implemented. If the extensible
   match filter does not parse in the engine, filter on userAccountControl in the condition instead.
+condition_cel: >-
+  flags(obj, "userAccountControl", 262144) && !flags(obj, "userAccountControl", 2) && age_days(obj, "pwdLastSet") > 60
+  && (objattr(obj.base, "msDS-ExpirePasswordsOnSmartCardOnlyAccounts").upperAscii() != "TRUE"
+  || intval(objattr(obj.base, "msDS-Behavior-Version")) < 7
+  || flags(obj, "userAccountControl", 65536)
+  || (!(objattr(obj.base, "maxPwdAge") in ["", "0", "-9223372036854775808"])
+  && age_days(obj, "pwdLastSet") > -intval(objattr(obj.base, "maxPwdAge")) / 864000000000 + 1))
+expect:
+- CN=sc.admin,CN=Users,DC=lab,DC=example
