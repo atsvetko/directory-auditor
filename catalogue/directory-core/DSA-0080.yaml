@@ -1,0 +1,51 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0080
+title:
+  en: Schema Admins group is not empty
+  ru: Группа Schema Admins не пуста
+domain: directory-core
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: The Schema Admins group of the forest root domain (RID 518)
+attributes:
+- member
+- objectSid
+condition: >-
+  The Schema Admins group has one or more direct members.
+threshold: one or more members
+rationale: >-
+  Schema Admins can change the forest schema, a change that replicates everywhere and cannot be undone. Microsoft
+  guidance is to keep the group empty and add a member only for the duration of a planned schema change. A
+  standing member is a forest-wide privilege that is rarely watched, which makes it a convenient place for an
+  attacker to keep access.
+remediation:
+  en: >-
+    Remove all members. Add a Tier-0 administrative account only when a schema update is scheduled and remove it
+    as soon as the update has replicated. Monitor membership changes of the group (event 4728).
+  ru: >-
+    Исключите всех участников. Добавляйте административную учётную запись нулевого уровня только на время
+    запланированного обновления схемы и исключайте её сразу после репликации изменений. Контролируйте изменения
+    состава группы (событие 4728).
+attack:
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+- id: T1484
+  name: Domain or Tenant Policy Modification
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (objectClass=group)
+references:
+- title: Microsoft Services Hub — Remove all members from the Schema Admins group unless you are actively changing the schema
+  url: https://learn.microsoft.com/en-us/services-hub/unified/health/remediation-steps-ad/remove-all-members-from-the-schema-admins-group-unless-you-are-actively-changing-the-schema
+- title: Microsoft Learn — Active Directory security groups (Schema Admins)
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups
+notes: >-
+  Groups and their members are already collected. In a child domain the group does not exist; the check runs
+  where the group with RID 518 is found. The finding lists the members.

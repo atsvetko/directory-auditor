@@ -1,0 +1,65 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0075
+title:
+  en: Key credentials (shadow credentials) registered on Tier-0 user accounts
+  ru: Ключевые учётные данные (теневые учётные данные) у учётных записей пользователей нулевого уровня
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: User accounts that are Tier 0 (catalogue/TIER0.md), excluding domain controller computer accounts
+attributes:
+- msDS-KeyCredentialLink
+- objectSid
+- userAccountControl
+- sAMAccountName
+condition: >-
+  A Tier-0 user account has one or more values in msDS-KeyCredentialLink. Each value is a public key that the KDC
+  accepts for PKINIT logon as that account, without a certificate issued by any CA.
+threshold: any value
+rationale: >-
+  msDS-KeyCredentialLink holds the raw public keys that Windows Hello for Business key trust and FIDO-style device
+  registration bind to an account. Whoever holds the matching private key can request a TGT for the account and,
+  through the PAC, recover its NT hash. An attacker with write access to the attribute adds a key of their own and
+  gets a persistent, password-independent way in that survives password resets. Administrative accounts of
+  Tier 0 should not use Windows Hello key trust on ordinary workstations, so any key on them is either an
+  undocumented design decision or a planted backdoor.
+remediation:
+  en: >-
+    For each value, find the device or user it belongs to (the DeviceId inside the key credential matches a
+    device object in Entra ID or the registered-devices container). Remove every value that is not tied to a known,
+    hardened privileged-access workstation, and review who can write msDS-KeyCredentialLink on Tier-0 objects
+    (DSA-0015). Enable auditing of changes to the attribute (event 5136) on the domain controllers.
+  ru: >-
+    Для каждого значения установите, какому устройству или пользователю оно принадлежит (идентификатор устройства
+    в ключевых учётных данных совпадает с объектом устройства в Entra ID или в контейнере зарегистрированных
+    устройств). Удалите все значения, не связанные с известной защищённой рабочей станцией привилегированного
+    доступа, и проверьте, кто может изменять атрибут msDS-KeyCredentialLink у объектов нулевого уровня (DSA-0015).
+    Включите аудит изменений этого атрибута (событие 5136) на контроллерах домена.
+attack:
+- id: T1556
+  name: Modify Authentication Process
+- id: T1098
+  name: Account Manipulation
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (&(sAMAccountType=805306368)(msDS-KeyCredentialLink=*))
+references:
+- title: Microsoft Open Specifications — MS-DVRJ 2.3.4 ms-DS-Key-Credential-Link
+  url: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dvrj/187a3ba8-a162-4f48-bf3d-8d4bccf0ea94
+- title: SpecterOps — Shadow Credentials, abusing key trust account mapping for account takeover (June 2021)
+  url: https://specterops.io/blog/2021/06/17/shadow-credentials-abusing-key-trust-account-mapping-for-account-takeover/
+- title: MITRE ATT&CK — T1556 Modify Authentication Process
+  url: https://attack.mitre.org/techniques/T1556/
+notes: >-
+  Collector: msDS-KeyCredentialLink must be added to the account attribute list. Open point for verification: by
+  default the attribute may not be readable by an ordinary user; if the scan account cannot read it, the check
+  must report "not collected" for the affected objects rather than pass. Domain controllers are excluded because
+  Windows Hello key-trust deployments register keys on DC computer objects legitimately; write access to the
+  attribute on any Tier-0 object is already a DSA-0015 finding.

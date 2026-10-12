@@ -1,0 +1,52 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0078
+title:
+  en: Right to reanimate deleted objects granted outside Tier 0
+  ru: Право восстанавливать удалённые объекты предоставлено вне нулевого уровня
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Domain naming-context head (and the configuration and schema heads when collected)
+attributes:
+- nTSecurityDescriptor (DACL)
+condition: >-
+  An allow ACE on the naming-context head grants a principal outside Tier 0 the Reanimate-Tombstones control
+  access right (rightsGuid 45ec5156-db7e-47bb-b53f-dbeb2d03c40f), all control access rights, or GENERIC_ALL.
+threshold: any occurrence
+rationale: >-
+  Reanimate-Tombstones lets its holder bring back deleted and recycled objects. With the AD Recycle Bin enabled a
+  restored object returns with its attributes, including group memberships, SID and SID history. A non-privileged
+  holder can restore a deleted former administrator account whose password they know, or a privileged group
+  they used to control, and so regain privileges that were deliberately removed.
+remediation:
+  en: >-
+    Remove the ACE from the naming-context head. Delegate object restoration only to Tier-0 administrators, and
+    restore privileged objects through a documented procedure that resets their passwords afterwards.
+  ru: >-
+    Удалите запись ACE из списка доступа корня контекста именования. Делегируйте восстановление объектов только
+    администраторам нулевого уровня, а привилегированные объекты восстанавливайте по документированной процедуре
+    со сменой пароля после восстановления.
+attack:
+- id: T1098
+  name: Account Manipulation
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+engine: declarative
+query_sketch:
+  base: default
+  scope: base
+  filter: (objectClass=domainDNS)
+references:
+- title: Microsoft Learn — Reanimate-Tombstones extended right
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/r-reanimate-tombstones
+- title: Microsoft Learn — Appendix A, additional Active Directory Recycle Bin tasks (delegating restore)
+  url: https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-r2-and-2008/dd392260(v=ws.10)
+notes: >-
+  The domain-head descriptor is already collected (query domain-head). Holders of DS-Replication-Get-Changes-All
+  and other Tier-0 principals are excluded the same way as in DSA-0014. The right is checked by GUID, never by
+  display name.

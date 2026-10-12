@@ -1,0 +1,57 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0079
+title:
+  en: Non-default write permissions on the schema partition
+  ru: Нестандартные права на запись в раздел схемы
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Schema naming-context head (CN=Schema,CN=Configuration,<forest root>)
+attributes:
+- nTSecurityDescriptor (DACL)
+condition: >-
+  An allow ACE on the schema head grants a principal outside Tier 0 (Schema Admins, Enterprise Admins,
+  Administrators, SYSTEM and Enterprise Domain Controllers are Tier 0) any of GENERIC_ALL, GENERIC_WRITE,
+  WRITE_DAC, WRITE_OWNER, CREATE_CHILD, write to all properties, or the control access rights Change-Schema-Master
+  (e12b56b6-0a95-11d1-adbb-00c04fd8d5cd) or Update-Schema-Cache (be2bb760-7f46-11d2-b9ad-00c04f79f805).
+threshold: any occurrence
+rationale: >-
+  The schema defines every class and attribute in the forest, including their default security descriptors and
+  confidentiality flags. Whoever can extend or change it can add an attribute that grants them rights on every
+  new object, strip the confidential flag from LAPS attributes, or plant a class default ACL that persists through
+  every future object creation. Schema changes replicate to the whole forest and cannot be deleted, only
+  deactivated.
+remediation:
+  en: >-
+    Remove the ACE. Schema changes are made by a member of Schema Admins added just for the change and removed
+    right after (DSA-0080); no other principal needs write access to the schema.
+  ru: >-
+    Удалите запись ACE. Схему изменяет участник группы Schema Admins, добавленный только на время изменения и
+    исключённый сразу после него (DSA-0080); остальным субъектам права на запись в схему не нужны.
+attack:
+- id: T1484
+  name: Domain or Tenant Policy Modification
+- id: T1098
+  name: Account Manipulation
+engine: declarative
+query_sketch:
+  base: <schema>
+  scope: base
+  filter: (objectClass=dMD)
+references:
+- title: Microsoft Learn — Change-Schema-Master extended right
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/r-change-schema-master
+- title: Microsoft Learn — Update-Schema-Cache extended right
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/r-update-schema-cache
+- title: ANSSI / CERT-FR — Active Directory control points (vuln_permissions_schema)
+  url: https://www.cert.ssi.gouv.fr/uploads/ad_checklist.html
+notes: >-
+  Collector: the schema-head query reads objectVersion only; it needs the descriptor too (SD: true). Explicit
+  ACEs on individual classSchema and attributeSchema objects are out of scope for this entry and planned with the
+  AD CS / schema wave. ANSSI point vuln_permissions_schema is planned (status collect, wave 4) — tag it when
+  implemented. Open point: confirm the two rights GUIDs against the linked pages.

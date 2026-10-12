@@ -1,0 +1,53 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0077
+title:
+  en: Anonymous access to the address book (NSPI) is allowed (dSHeuristics fAllowAnonNSPI)
+  ru: Разрешён анонимный доступ к адресной книге по протоколу NSPI (dSHeuristics fAllowAnonNSPI)
+domain: directory-core
+providers: [ad]   # NSPI is the Exchange address-book interface of Windows domain controllers; Samba does not serve it
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: CN=Directory Service,CN=Windows NT,CN=Services in the configuration partition
+attributes:
+- dSHeuristics
+condition: >-
+  dSHeuristics has at least 8 characters and its 8th character (fAllowAnonNSPI) is not "0".
+threshold: any non-zero value
+rationale: >-
+  The Name Service Provider Interface is the address-book RPC interface of a domain controller. With
+  fAllowAnonNSPI set, an unauthenticated client can browse it and enumerate users, groups and their attributes —
+  the same information anonymous LDAP would leak, through a channel that LDAP hardening (DSA-0025) does not close.
+  The switch is off by default and is turned on mostly for legacy mail clients.
+remediation:
+  en: >-
+    Set the 8th character of dSHeuristics back to 0 (keep the other characters, including the 10th-character
+    check digit rule when the string is 10 characters or longer). Confirm first that no legacy client still needs
+    anonymous address-book access.
+  ru: >-
+    Верните 8-й символ атрибута dSHeuristics в значение 0, сохранив остальные символы (при длине строки 10 символов
+    и более соблюдайте правило контрольного 10-го символа). Предварительно убедитесь, что анонимный доступ к
+    адресной книге не нужен ни одному устаревшему клиенту.
+attack:
+- id: T1087.002
+  name: 'Account Discovery: Domain Account'
+engine: declarative
+query_sketch:
+  base: CN=Directory Service,CN=Windows NT,CN=Services,<config>
+  scope: base
+  filter: (objectClass=nTDSService)
+references:
+- title: Microsoft Open Specifications — MS-ADTS 6.1.1.2.4.1.2 dSHeuristics
+  url: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/e5899be4-862e-496f-9a38-33950617d2c5
+- title: Microsoft Learn — DS-Heuristics attribute
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-dsheuristics
+- title: ADSecurity.org — dSHeuristics and anonymous access
+  url: https://adsecurity.org/?p=5044
+notes: >-
+  The attribute is already collected (query ds-heuristics, used by DSA-0025 and DSA-0066). Open point for
+  verification: confirm against MS-ADTS that fAllowAnonNSPI is the 8th character and that any value other than
+  "0" enables it.

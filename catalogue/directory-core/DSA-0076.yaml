@@ -1,0 +1,61 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0076
+title:
+  en: Tier-0 objects owned by a principal outside Tier 0
+  ru: Владелец объекта нулевого уровня находится вне нулевого уровня
+domain: directory-core
+tier: 0
+severity: high
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  Tier-0 objects listed in catalogue/TIER0.md — domain naming-context head, AdminSDHolder, OU=Domain Controllers,
+  domain controller computer accounts, Tier-0 groups and their members, krbtgt, GPOs linked to Tier-0 scope
+attributes:
+- nTSecurityDescriptor (owner SID)
+- objectSid
+condition: >-
+  The owner SID in the object's security descriptor is not a Tier-0 principal (Domain Admins, Enterprise Admins,
+  Administrators, SYSTEM, Domain Controllers, Enterprise Domain Controllers or another member of TIER0.md).
+threshold: any occurrence
+rationale: >-
+  The owner of an object is implicitly allowed to read and rewrite its DACL, whatever the DACL itself says, unless
+  an OWNER RIGHTS (S-1-3-4) entry restricts that. A non-privileged owner of a Tier-0 object can therefore grant
+  itself full control at any time, and the path is invisible to a review that looks at the DACL alone. Such
+  owners usually appear when an account is created by a delegated helpdesk account and later added to a
+  privileged group, or when a GPO is created by a non-admin and linked to the domain.
+remediation:
+  en: >-
+    Set the owner of each reported object to Domain Admins (or Enterprise Admins for forest-wide objects), then
+    review the DACL for entries the former owner may have added. Create privileged accounts and Tier-0 GPOs only
+    from Tier-0 administrative accounts.
+  ru: >-
+    Назначьте владельцем каждого найденного объекта группу Domain Admins (для объектов уровня леса — Enterprise
+    Admins), затем проверьте DACL на записи, которые мог добавить прежний владелец. Создавайте привилегированные
+    учётные записи и групповые политики нулевого уровня только из административных учётных записей нулевого
+    уровня.
+attack:
+- id: T1098
+  name: Account Manipulation
+- id: T1484
+  name: Domain or Tenant Policy Modification
+engine: complex:tier0-owner
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (adminCount=1)
+references:
+- title: Microsoft Learn — Security descriptors (owner and DACL)
+  url: https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptors
+- title: Microsoft Learn — Well-known SIDs (OWNER RIGHTS, S-1-3-4)
+  url: https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids
+- title: ANSSI / CERT-FR — Active Directory control points (vuln_owner)
+  url: https://www.cert.ssi.gouv.fr/uploads/ad_checklist.html
+notes: >-
+  Collector: every descriptor read today requests the DACL only; this check needs the owner part as well (SD
+  flags OWNER | DACL), which an ordinary user can read on objects that grant READ_CONTROL. ANSSI point vuln_owner
+  is planned (frameworks/anssi-plan.yaml, status collect) — tag the entry with it and drop the plan line when the
+  check is implemented. An OWNER RIGHTS entry on the object that removes WRITE_DAC lowers the finding to info.
