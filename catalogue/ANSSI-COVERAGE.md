@@ -12,13 +12,13 @@ sources; this page only maps identifiers. A point is **covered** when an entry d
 
 | ANSSI level | Points | Covered | Partial | Covered + partial |
 |---|---:|---:|---:|---:|
-| 1 | 37 | 28 | 0 | 76% |
-| 2 | 18 | 16 | 0 | 89% |
-| 3 | 17 | 5 | 2 | 41% |
+| 1 | 37 | 28 | 1 | 78% |
+| 2 | 18 | 17 | 0 | 94% |
+| 3 | 17 | 9 | 3 | 71% |
 | 4 | 4 | 2 | 0 | 50% |
-| **All** | **76** | **51** | **2** | **70%** |
+| **All** | **76** | **56** | **4** | **79%** |
 
-Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 3 · wave 3 (level-3/4) 14 · wave 4 (AD CS) 6 · wave 5 (DNS) 2.
+Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 2 · wave 3 (level-3/4) 10 · wave 4 (AD CS) 6 · wave 5 (DNS) 2.
 
 ## Control points
 
@@ -53,7 +53,7 @@ Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 3 · wave 3
 | 1 | `vuln_permissions_gpo_priv` | Dangerous ACLs expose GPOs applied to privileged group members (attack path) | ✅ covered | DSA-0072 |
 | 1 | `vuln_permissions_msdns` | Dangerous ACLs expose MicrosoftDNS server objects (attack path) | ⬜ planned | wave 5 — needs MicrosoftDNS server and zone objects and their DACLs |
 | 1,2 | `vuln_permissions_naming_context` | Dangerous ACLs expose a naming context root (attack path) | ✅ covered | DSA-0014, DSA-0015, DSA-0049 |
-| 1,2 | `vuln_permissions_schema` | Dangerous ACLs expose schema objects (attack path) | ⬜ planned | wave 4 — needs schema partition objects and their DACLs |
+| 1,2 | `vuln_permissions_schema` | Dangerous ACLs expose schema objects (attack path) | 🟡 partial | DSA-0079 — wave 4: DSA-0079 covers the schema head; explicit ACEs on classSchema and attributeSchema objects are still to be read |
 | 1 | `vuln_primary_group_id_1000` | Accounts with PrimaryGroupID lower than 1000 | ✅ covered | DSA-0034 |
 | 1,2 | `vuln_privileged_members` | Large privileged group member count | ✅ covered | DSA-0035 |
 | 1,2 | `vuln_privileged_members_perm` | Dangerous ACLs expose members of privileged groups (attack path) | ✅ covered | DSA-0015 |
@@ -75,24 +75,24 @@ Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 3 · wave 3
 | 2 | `vuln_permissions_gpo_container_priv` | Dangerous ACLs expose privileged object containers (attack path) | ✅ covered | DSA-0058 |
 | 2 | `vuln_privileged_members_no_admincount` | Privileged groups members having an adminCount attribute which is null or 0 | ✅ covered | DSA-0040, DSA-0221 |
 | 2 | `vuln_privileged_members_password` | Privileged group members with weak password policy | ✅ covered | DSA-0071 |
-| 2 | `vuln_rodc_priv_revealed` | Privileged users revealed on RODC | ⬜ planned | wave 2 — needs RODC revealed lists (msDS-RevealedList) |
+| 2 | `vuln_rodc_priv_revealed` | Privileged users revealed on RODC | ✅ covered | DSA-0089 |
 | 2 | `vuln_sidhistory_dangerous` | Accounts or groups with unexpected SID history | ✅ covered | DSA-0017 |
 | 2 | `vuln_sysvol_ntfrs` | SYSVOL replication through NTFRS | ✅ covered | DSA-0070 |
 | 2 | `vuln_trusts_accounts` | Trust account passwords unchanged for more than a year | ✅ covered | DSA-0065 |
 | 3 | `vuln_compatible_2000_not_default` | Use of the "Pre-Windows 2000 Compatible Access" group | ✅ covered | DSA-0039 |
 | 3 | `vuln_kerberos_properties_encryption` | Service accounts supported encryption algorithms | 🟡 partial | DSA-0003, DSA-0012 — wave 3: DSA-0003/0012 cover weak types; ANSSI checks service accounts' declared types |
-| 3 | `vuln_owner` | Incorrect object owners | ⬜ planned | wave 3 — needs owner part of security descriptors (SD_FLAGS owner) |
+| 3 | `vuln_owner` | Incorrect object owners | ✅ covered | DSA-0076 |
 | 3 | `vuln_password_change_inactive_servers` | Inactive servers | ⬜ planned | wave 3 — server accounts with no recent logon |
 | 3 | `vuln_password_change_server_no_change_45` | Servers with passwords unchanged for more than 45 days | ⬜ planned | wave 3 — server machine password older than 45 days (stricter level-3 threshold) |
 | 3 | `vuln_primary_group_id_nochange` | Accounts with modified PrimaryGroupID | ✅ covered | DSA-0044 |
 | 3 | `vuln_protected_users` | Privileged accounts outside of the Protected Users group | 🟡 partial | DSA-0007 — wave 3: DSA-0007 covers delegation protection; ANSSI checks Protected Users membership itself |
 | 3 | `vuln_reversible_password_priv_namingcontext` | [BETA] Passwords stored in cleartext because of a configuration at the naming context root | ⬜ planned | wave 3 — domain pwdProperties DOMAIN_PASSWORD_STORE_CLEARTEXT |
 | 3 | `vuln_reversible_password_priv_uac` | Privileged accounts with passwords stored using reversible encryption | ✅ covered | DSA-0011 |
-| 3 | `vuln_rodc_allowed_group` | Dangerous configuration of replication groups for read-only domain controllers (RODCs) (allow) | ⬜ planned | wave 3 — needs Allowed RODC Password Replication Group membership |
-| 3 | `vuln_rodc_denied_group` | Dangerous configuration of replication groups for read-only domain controllers (RODCs) (denied) | ⬜ planned | wave 3 — needs Denied RODC Password Replication Group membership |
-| 3 | `vuln_rodc_never_reveal` | Dangerous configuration of read-only domain controllers (RODC) (neverReveal) | ⬜ planned | wave 3 — needs RODC password replication policy attributes |
+| 3 | `vuln_rodc_allowed_group` | Dangerous configuration of replication groups for read-only domain controllers (RODCs) (allow) | ✅ covered | DSA-0089 |
+| 3 | `vuln_rodc_denied_group` | Dangerous configuration of replication groups for read-only domain controllers (RODCs) (denied) | ✅ covered | DSA-0089 |
+| 3 | `vuln_rodc_never_reveal` | Dangerous configuration of read-only domain controllers (RODC) (neverReveal) | 🟡 partial | DSA-0089 — wave 3: DSA-0089 checks the Denied RODC group is on each RODC's never-reveal list; the built-in groups that list holds by default are not checked yet |
 | 3 | `vuln_rodc_orphan_krbtgt` | Orphan RODC krbtgt accounts | ⬜ planned | wave 3 — needs krbtgt_NNNNN accounts and their RODC links |
-| 3 | `vuln_rodc_reveal` | Dangerous configuration of read-only domain controllers (RODC) (reveal) | ⬜ planned | wave 3 — needs RODC password replication policy attributes |
+| 3 | `vuln_rodc_reveal` | Dangerous configuration of read-only domain controllers (RODC) (reveal) | ✅ covered | DSA-0089 |
 | 3 | `vuln_sd_failed_sd_read_on_priv` | Critical information missing for privileged accounts | ⬜ planned | wave 3 — privileged objects whose security descriptor could not be read |
 | 3 | `vuln_sidhistory_present` | Accounts or groups with SID history set | ✅ covered | DSA-0017 |
 | 3 | `vuln_trusts_tgt_deleg` | Inbound trust relationships with delegation | ✅ covered | DSA-0018 |

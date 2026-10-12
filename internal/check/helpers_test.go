@@ -201,3 +201,52 @@ func TestResolvePrincipal(t *testing.T) {
 		t.Errorf("unknown should pass through: %q", got)
 	}
 }
+
+// TestOwnerAndMembershipHelpers covers the helpers added for DSA-0076 and
+// DSA-0089: sd_owner on descriptors with and without an owner part (snapshots
+// collected DACL-only before owners were read), dn_of on DN-Binary/DN-String
+// values, and has_tier0_member through nesting and primaryGroupID.
+func TestOwnerAndMembershipHelpers(t *testing.T) {
+	dom := "S-1-5-21-1-2-3"
+	base := "DC=x,DC=test"
+	withOwner := func(owner []byte) string {
+		raw, _ := base64.StdEncoding.DecodeString(sdB64(false))
+		binary.LittleEndian.PutUint32(raw[4:], uint32(len(raw)))
+		return base64.StdEncoding.EncodeToString(append(raw, owner...))
+	}
+	obj := func(dn string, attrs map[string][]string) snapshot.Object {
+		return snapshot.Object{DN: dn, Class: []string{"top", "group"}, Attrs: attrs}
+	}
+	snap := &snapshot.Snapshot{Schema: snapshot.SchemaVersion, Collected: time.Now(), Meta: snapshot.Meta{Provider: "ad", BaseDN: base, DomainSID: dom},
+		Objects: []snapshot.Object{
+			obj("CN=Domain Admins,"+base, map[string][]string{"objectSid": {dom + "-512"}}),
+			obj("CN=owned,"+base, map[string][]string{"objectSid": {dom + "-2000"}, "nTSecurityDescriptor": {withOwner(tsid(21, 1, 2, 3, 1105))}}),
+			obj("CN=dacl-only,"+base, map[string][]string{"objectSid": {dom + "-2001"}, "nTSecurityDescriptor": {sdB64(false)}}),
+			obj("CN=outer,"+base, map[string][]string{"objectSid": {dom + "-2002"}, "member": {"CN=inner," + base}}),
+			obj("CN=inner,"+base, map[string][]string{"objectSid": {dom + "-2003"}}),
+			{DN: "CN=hidden,CN=Users," + base, Attrs: map[string][]string{"objectSid": {dom + "-2004"}, "primaryGroupID": {"512"}}},
+			{DN: "CN=user,CN=Users," + base, Attrs: map[string][]string{"objectSid": {dom + "-2005"}, "primaryGroupID": {"2003"}}},
+			obj("CN=plain,"+base, map[string][]string{"objectSid": {dom + "-2006"}, "member": {"CN=user,CN=Users," + base}}),
+		}}
+	cases := map[string]string{
+		"owner":      `obj.dn.startsWith("CN=owned,") && sd_owner(obj) == "S-1-5-21-1-2-3-1105"`,
+		"no-owner":   `obj.dn.startsWith("CN=dacl-only,") && sd_owner(obj) == "" && sd_readable(obj)`,
+		"dn-binary":  `obj.dn.startsWith("CN=owned,") && dn_of("B:4:00FF:CN=a,DC=x") == "CN=a,DC=x" && dn_of("S:3:a:b:CN=b,DC=x") == "CN=b,DC=x" && dn_of("CN=c,DC=x") == "CN=c,DC=x"`,
+		"parent":     `obj.dn.startsWith("CN=owned,") && parent_dn("CN=NTDS Settings,CN=a\\,b,DC=x") == "CN=a\\,b,DC=x"`,
+		"nested-pg":  `obj.dn.startsWith("CN=outer,") && has_tier0_member(obj.dn) && member_sids(obj) == ["S-1-5-21-1-2-3-2003"]`,
+		"not-tier0":  `obj.dn.startsWith("CN=plain,") && !has_tier0_member(obj.dn)`,
+		"dn_sid-fsp": `obj.dn.startsWith("CN=owned,") && dn_sid("CN=S-1-5-9,CN=ForeignSecurityPrincipals,DC=x") == "S-1-5-9" && dn_sid("CN=nope,DC=x") == ""`,
+	}
+	// inner's primary-group member "hidden" is Tier 0 (primary group 512): outer > inner > hidden.
+	snap.Objects[5].Attrs["primaryGroupID"] = []string{"2003"}
+	snap.Objects[0].Attrs["member"] = []string{"CN=hidden,CN=Users," + base}
+	for name, cond := range cases {
+		res, err := Evaluate(snap, []Pack{{ID: name, Provider: []string{"ad"}, Severity: "info", Query: Query{Filter: "(objectClass=*)"}, Condition: cond, Signed: true}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c := res.Checks[0]; c.Status != "fail" || len(c.Findings) != 1 {
+			t.Errorf("%s: status %s findings %v", name, c.Status, c.Findings)
+		}
+	}
+}

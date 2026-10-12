@@ -141,7 +141,8 @@ func main() {
 		{"Administrators", "S-1-5-32-544", []string{"CN=Domain Admins,CN=Users," + base, "CN=Administrator,CN=Users," + base,
 			"CN=S-1-5-21-9-8-7-1500,CN=ForeignSecurityPrincipals," + base}, ""}, // DSA-0048: a partner-forest principal in Administrators
 		{"Domain Admins", dom + "-512", []string{"CN=Tier0 Ops,OU=Groups," + base},
-			sd(true, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""}, ace{dom + "-1201", 0x00040000, ""})},
+			// negative DSA-0076: owned by Domain Admins
+			sdOwned(dom+"-512", true, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""}, ace{dom + "-1201", 0x00040000, ""})},
 		{"Protected Users", dom + "-525", nil, ""},
 		{"Tier0 Ops", dom + "-1200", []string{"CN=svc_backup,CN=Users," + base, "CN=SQL01,OU=Servers," + base}, ""}, // DSA-0047: a member server in a Tier-0 group
 		{"Helpdesk", dom + "-1201", []string{"CN=j.doe,CN=Users," + base}, ""},
@@ -154,6 +155,14 @@ func main() {
 		{"Schema Admins", dom + "-518", []string{"CN=Administrator,CN=Users," + base}, ""},                                            // DSA-0080: standing member
 		{"Distributed COM Users", "S-1-5-32-562", []string{"CN=j.doe,CN=Users," + base}, ""},                                          // DSA-0081: a member
 		{"Performance Log Users", "S-1-5-32-559", nil, ""},                                                                            // negative DSA-0081: empty
+		// DSA-0089: RODC password replication groups. The allowed group holds a Tier-0 account (4); the
+		// denied group has lost Schema Admins (5) — Cert Publishers and Enterprise Admins are not in this
+		// lab, so they are not demanded.
+		{"Read-only Domain Controllers", dom + "-521", nil, ""},
+		{"Allowed RODC Password Replication Group", dom + "-571", []string{"CN=svc_backup,CN=Users," + base}, ""},
+		{"Denied RODC Password Replication Group", dom + "-572", []string{"CN=krbtgt,CN=Users," + base, "CN=Domain Admins,CN=Users," + base,
+			"CN=Domain Controllers,CN=Users," + base, "CN=Group Policy Creator Owners,CN=Users," + base, "CN=Read-only Domain Controllers,CN=Users," + base}, ""},
+		{"Branch Users", dom + "-1160", []string{"CN=j.doe,CN=Users," + base}, ""}, // negative DSA-0089: allowed list without Tier 0
 	}
 	for _, g := range groups {
 		attrs := map[string][]string{"sAMAccountName": {g.name}, "objectSid": {g.sid}, "description": {g.name + " (synthetic)"}}
@@ -226,8 +235,10 @@ func main() {
 	}
 	// DSA-0016: AdminSDHolder with a WriteDacl ACE for Helpdesk
 	// DSA-0050: inheritance left enabled on AdminSDHolder
+	// Negative DSA-0076: owned by j.doe, but an OWNER RIGHTS entry limits the owner to READ_CONTROL.
 	add("CN=AdminSDHolder,CN=System,"+base, []string{"top", "container"}, map[string][]string{
-		"nTSecurityDescriptor": {sd(false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""}, ace{dom + "-1201", 0x00040000, ""})}})
+		"nTSecurityDescriptor": {sdOwned(dom+"-1105", false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""}, ace{dom + "-1201", 0x00040000, ""},
+			ace{"S-1-3-4", 0x00020000, ""})}})
 	// DSA-0018: a forest trust with SID filtering relaxed, and a disabled stale trust
 	add("CN=partner.example,CN=System,"+base, []string{"top", "leaf", "trustedDomain"}, map[string][]string{
 		"trustPartner": {"partner.example"}, "trustDirection": {"3"}, "trustType": {"2"}, "trustAttributes": {"72"}, "securityIdentifier": {"S-1-5-21-9-8-7"}})
@@ -235,7 +246,11 @@ func main() {
 		"trustPartner": {"old.example"}, "trustDirection": {"0"}, "trustType": {"2"}, "trustAttributes": {"4"}, "securityIdentifier": {"S-1-5-21-1-1-1"}})
 	// Wave 2c fixtures.
 	add("CN=Schema,CN=Configuration,"+base, []string{"top", "dMD"}, map[string][]string{ // DSA-0069: schema 2012 R2
-		"objectVersion": {"69"}})
+		"objectVersion": {"69"},
+		"nTSecurityDescriptor": {sd(false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-518", 0x000F01FF, ""},
+			ace{"S-1-5-11", 0x00020094, ""},                                           // negative: Authenticated Users read
+			ace{"S-1-5-11", 0x00000100, "45ec5156-db7e-47bb-b53f-dbeb2d03c40f"},       // negative: an unrelated control right
+			ace{dom + "-1201", 0x00000100, "be2bb760-7f46-11d2-b9ad-00c04f79f805"})}}) // DSA-0079: Helpdesk may Update-Schema-Cache
 	add("CN=DFSR-GlobalSettings,CN=System,"+base, []string{"top", "msDFSR-GlobalSettings"}, map[string][]string{ // DSA-0070: Prepared, FRS still live
 		"msDFSR-Flags": {"16"}})
 	add("CN=WeakAdminPSO,CN=Password Settings Container,CN=System,"+base, []string{"top", "msDS-PasswordSettings"}, map[string][]string{ // DSA-0071
@@ -243,7 +258,7 @@ func main() {
 		"msDS-PSOAppliesTo": {"CN=Domain Admins,CN=Users," + base}})
 	add("CN={31B2F340-016D-11D2-945F-00C04FB984F9},CN=Policies,CN=System,"+base, []string{"top", "container", "groupPolicyContainer"}, map[string][]string{ // DSA-0072
 		"displayName": {"Default Domain Policy"}, "gPCFileSysPath": {"\\\\lab.example\\sysvol\\lab.example\\Policies\\{31B2F340-016D-11D2-945F-00C04FB984F9}"},
-		"nTSecurityDescriptor": {sd(false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""}, ace{dom + "-1201", 0x00040000, ""})}}) // Helpdesk has WriteDacl
+		"nTSecurityDescriptor": {sdOwned(dom+"-1201", false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""}, ace{dom + "-1201", 0x00040000, ""})}}) // Helpdesk has WriteDacl; DSA-0076: and owns it
 
 	// Wave 2b fixtures.
 	msaClass := []string{"top", "person", "organizationalPerson", "user", "computer", "msDS-ManagedServiceAccount"}
@@ -295,6 +310,63 @@ func main() {
 	setAttr(s, "CN=OLDDC,OU=Domain Controllers,"+base, "whenCreated", gt(12))                                                   // negative: a DC
 	setAttr(s, "CN=WS01,CN=Computers,"+base, "whenCreated", gt(12))                                                             // negative: not Tier 0
 	setAttr(s, "CN=DC01,OU=Domain Controllers,"+base, "msDS-KeyCredentialLink", keyCred("CN=DC01,OU=Domain Controllers,"+base)) // negative DSA-0075: DC key trust
+	// DSA-0076: a Tier-0 member server (Tier0 Ops) owned by an ordinary user.
+	setAttr(s, "CN=SQL01,OU=Servers,"+base, "nTSecurityDescriptor", sdOwned(dom+"-1105", false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""}))
+	// Negative DSA-0076: an ordinary user owned by an ordinary user (not Tier 0).
+	setAttr(s, "CN=old.admin,CN=Users,"+base, "nTSecurityDescriptor", sdOwned(dom+"-1105", true, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-1201", 0x000F01FF, ""}))
+
+	// DSA-0088: DC registrations under CN=Sites. Classes as the directory returns them.
+	sites := "CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration," + base
+	server := []string{"top", "server"}
+	ntds := []string{"top", "applicationSettings", "nTDSDSA"}
+	for _, r := range []struct{ name, ref string }{
+		{"DC01", "CN=DC01,OU=Domain Controllers," + base},     // negative: a real DC
+		{"RODC01", "CN=RODC01,OU=Domain Controllers," + base}, // negative: a real RODC
+		{"ROGUE01", "CN=ROGUE01,CN=Computers," + base},        // fires: NTDS Settings for an ordinary computer
+		{"GHOST", ""}, // fires: NTDS Settings under a server with no serverReference
+		{"CHILDDC", "CN=CHILDDC,OU=Domain Controllers,DC=child," + base}, // negative: computer in another domain, not judged
+	} {
+		attrs := map[string][]string{"dNSHostName": {strings.ToLower(r.name) + ".lab.example"}, "whenCreated": {gt(2)}}
+		if r.ref != "" {
+			attrs["serverReference"] = []string{r.ref}
+		}
+		add("CN="+r.name+","+sites, server, attrs)
+		add("CN=NTDS Settings,CN="+r.name+","+sites, ntds, map[string][]string{"whenCreated": {gt(2)}})
+	}
+	add("CN=WS01,"+sites, server, map[string][]string{"serverReference": {"CN=WS01,CN=Computers," + base}}) // negative: server object without NTDS Settings
+	add("CN=ROGUE01,CN=Computers,"+base, computer, map[string][]string{                                     // DSA-0088 (1): replication and GC SPNs on an ordinary computer
+		"sAMAccountName": {"ROGUE01$"}, "objectSid": {dom + "-1170"}, "primaryGroupID": {"515"}, "sAMAccountType": {"805306369"},
+		"dNSHostName": {"rogue01.lab.example"}, "operatingSystem": {"Windows Server 2022 Standard"}, "operatingSystemVersion": {"10.0 (20348)"},
+		"userAccountControl": {"4096"}, "pwdLastSet": {ft(5)}, "lastLogonTimestamp": {ft(1)},
+		"servicePrincipalName": {"HOST/rogue01.lab.example", "GC/rogue01.lab.example/lab.example",
+			"E3514235-4B06-11D1-AB04-00C04FC2DCD2/0f6e2a9c-1b4d-4e3a-9c77-5d2e8b1a0c41/lab.example"}})
+	setAttr(s, "CN=DC01,OU=Domain Controllers,"+base, "servicePrincipalName", "GC/dc01.lab.example/lab.example", // negative: a DC
+		"E3514235-4B06-11D1-AB04-00C04FC2DCD2/7a1d9c3e-2f4b-4a6c-8e15-3b9d0c7f2a64/lab.example")
+
+	// DSA-0089: read-only DCs (PARTIAL_SECRETS_ACCOUNT | WORKSTATION_TRUST_ACCOUNT, primary group 521).
+	allowed, denied := "CN=Allowed RODC Password Replication Group,CN=Users,"+base, "CN=Denied RODC Password Replication Group,CN=Users,"+base
+	branch := "CN=Branch Users,CN=Users," + base
+	for _, r := range []struct {
+		name                    string
+		reveal, never, revealed []string
+	}{
+		{"RODC01", []string{allowed, "CN=Tier0 Ops,OU=Groups," + base}, []string{denied, "CN=Administrators,CN=Builtin," + base}, nil},   // (1) Tier 0 directly allowed
+		{"RODC02", []string{branch}, []string{"CN=Administrators,CN=Builtin," + base}, nil},                                              // (2) denied group dropped
+		{"RODC03", []string{branch}, []string{denied}, []string{"S:4:0001:CN=svc_backup,CN=Users," + base, "CN=j.doe,CN=Users," + base}}, // (3) a Tier-0 password cached
+		{"RODC04", []string{branch}, []string{denied}, []string{"CN=j.doe,CN=Users," + base}},                                            // negative: clean policy
+		{"RODC05", nil, nil, nil}, // negative: policy not collected (older snapshot / no rights)
+	} {
+		attrs := map[string][]string{"sAMAccountName": {r.name + "$"}, "objectSid": {dom + "-" + strconv.Itoa(1180+int(r.name[5]-'0'))}, "primaryGroupID": {"521"},
+			"sAMAccountType": {"805306369"}, "dNSHostName": {strings.ToLower(r.name) + ".lab.example"}, "operatingSystem": {"Windows Server 2022 Datacenter"},
+			"operatingSystemVersion": {"10.0 (20348)"}, "userAccountControl": {"67112960"}, "pwdLastSet": {ft(5)}, "lastLogonTimestamp": {ft(1)},
+			"servicePrincipalName": {"E3514235-4B06-11D1-AB04-00C04FC2DCD2/" + strings.ToLower(r.name) + "/lab.example"}} // negative DSA-0088: an RODC
+		for k, v := range map[string][]string{"msDS-RevealOnDemandGroup": r.reveal, "msDS-NeverRevealGroup": r.never, "msDS-RevealedList": r.revealed} {
+			if len(v) > 0 {
+				attrs[k] = v
+			}
+		}
+		add("CN="+r.name+",OU=Domain Controllers,"+base, computer, attrs)
+	}
 	s.Skipped = []snapshot.Skipped{{Query: "sysvol", Reason: "tier", Detail: "tier 1 not requested"}}
 
 	for _, path := range []string{*out, "internal/demo/synthetic-lab.json.zst"} {
@@ -332,9 +404,13 @@ type ace struct {
 	guid string // object type GUID (registry form); "" = plain ACE
 }
 
-// sd encodes a minimal self-relative descriptor with allow ACEs — test data
-// only; the product itself has no descriptor encoder.
-func sd(protected bool, aces ...ace) string {
+// sd encodes a minimal self-relative descriptor with allow ACEs and no owner
+// (what a DACL-only read returns) — test data only; the product itself has no
+// descriptor encoder.
+func sd(protected bool, aces ...ace) string { return sdOwned("", protected, aces...) }
+
+// sdOwned is sd with an owner SID (what an OWNER|DACL read returns); "" = none.
+func sdOwned(owner string, protected bool, aces ...ace) string {
 	var acl []byte
 	for _, a := range aces {
 		var body []byte
@@ -363,7 +439,12 @@ func sd(protected bool, aces ...ace) string {
 	h[0] = 1
 	binary.LittleEndian.PutUint16(h[2:], ctl)
 	binary.LittleEndian.PutUint32(h[16:], 20)
-	return base64.StdEncoding.EncodeToString(append(append(h, ah...), acl...))
+	b := append(append(h, ah...), acl...)
+	if owner != "" {
+		binary.LittleEndian.PutUint32(b[4:], uint32(len(b)))
+		b = append(b, sidBytes(owner)...)
+	}
+	return base64.StdEncoding.EncodeToString(b)
 }
 
 func sidBytes(s string) []byte {

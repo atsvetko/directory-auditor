@@ -44,11 +44,11 @@ remediation:
 attack:
 - id: T1207
   name: Rogue Domain Controller
-engine: complex:rogue-dc
+engine: declarative
 query_sketch:
   base: CN=Sites,<config>
   scope: subtree
-  filter: (|(objectClass=server)(objectClass=nTDSDSA))
+  filter: (|(sAMAccountType=805306369)(objectClass=nTDSDSA))
 references:
 - title: MITRE ATT&CK — T1207 Rogue Domain Controller
   url: https://attack.mitre.org/techniques/T1207/
@@ -59,4 +59,22 @@ references:
 notes: >-
   Collector: computer SPNs are already read; server and nTDSDSA objects under CN=Sites must be added (one subtree
   query, readable by any user). Open point: confirm the MS-DRSR page for the replication SPN form. Complex engine
-  because condition (2) joins two object sets.
+  because condition (2) joins two object sets. Implementation notes: the join is expressed declaratively — the
+  pack runs on computer accounts (condition 1) and nTDSDSA objects (condition 2); for an nTDSDSA object it reads
+  serverReference from the parent server object (helper parent_dn) and the flags of the computer it names
+  (objattr), so engine is declarative. Collected by query site-servers. A serverReference to a computer that is not
+  in the snapshot (a DC of another domain of the forest) is not judged; a server object with no nTDSDSA child is
+  not reported. If site-servers could not be read, condition (2) cannot fire and the inventory lists the query
+  as not collected; condition (1) still runs. SPN prefixes are compared case-insensitively.
+condition_cel: >-
+  (attr(obj, "sAMAccountType") == "805306369" && !flags(obj, "userAccountControl", 8192) && !flags(obj,
+  "userAccountControl", 67108864) && attrs(obj, "servicePrincipalName").exists(s, s.lowerAscii().startsWith("gc/")
+  || s.lowerAscii().startsWith("e3514235-4b06-11d1-ab04-00c04fc2dcd2/")))
+  || (obj.class.exists(c, c.lowerAscii() == "ntdsdsa") && objexists(parent_dn(obj.dn))
+  && (objattr(parent_dn(obj.dn), "serverReference") == "" || (objexists(objattr(parent_dn(obj.dn), "serverReference"))
+  && !mask_has(intval(objattr(objattr(parent_dn(obj.dn), "serverReference"), "userAccountControl")), 8192)
+  && !mask_has(intval(objattr(objattr(parent_dn(obj.dn), "serverReference"), "userAccountControl")), 67108864))))
+expect:
+- CN=ROGUE01,CN=Computers,DC=lab,DC=example
+- CN=NTDS Settings,CN=ROGUE01,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=lab,DC=example
+- CN=NTDS Settings,CN=GHOST,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=lab,DC=example

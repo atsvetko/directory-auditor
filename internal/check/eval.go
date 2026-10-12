@@ -249,7 +249,7 @@ func EvaluateWith(snap *snapshot.Snapshot, packs []Pack, opts EvalOptions) (*Res
 	defer func() {
 		currentTier0, currentIndex, currentSIDs, currentBase = nil, nil, nil, ""
 		currentSchemaGUIDs, currentT0Parents, currentHosts, currentDNSDomain = nil, nil, nil, ""
-		currentNames, currentReachers, currentReachPath, currentGPOToTier0 = nil, nil, nil, nil
+		currentNames, currentReachers, currentReachPath, currentGPOToTier0, currentByPrimary = nil, nil, nil, nil, nil
 	}()
 	now := snap.Collected.Unix()
 	inv := Inventory{Objects: len(snap.Objects), Collected: snap.Collected, Identity: snap.Meta.Identity,

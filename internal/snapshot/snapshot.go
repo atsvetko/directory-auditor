@@ -11,7 +11,9 @@
 //   - GUIDs (objectGUID): registry form, lower case
 //   - security descriptors (nTSecurityDescriptor,
 //     msDS-AllowedToActOnBehalfOfOtherIdentity): standard base64 of the
-//     self-relative descriptor, DACL only (collected with SD_FLAGS = DACL)
+//     self-relative descriptor with owner and DACL (collected with SD_FLAGS =
+//     OWNER | DACL; snapshots from earlier builds carry the DACL only and no
+//     owner, which the owner checks treat as "not collected")
 package snapshot
 
 import (

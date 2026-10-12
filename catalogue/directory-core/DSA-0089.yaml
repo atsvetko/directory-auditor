@@ -47,11 +47,17 @@ attack:
   name: OS Credential Dumping
 - id: T1558
   name: Steal or Forge Kerberos Tickets
-engine: complex:rodc-prp
+anssi:
+- vuln_rodc_reveal
+- vuln_rodc_never_reveal
+- vuln_rodc_priv_revealed
+- vuln_rodc_allowed_group
+- vuln_rodc_denied_group
+engine: declarative
 query_sketch:
   base: default
   scope: subtree
-  filter: (&(sAMAccountType=805306369)(userAccountControl:1.2.840.113556.1.4.803:=67108864))
+  filter: (|(&(sAMAccountType=805306369)(userAccountControl:1.2.840.113556.1.4.803:=67108864))(objectClass=group))
 references:
 - title: Microsoft Learn — Password Replication Policy (RODC)
   url: https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-R2-and-2008/cc730883(v=ws.10)
@@ -65,3 +71,34 @@ notes: >-
   reported as not collected and the rest still runs. ANSSI points vuln_rodc_priv_revealed, vuln_rodc_reveal,
   vuln_rodc_never_reveal, vuln_rodc_allowed_group and vuln_rodc_denied_group are planned — tag them when
   implemented. Open point: confirm the default denied-group membership list against the Microsoft page.
+  Implementation notes: conditions (1)–(3) fire on the RODC computer account, (4) and (5) on the Allowed (RID 571)
+  or Denied (RID 572) group, so the sketch filter also takes groups. Membership is resolved through nesting and
+  primaryGroupID (helper has_tier0_member) and by SID (dn_sid, member_sids), so renamed groups still match.
+  msDS-RevealedList values are DN-String/DN-Binary; the DN is extracted with dn_of. (5) checks each default member
+  by RID (krbtgt 502, 512, 516, 517, 518, 519, 520, 521) only when an object with that SID was collected, so the
+  forest-root groups 518/519 are not demanded in a child domain. When an RODC returns no msDS-RevealedList the
+  collector adds a "rodc-revealed-list" not-collected note to the inventory; condition (3) is then unproven, not
+  passed. (2) is evaluated only when the Denied group (RID 572) was collected, and only on an RODC that returned
+  at least one PRP attribute (a snapshot from before these
+  attributes were read would otherwise fire on every RODC); an RODC that returned neither is noted as
+  "rodc-prp" in the inventory. The Microsoft page cited lists Enterprise Domain Controllers and Enterprise
+  Read-only Domain Controllers among the defaults where this entry names Domain Controllers and Read-only Domain
+  Controllers; the implementation follows this entry and the discrepancy is left for verification.
+condition_cel: >-
+  (flags(obj, "userAccountControl", 67108864) && attr(obj, "sAMAccountType") == "805306369"
+  && (attrs(obj, "msDS-RevealOnDemandGroup").exists(g, tier0_sid(dn_sid(g)) || has_tier0_member(g))
+  || ((hasattr(obj, "msDS-RevealOnDemandGroup") || hasattr(obj, "msDS-NeverRevealGroup"))
+  && sidexists(sid_domain(attr(obj, "objectSid")) + "-572")
+  && !attrs(obj, "msDS-NeverRevealGroup").exists(g, dn_sid(g).startsWith("S-1-5-21-") && sid_rid(dn_sid(g)) == 572))
+  || attrs(obj, "msDS-RevealedList").exists(v, tier0_sid(dn_sid(dn_of(v))))))
+  || (obj.class.exists(c, c.lowerAscii() == "group") && attr(obj, "objectSid").startsWith("S-1-5-21-")
+  && ((sid_rid(attr(obj, "objectSid")) == 571 && has_tier0_member(obj.dn))
+  || (sid_rid(attr(obj, "objectSid")) == 572 && [502, 512, 516, 517, 518, 519, 520, 521].exists(r,
+  sidexists(sid_domain(attr(obj, "objectSid")) + "-" + string(r)) && !(sid_domain(attr(obj, "objectSid")) + "-" + string(r)
+  in member_sids(obj))))))
+expect:
+- CN=RODC01,OU=Domain Controllers,DC=lab,DC=example
+- CN=RODC02,OU=Domain Controllers,DC=lab,DC=example
+- CN=RODC03,OU=Domain Controllers,DC=lab,DC=example
+- CN=Allowed RODC Password Replication Group,CN=Users,DC=lab,DC=example
+- CN=Denied RODC Password Replication Group,CN=Users,DC=lab,DC=example

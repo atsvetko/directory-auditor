@@ -53,6 +53,18 @@ import (
 //	                                              object (transitive ACL + group membership graph)
 //	gpo_affects_tier0(obj)                        this GPO is linked to the domain, the DC OU, a site,
 //	                                              or an OU/container that holds a Tier-0 object
+//	sd_owner(obj)                                 owner SID of nTSecurityDescriptor; "" when the owner
+//	                                              part was not collected (snapshots before owner reads)
+//	parent_dn("CN=NTDS Settings,CN=DC1,…")        "CN=DC1,…" (first RDN removed, escapes honoured)
+//	dn_of("B:4:00FF:CN=x,…")                      the DN of a DN-Binary / DN-String value; a plain DN
+//	                                              is returned unchanged
+//	member_sids(obj)                              SIDs of the direct members (collected objects and
+//	                                              foreign security principals); "" for a member DN
+//	                                              that is in neither
+//	dn_sid("CN=G,…")                              objectSid of a collected object, or the SID of a
+//	                                              foreign-security-principal DN; "" otherwise
+//	has_tier0_member("CN=G,…")                    a Tier-0 principal is a member of that group, directly,
+//	                                              through nesting or through primaryGroupID
 func helperOptions() []cel.EnvOption {
 	mapT := cel.MapType(cel.StringType, cel.DynType)
 	aceList := cel.ListType(cel.MapType(cel.StringType, cel.DynType))
@@ -218,6 +230,36 @@ func helperOptions() []cel.EnvOption {
 					dn, _ := m["dn"].(string)
 					return types.Bool(currentGPOToTier0[strings.ToLower(dn)])
 				}))),
+		cel.Function("sd_owner",
+			cel.Overload("sd_owner_map", []*cel.Type{mapT}, cel.StringType,
+				cel.UnaryBinding(func(o ref.Val) ref.Val {
+					d, err := descriptorOf(o, "nTSecurityDescriptor")
+					if err != nil {
+						return types.String("")
+					}
+					return types.String(d.Owner)
+				}))),
+		cel.Function("parent_dn",
+			cel.Overload("parent_dn_string", []*cel.Type{cel.StringType}, cel.StringType,
+				cel.UnaryBinding(func(s ref.Val) ref.Val { return types.String(parentDN(string(s.(types.String)))) }))),
+		cel.Function("dn_of",
+			cel.Overload("dn_of_string", []*cel.Type{cel.StringType}, cel.StringType,
+				cel.UnaryBinding(func(s ref.Val) ref.Val { return types.String(dnOf(string(s.(types.String)))) }))),
+		cel.Function("member_sids",
+			cel.Overload("member_sids_map", []*cel.Type{mapT}, cel.ListType(cel.StringType),
+				cel.UnaryBinding(func(o ref.Val) ref.Val {
+					var out []ref.Val
+					for _, m := range allAttr(o, "member") {
+						out = append(out, types.String(memberSID(m)))
+					}
+					return types.NewRefValList(types.DefaultTypeAdapter, out)
+				}))),
+		cel.Function("dn_sid",
+			cel.Overload("dn_sid_string", []*cel.Type{cel.StringType}, cel.StringType,
+				cel.UnaryBinding(func(dn ref.Val) ref.Val { return types.String(memberSID(string(dn.(types.String)))) }))),
+		cel.Function("has_tier0_member",
+			cel.Overload("has_tier0_member_string", []*cel.Type{cel.StringType}, cel.BoolType,
+				cel.UnaryBinding(func(dn ref.Val) ref.Val { return types.Bool(hasTier0Member(string(dn.(types.String)))) }))),
 		cel.Function("aces",
 			cel.Overload("aces_map", []*cel.Type{mapT}, aceList,
 				cel.UnaryBinding(func(o ref.Val) ref.Val { return aceVals(o, "nTSecurityDescriptor") }))),
@@ -315,20 +357,100 @@ func aceVals(o ref.Val, attr string) ref.Val {
 	return types.NewDynamicList(types.DefaultTypeAdapter, out)
 }
 
+// dnOf strips the "B:<n>:<hex>:" or "S:<n>:<string>:" prefix of a DN-Binary or
+// DN-String value ([MS-ADTS] 3.1.1.2.2.2) and returns the DN. The declared
+// length is used to skip the payload, so a payload containing ':' is safe.
+func dnOf(v string) string {
+	if len(v) < 4 || v[1] != ':' || (v[0] != 'B' && v[0] != 'b' && v[0] != 'S' && v[0] != 's') {
+		return v
+	}
+	rest := v[2:]
+	i := strings.IndexByte(rest, ':')
+	if i < 0 {
+		return v
+	}
+	n, err := strconv.Atoi(rest[:i])
+	if err != nil || n < 0 || i+1+n+1 > len(rest) || rest[i+1+n] != ':' {
+		return v
+	}
+	return rest[i+1+n+1:]
+}
+
+// memberSID resolves one member DN to a SID: the objectSid of a collected
+// object, or the SID named by a foreign-security-principal DN.
+func memberSID(dn string) string {
+	if o, ok := lookupObject(dn); ok {
+		if sid := o.Attr("objectSid"); sid != "" {
+			return sid
+		}
+	}
+	l := strings.ToLower(dn)
+	if strings.HasPrefix(l, "cn=s-1-") && strings.Contains(l, ",cn=foreignsecurityprincipals,") {
+		return dn[3:strings.IndexByte(dn, ',')]
+	}
+	return ""
+}
+
+// hasTier0Member walks the members of a group (member values, nested groups,
+// and accounts whose primaryGroupID names it) and reports whether any of them
+// is Tier 0. The group itself does not count.
+func hasTier0Member(dn string) bool {
+	if currentTier0 == nil {
+		return false
+	}
+	seen := map[string]bool{}
+	queue := []string{dn}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		k := strings.ToLower(cur)
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		o, ok := lookupObject(cur)
+		if !ok {
+			continue
+		}
+		var members []string
+		for a, v := range o.Attrs {
+			if strings.EqualFold(a, "member") {
+				members = append(members, v...)
+			}
+		}
+		for _, p := range currentByPrimary[strings.ToUpper(o.Attr("objectSid"))] {
+			members = append(members, p.DN)
+		}
+		for _, m := range members {
+			if ok, _ := currentTier0.IsDN(m); ok {
+				return true
+			}
+			if sid := memberSID(m); sid != "" {
+				if ok, _ := currentTier0.IsSID(sid); ok {
+					return true
+				}
+			}
+			queue = append(queue, m)
+		}
+	}
+	return false
+}
+
 // Snapshot index for the objattr/objattrs/objexists helpers; set per evaluation
 // under evalMu like currentTier0.
 var (
 	currentIndex       map[string]*snapshot.Object
 	currentSIDs        map[string]bool
 	currentBase        string
-	currentSchemaGUIDs map[string]string // lower(lDAPDisplayName) -> schemaIDGUID
-	currentT0Parents   map[string]bool   // lower(DN) of every ancestor of a Tier-0 object
-	currentHosts       map[string]bool   // lower host names and short names of collected accounts
-	currentDNSDomain   string            // DNS domain derived from the base DN
-	currentNames       map[string]string // upper(SID) -> display name (sAMAccountName or CN)
-	currentReachers    map[string]bool   // upper(SID) -> has a control path to a Tier-0 object
-	currentReachPath   map[string]string // upper(SID) -> that path, for the finding evidence
-	currentGPOToTier0  map[string]bool   // lower(GPO DN) -> linked to a Tier-0-affecting container
+	currentSchemaGUIDs map[string]string             // lower(lDAPDisplayName) -> schemaIDGUID
+	currentT0Parents   map[string]bool               // lower(DN) of every ancestor of a Tier-0 object
+	currentHosts       map[string]bool               // lower host names and short names of collected accounts
+	currentDNSDomain   string                        // DNS domain derived from the base DN
+	currentNames       map[string]string             // upper(SID) -> display name (sAMAccountName or CN)
+	currentReachers    map[string]bool               // upper(SID) -> has a control path to a Tier-0 object
+	currentReachPath   map[string]string             // upper(SID) -> that path, for the finding evidence
+	currentGPOToTier0  map[string]bool               // lower(GPO DN) -> linked to a Tier-0-affecting container
+	currentByPrimary   map[string][]*snapshot.Object // upper(group SID) -> accounts with it as primary group
 )
 
 func indexSnapshot(snap *snapshot.Snapshot) map[string]*snapshot.Object {
@@ -347,6 +469,15 @@ func indexSnapshot(snap *snapshot.Snapshot) map[string]*snapshot.Object {
 		}
 	}
 	currentSIDs = sids
+	currentByPrimary = map[string][]*snapshot.Object{}
+	if dom := snap.Meta.DomainSID; dom != "" {
+		for i := range snap.Objects {
+			if pg := snap.Objects[i].Attr("primaryGroupID"); pg != "" {
+				k := strings.ToUpper(dom + "-" + pg)
+				currentByPrimary[k] = append(currentByPrimary[k], &snap.Objects[i])
+			}
+		}
+	}
 
 	currentSchemaGUIDs = map[string]string{}
 	currentHosts = map[string]bool{}

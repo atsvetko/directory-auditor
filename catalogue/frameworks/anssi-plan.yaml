@@ -19,18 +19,13 @@ plan:
 # --- wave 2 -------------------------------------------------------------------------------------------
 - {id: vuln_display_specifier,               status: collect, wave: 2, needs: "CN=DisplaySpecifiers in the configuration partition"}
 - {id: vuln_password_change_cluster_no_change_3years, status: gap, wave: 2, note: "cluster name objects identified by their SPNs"}
-- {id: vuln_rodc_priv_revealed,              status: collect, wave: 2, needs: "RODC revealed lists (msDS-RevealedList)"}
 # --- wave 3 -------------------------------------------------------------------------------------------
 - {id: vuln_protected_users,                 status: partial, wave: 3, note: "DSA-0007 covers delegation protection; ANSSI checks Protected Users membership itself"}
 - {id: vuln_kerberos_properties_encryption,  status: partial, wave: 3, note: "DSA-0003/0012 cover weak types; ANSSI checks service accounts' declared types"}
-- {id: vuln_owner,                           status: collect, wave: 3, needs: "owner part of security descriptors (SD_FLAGS owner)"}
 - {id: vuln_password_change_inactive_servers, status: gap,    wave: 3, note: "server accounts with no recent logon"}
 - {id: vuln_password_change_server_no_change_45, status: gap, wave: 3, note: "server machine password older than 45 days (stricter level-3 threshold)"}
 - {id: vuln_reversible_password_priv_namingcontext, status: gap, wave: 3, note: "domain pwdProperties DOMAIN_PASSWORD_STORE_CLEARTEXT"}
-- {id: vuln_rodc_never_reveal,               status: collect, wave: 3, needs: "RODC password replication policy attributes"}
-- {id: vuln_rodc_reveal,                     status: collect, wave: 3, needs: "RODC password replication policy attributes"}
-- {id: vuln_rodc_allowed_group,              status: collect, wave: 3, needs: "Allowed RODC Password Replication Group membership"}
-- {id: vuln_rodc_denied_group,               status: collect, wave: 3, needs: "Denied RODC Password Replication Group membership"}
+- {id: vuln_rodc_never_reveal,               status: partial, wave: 3, note: "DSA-0089 checks the Denied RODC group is on each RODC's never-reveal list; the built-in groups that list holds by default are not checked yet"}
 - {id: vuln_rodc_orphan_krbtgt,              status: collect, wave: 3, needs: "krbtgt_NNNNN accounts and their RODC links"}
 - {id: vuln_sd_failed_sd_read_on_priv,       status: gap,     wave: 3, note: "privileged objects whose security descriptor could not be read"}
 - {id: vuln_group_loop,                      status: gap,     wave: 3, note: "cycles in the group membership graph"}
@@ -40,7 +35,7 @@ plan:
 - {id: vuln_adcs_template_control,           status: collect, wave: 4, needs: "certificate template objects and their DACLs"}
 - {id: vuln_adcs_template_auth_enroll_with_name, status: collect, wave: 4, needs: "certificate template flags, EKUs and enrolment rights"}
 - {id: vuln_certificates_vuln,               status: collect, wave: 4, needs: "certificate parsing (CA and NTAuth certificates: key size, signature algorithm)"}
-- {id: vuln_permissions_schema,              status: collect, wave: 4, needs: "schema partition objects and their DACLs"}
+- {id: vuln_permissions_schema,              status: partial, wave: 4, note: "DSA-0079 covers the schema head; explicit ACEs on classSchema and attributeSchema objects are still to be read"}
 - {id: vuln_permissions_dfsr_sysvol,         status: collect, wave: 4, needs: "DFSR settings objects of the SYSVOL replication group"}
 # --- wave 5: DNS --------------------------------------------------------------------------------------
 - {id: vuln_dnszone_bad_prop,                status: collect, wave: 5, needs: "DNS application partitions (DomainDnsZones/ForestDnsZones) and dNSProperty decoding"}

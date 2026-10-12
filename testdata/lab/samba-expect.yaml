@@ -68,6 +68,11 @@ allow:
   - DSA-0080   # Schema Admins: Samba provisioning adds Administrator as a standing member
   - DSA-0083   # built-in Administrator used within 30 days: depends on logons during provisioning
   - DSA-0084   # Tier-0 accounts created within 30 days: the lab is provisioned fresh on every run
+  # Group A (DSA-0076, 0079, 0088, 0089), first live run pending
+  - DSA-0076   # Tier-0 object owners: depends on which account Samba provisioning records as owner
+  - DSA-0079   # schema head ACL: Samba's provisioned default not yet observed
+  - DSA-0088   # rogue DC traces: confirm Samba sets serverReference on its server object
+  - DSA-0089   # RODC password replication: no RODC in the lab; fires only if the Denied group lacks a default member
 tier0_must_include:
   - "CN=svc-backup,CN=Users,DC=lab,DC=example"      # nested: Domain Admins > Tier0 Ops > svc-backup
   - "CN=Tier0 Ops,CN=Users,DC=lab,DC=example"

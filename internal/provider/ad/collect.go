@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,7 +27,7 @@ type Query struct {
 	Scope   ldapx.Scope
 	Filter  string
 	Attrs   []string
-	SD      bool     // read nTSecurityDescriptor (DACL only)
+	SD      bool     // read nTSecurityDescriptor (owner and DACL, see sdFlags)
 	Purpose string   // which catalogue entries need it
 	Classes []string // object classes the query returns (for honest "not collected" states)
 }
@@ -58,6 +59,19 @@ var accountAttrs = []string{
 	"msDS-KeyCredentialLink",
 }
 
+// sdFlags selects the descriptor parts every SD read asks for: the owner
+// (DSA-0076) and the DACL. Both are readable with READ_CONTROL, which an
+// ordinary user holds on most objects; the SACL is never requested. Every SD
+// query uses the same flags because objects are merged by DN, and a later
+// DACL-only read would otherwise overwrite an earlier descriptor that carried
+// the owner (OU=Domain Controllers is read by dc-ou and again by ou-sd).
+const sdFlags = ldapx.SDFlagsOwner | ldapx.SDFlagsDACL
+
+// rodcAttrs is the password replication policy of a read-only DC (DSA-0089).
+// msDS-RevealedList may need more than ordinary user rights: an RODC that
+// returns none is noted in the inventory (see collect), never assumed clean.
+var rodcAttrs = []string{"msDS-RevealOnDemandGroup", "msDS-NeverRevealGroup", "msDS-RevealedList"}
+
 // Plan is the tier-0 (ordinary user) collection plan.
 var Plan = []Query{
 	{Name: "domain-head", Base: "default", Scope: ldapx.ScopeBase, Filter: "(objectClass=domainDNS)", SD: true, Classes: []string{"domainDNS", "domain"},
@@ -71,20 +85,22 @@ var Plan = []Query{
 		Attrs:   accountAttrs,
 		Purpose: "account flags, SPNs, delegation, password age, SID history, key credentials (DSA-0001…0012, 0017, 0019, 0075, 0083…0086)"},
 	{Name: "computers", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(sAMAccountType=805306369)", Classes: []string{"computer"},
-		Attrs:   append(append([]string{}, accountAttrs...), "operatingSystem", "operatingSystemVersion", "dNSHostName", "ms-DS-CreatorSID", "msDS-GroupMSAMembership"),
-		Purpose: "delegation, RBCD, DCs, machine-account creators, gMSA password readers, member OS support (DSA-0004…0006, 0013, 0055, 0084, 0087)"},
+		Attrs: append(append(append([]string{}, accountAttrs...), "operatingSystem", "operatingSystemVersion", "dNSHostName", "ms-DS-CreatorSID",
+			"msDS-GroupMSAMembership"), rodcAttrs...),
+		Purpose: "delegation, RBCD, DCs, machine-account creators, gMSA password readers, member OS support, " +
+			"replication SPNs on non-DCs, RODC password replication policy (DSA-0004…0006, 0013, 0055, 0084, 0087, 0088, 0089)"},
 	{Name: "groups", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(objectClass=group)", Classes: []string{"group"},
 		Attrs:   []string{"objectClass", "sAMAccountName", "objectSid", "objectGUID", "sIDHistory", "member", "groupType", "adminCount", "whenChanged"},
-		Purpose: "Tier-0 membership resolution (catalogue/TIER0.md)"},
+		Purpose: "Tier-0 membership resolution (catalogue/TIER0.md), Allowed/Denied RODC Password Replication Groups (DSA-0089)"},
 	{Name: "trusts", Base: "CN=System", Scope: ldapx.ScopeOneLevel, Filter: "(objectClass=trustedDomain)", Classes: []string{"trustedDomain"},
 		Attrs:   []string{"objectClass", "name", "trustPartner", "trustDirection", "trustType", "trustAttributes", "securityIdentifier", "whenCreated", "whenChanged"},
 		Purpose: "trust posture (DSA-0018), trusted-domain SIDs (DSA-0017)"},
 	{Name: "adminsdholder", Base: "CN=AdminSDHolder,CN=System", Scope: ldapx.ScopeBase, Filter: "(objectClass=*)", SD: true,
 		Attrs:   []string{"objectClass", "whenChanged"},
-		Purpose: "AdminSDHolder ACL (DSA-0016)"},
+		Purpose: "AdminSDHolder ACL and owner (DSA-0016, DSA-0076)"},
 	{Name: "dc-ou", Base: "OU=Domain Controllers", Scope: ldapx.ScopeBase, Filter: "(objectClass=*)", SD: true,
 		Attrs:   []string{"objectClass", "gPLink", "whenChanged"},
-		Purpose: "Tier-0 object ACL (DSA-0015)"},
+		Purpose: "Tier-0 object ACL and owner (DSA-0015, DSA-0076)"},
 	{Name: "ds-heuristics", Base: "CN=Directory Service,CN=Windows NT,CN=Services,<config>", Scope: ldapx.ScopeBase, Filter: "(objectClass=*)", Classes: []string{"nTDSService"},
 		Attrs:   []string{"objectClass", "dSHeuristics", "tombstoneLifetime", "whenChanged"},
 		Purpose: "directory-wide switches such as anonymous LDAP operations and anonymous NSPI (DSA-0025, DSA-0066, DSA-0077)"},
@@ -100,6 +116,10 @@ var Plan = []Query{
 	{Name: "sites", Base: "CN=Sites,<config>", Scope: ldapx.ScopeOneLevel, Filter: "(objectClass=site)", SD: true, Classes: []string{"site"},
 		Attrs:   []string{"objectClass", "gPLink", "gPOptions", "whenChanged"},
 		Purpose: "who can link GPOs to AD sites (DSA-0058)"},
+	{Name: "site-servers", Base: "CN=Sites,<config>", Scope: ldapx.ScopeSubtree, Filter: "(|(objectClass=server)(objectClass=nTDSDSA))",
+		Classes: []string{"server", "nTDSDSA"},
+		Attrs:   []string{"objectClass", "serverReference", "dNSHostName", "whenCreated"},
+		Purpose: "DC registrations in the configuration partition: server objects, their NTDS Settings and the computer each names (DSA-0088)"},
 	{Name: "schema-laps", Base: "<schema>", Scope: ldapx.ScopeOneLevel, Classes: []string{"attributeSchema"},
 		Filter:  "(|(lDAPDisplayName=ms-Mcs-AdmPwd)(lDAPDisplayName=msLAPS-Password)(lDAPDisplayName=msLAPS-EncryptedPassword)(lDAPDisplayName=msLAPS-EncryptedPasswordHistory)(lDAPDisplayName=msLAPS-EncryptedDSRMPassword)(lDAPDisplayName=msLAPS-EncryptedDSRMPasswordHistory))",
 		Attrs:   []string{"objectClass", "lDAPDisplayName", "searchFlags", "schemaIDGUID"},
@@ -123,9 +143,9 @@ var Plan = []Query{
 		Filter: "(objectClass=msKds-ProvRootKey)", SD: true, Classes: []string{"msKds-ProvRootKey"},
 		Attrs:   []string{"objectClass", "cn"},
 		Purpose: "who can read the KDS root keys that derive every gMSA password (DSA-0068)"},
-	{Name: "schema-head", Base: "<schema>", Scope: ldapx.ScopeBase, Filter: "(objectClass=dMD)", Classes: []string{"dMD"},
+	{Name: "schema-head", Base: "<schema>", Scope: ldapx.ScopeBase, Filter: "(objectClass=dMD)", SD: true, Classes: []string{"dMD"},
 		Attrs:   []string{"objectClass", "objectVersion"},
-		Purpose: "schema version — whether the forest was prepared for a supported OS (DSA-0069)"},
+		Purpose: "schema version — whether the forest was prepared for a supported OS (DSA-0069); write rights on the schema head (DSA-0079)"},
 	{Name: "dfsr-global", Base: "CN=DFSR-GlobalSettings,CN=System", Scope: ldapx.ScopeBase, Filter: "(objectClass=*)",
 		Attrs:   []string{"objectClass", "msDFSR-Flags"},
 		Purpose: "SYSVOL FRS→DFSR migration state (DSA-0070)"},
@@ -137,16 +157,16 @@ var Plan = []Query{
 		Purpose: "fine-grained password policies applied to privileged members (DSA-0071)"},
 	{Name: "gpo", Base: "CN=Policies,CN=System", Scope: ldapx.ScopeOneLevel, Filter: "(objectClass=groupPolicyContainer)", SD: true, Classes: []string{"groupPolicyContainer"},
 		Attrs:   []string{"objectClass", "displayName", "gPCFileSysPath"},
-		Purpose: "control rights on GPOs linked to Tier-0 scope (DSA-0072)"},
+		Purpose: "control rights and owners of GPOs linked to Tier-0 scope (DSA-0072, DSA-0076)"},
 	{Name: "protected-sd", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(adminCount=1)", SD: true,
 		Attrs:   []string{"objectClass"},
-		Purpose: "ACLs and inheritance state of protected objects (DSA-0015, DSA-0019)"},
+		Purpose: "ACLs, owners and inheritance state of protected objects (DSA-0015, DSA-0019, DSA-0076)"},
 }
 
 // SDBaseQuery describes the follow-up per-object reads of Tier-0 objects whose
 // descriptor was not already collected (members that SDProp does not cover).
 var SDBaseQuery = Query{Name: "tier0-sd", Base: "<each Tier-0 DN>", Scope: ldapx.ScopeBase, Filter: "(objectClass=*)", SD: true,
-	Attrs: []string{"objectClass"}, Purpose: "ACLs of Tier-0 objects not marked adminCount=1 (DSA-0015)"}
+	Attrs: []string{"objectClass"}, Purpose: "ACLs and owners of Tier-0 objects not marked adminCount=1 (DSA-0015, DSA-0076)"}
 
 // searcher is the subset of *ldapx.Conn the collector uses; tests supply a fake.
 //
@@ -270,6 +290,19 @@ func collect(ctx context.Context, c searcher, meta snapshot.Meta, progress func(
 			Detail: fmt.Sprintf("%d objects returned no nTSecurityDescriptor; ACL checks on them are incomplete", n)})
 	}
 
+	// Honest state for DSA-0089 condition (3): an empty msDS-RevealedList and
+	// one this account may not read look the same, so say how many RODCs gave none.
+	if n := rodcsWithout(snap.Objects, "msDS-RevealOnDemandGroup", "msDS-NeverRevealGroup"); n > 0 {
+		snap.Skipped = append(snap.Skipped, snapshot.Skipped{Query: "rodc-prp", Reason: "permission",
+			Detail: fmt.Sprintf("%d read-only DC accounts returned neither msDS-RevealOnDemandGroup nor msDS-NeverRevealGroup; "+
+				"their password replication policy (DSA-0089) was not checked", n)})
+	}
+	if n := rodcsWithout(snap.Objects, "msDS-RevealedList"); n > 0 {
+		snap.Skipped = append(snap.Skipped, snapshot.Skipped{Query: "rodc-revealed-list", Reason: "permission",
+			Detail: fmt.Sprintf("%d read-only DC accounts returned no msDS-RevealedList (nothing cached, or not readable by this account); "+
+				"cached Tier-0 credentials (DSA-0089) cannot be ruled out on them", n)})
+	}
+
 	snap.Meta.QueryCount = c.Queries()
 	snap.Meta.Requests = c.Requests()
 	snap.Meta.Duration = time.Since(start).Round(time.Millisecond).String()
@@ -281,7 +314,7 @@ func run(ctx context.Context, c searcher, q Query, base string) ([]ldapx.Entry, 
 	opts := ldapx.SearchOptions{Binary: append(append(append([]string{}, sidAttrs...), guidAttrs...), sdAttrs...)}
 	if q.SD {
 		attrs = append(append([]string{}, attrs...), "nTSecurityDescriptor")
-		opts.SDFlags = ldapx.SDFlagsDACL
+		opts.SDFlags = sdFlags
 	}
 	return c.SearchWith(ctx, base, q.Scope, q.Filter, attrs, opts)
 }
@@ -357,6 +390,26 @@ func countWithout(objs []snapshot.Object, sdSeen map[string]bool, attr string) i
 	n := 0
 	for _, o := range objs {
 		if sdSeen[strings.ToLower(o.DN)] && o.Attr(attr) == "" {
+			n++
+		}
+	}
+	return n
+}
+
+// rodcsWithout counts read-only DC computer accounts (PARTIAL_SECRETS_ACCOUNT)
+// that carry a value for none of attrs.
+func rodcsWithout(objs []snapshot.Object, attrs ...string) int {
+	n := 0
+	for _, o := range objs {
+		uac, err := strconv.ParseInt(o.Attr("userAccountControl"), 10, 64)
+		if err != nil || uint32(uac)&0x4000000 == 0 || o.Attr("sAMAccountType") != "805306369" {
+			continue
+		}
+		has := false
+		for _, a := range attrs {
+			has = has || o.Attr(a) != ""
+		}
+		if !has {
 			n++
 		}
 	}

@@ -15,7 +15,7 @@ object: >-
   Tier-0 objects listed in catalogue/TIER0.md — domain naming-context head, AdminSDHolder, OU=Domain Controllers,
   domain controller computer accounts, Tier-0 groups and their members, krbtgt, GPOs linked to Tier-0 scope
 attributes:
-- nTSecurityDescriptor (owner SID)
+- nTSecurityDescriptor
 - objectSid
 condition: >-
   The owner SID in the object's security descriptor is not a Tier-0 principal (Domain Admins, Enterprise Admins,
@@ -42,11 +42,13 @@ attack:
   name: Account Manipulation
 - id: T1484
   name: Domain or Tenant Policy Modification
-engine: complex:tier0-owner
+anssi:
+- vuln_owner
+engine: declarative
 query_sketch:
   base: default
   scope: subtree
-  filter: (adminCount=1)
+  filter: (objectClass=*)
 references:
 - title: Microsoft Learn — Security descriptors (owner and DACL)
   url: https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptors
@@ -59,3 +61,20 @@ notes: >-
   flags OWNER | DACL), which an ordinary user can read on objects that grant READ_CONTROL. ANSSI point vuln_owner
   is planned (frameworks/anssi-plan.yaml, status collect) — tag the entry with it and drop the plan line when the
   check is implemented. An OWNER RIGHTS entry on the object that removes WRITE_DAC lowers the finding to info.
+  Implementation notes: the engine has one severity per entry, so an object whose OWNER RIGHTS (S-1-3-4) entries
+  leave the owner without WRITE_DAC is excluded rather than reported as info. Following [MS-DTYP] owner semantics,
+  any effective OWNER RIGHTS entry replaces the implicit owner rights, so the object is excluded unless one of them
+  grants WRITE_DAC or GENERIC_ALL. The Tier-0 scope is the TIER0.md set (tier0(obj)), the domain head, OU=Domain
+  Controllers, AdminSDHolder and GPOs linked to Tier-0 scope (gpo_affects_tier0, as in DSA-0072); the sketch
+  filter is therefore (objectClass=*) — the descriptors come from the queries that already read them (SD flags
+  now OWNER | DACL). A snapshot collected before owners were read has no owner (sd_owner is empty) and the entry
+  does not fire on it. Engine changed from complex:tier0-owner to declarative (new helper sd_owner).
+evidence_principals: '[sd_owner(obj)]'
+condition_cel: >-
+  (tier0(obj) || obj.dn.lowerAscii() == obj.base.lowerAscii() || obj.dn.lowerAscii().startsWith("ou=domain controllers,")
+  || obj.dn.lowerAscii().startsWith("cn=adminsdholder,cn=system,") || gpo_affects_tier0(obj)) && sd_owner(obj) != ""
+  && !tier0_sid(sd_owner(obj)) && !(aces(obj).exists(a, a.trustee == "S-1-3-4" && a.effective) && !aces(obj).exists(a,
+  a.trustee == "S-1-3-4" && a.allow && a.effective && (mask_has(a.mask, 0x40000) || mask_has(a.mask, 0x10000000))))
+expect:
+- CN={31B2F340-016D-11D2-945F-00C04FB984F9},CN=Policies,CN=System,DC=lab,DC=example
+- CN=SQL01,OU=Servers,DC=lab,DC=example

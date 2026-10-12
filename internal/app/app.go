@@ -406,7 +406,7 @@ func PrintQueries(w io.Writer) {
 		}
 		sd := ""
 		if q.SD {
-			sd = " + nTSecurityDescriptor (DACL only, SD_FLAGS=0x4)"
+			sd = " + nTSecurityDescriptor (owner and DACL, no SACL, SD_FLAGS=0x5)"
 		}
 		fmt.Fprintf(w, "  %-14s base=%s scope=%s filter=%s\n                 attrs=%s%s\n                 why: %s\n",
 			q.Name, b, scopes[q.Scope], q.Filter, strings.Join(q.Attrs, ","), sd, q.Purpose)

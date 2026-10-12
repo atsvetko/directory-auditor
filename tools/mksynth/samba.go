@@ -106,6 +106,7 @@ func writeSambaLab(path string, hardened bool) error {
 			{"CN=Distributed COM Users,CN=Builtin," + base, "S-1-5-32-562"}, {"CN=Performance Log Users,CN=Builtin," + base, "S-1-5-32-559"}} {
 			add(g.dn, []string{"top", "group"}, map[string][]string{"objectSid": {g.sid}})
 		}
+		hardenedGroupA2(s, add, base, dom, ft(5), ft(1))
 	}
 	add("CN=DC1,OU=Domain Controllers,"+base, append(append([]string{}, user...), "computer"), map[string][]string{
 		"sAMAccountName": {"DC1$"}, "objectSid": {dom + "-1000"}, "primaryGroupID": {"516"}, "userAccountControl": {"532480"}, "sAMAccountType": {"805306369"},
@@ -168,4 +169,44 @@ func writeSambaLab(path string, hardened bool) error {
 	h, _ := snapshot.Hash(s)
 	fmt.Printf("wrote %s (%d objects, sha256 %s)\n", path, len(s.Objects), h[:16])
 	return nil
+}
+
+// hardenedGroupA2 adds the negative controls for DSA-0076, 0079, 0088 and 0089
+// to the hardened lab: Tier-0 objects owned by Tier-0 principals, a schema head
+// writable by Schema Admins only, a properly registered DC, and a read-only DC
+// whose password replication policy keeps the defaults.
+func hardenedGroupA2(s *snapshot.Snapshot, add func(string, []string, map[string][]string), base, dom, pwd, logon string) {
+	da := dom + "-512"
+	full := ace{"S-1-5-18", 0x000F01FF, ""}
+	for i := range s.Objects {
+		switch s.Objects[i].DN {
+		case base, "CN=Domain Admins,CN=Users," + base, "CN=Administrator,CN=Users," + base, "CN=AdminSDHolder,CN=System," + base:
+			s.Objects[i].Attrs["nTSecurityDescriptor"] = []string{sdOwned(da, false, full, ace{da, 0x000F01FF, ""})}
+		case "CN=DC1,OU=Domain Controllers," + base:
+			s.Objects[i].Attrs["nTSecurityDescriptor"] = []string{sdOwned(da, false, full, ace{da, 0x000F01FF, ""})}
+			s.Objects[i].Attrs["servicePrincipalName"] = []string{"GC/dc1.samba.example/samba.example",
+				"E3514235-4B06-11D1-AB04-00C04FC2DCD2/3c9e1f0a-6b2d-4f8e-9a17-0d4c5b7e2f93/samba.example"}
+		}
+	}
+	add("CN=Schema,CN=Configuration,"+base, []string{"top", "dMD"}, map[string][]string{"objectVersion": {"88"},
+		"nTSecurityDescriptor": {sdOwned(dom+"-518", false, full, ace{dom + "-518", 0x000F01FF, ""}, ace{"S-1-5-9", 0x00000100, "be2bb760-7f46-11d2-b9ad-00c04f79f805"},
+			ace{"S-1-5-11", 0x00020094, ""})}})
+	sites := "CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration," + base
+	for _, n := range []string{"DC1", "RODC1"} {
+		add("CN="+n+","+sites, []string{"top", "server"}, map[string][]string{"serverReference": {"CN=" + n + ",OU=Domain Controllers," + base}})
+		add("CN=NTDS Settings,CN="+n+","+sites, []string{"top", "applicationSettings", "nTDSDSA"}, map[string][]string{})
+	}
+	users := ",CN=Users," + base
+	add("CN=Read-only Domain Controllers"+users, []string{"top", "group"}, map[string][]string{"objectSid": {dom + "-521"}})
+	add("CN=Allowed RODC Password Replication Group"+users, []string{"top", "group"}, map[string][]string{"objectSid": {dom + "-571"}})
+	add("CN=Denied RODC Password Replication Group"+users, []string{"top", "group"}, map[string][]string{"objectSid": {dom + "-572"},
+		"member": {"CN=krbtgt" + users, "CN=Domain Admins" + users, "CN=Domain Controllers" + users, "CN=Schema Admins" + users,
+			"CN=Read-only Domain Controllers" + users}})
+	add("CN=RODC1,OU=Domain Controllers,"+base, []string{"top", "person", "organizationalPerson", "user", "computer"}, map[string][]string{
+		"sAMAccountName": {"RODC1$"}, "objectSid": {dom + "-1010"}, "primaryGroupID": {"521"}, "userAccountControl": {"67112960"},
+		"sAMAccountType": {"805306369"}, "operatingSystem": {"Windows Server 2022 Datacenter"}, "dNSHostName": {"rodc1.samba.example"},
+		"pwdLastSet": {pwd}, "lastLogonTimestamp": {logon},
+		"msDS-RevealOnDemandGroup": {"CN=Allowed RODC Password Replication Group" + users},
+		"msDS-NeverRevealGroup":    {"CN=Denied RODC Password Replication Group" + users, "CN=Administrators,CN=Builtin," + base},
+		"msDS-RevealedList":        {"CN=sc.user" + users}})
 }

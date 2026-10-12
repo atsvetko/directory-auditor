@@ -116,15 +116,15 @@ func TestCollect(t *testing.T) {
 		t.Errorf("descriptor round-trip: %v %v", d, err)
 	}
 
-	// Every SD read asks for the DACL only; the follow-up pass reached the Tier-0 member.
+	// Every SD read asks for the owner and the DACL (never the SACL); the follow-up pass reached the Tier-0 member.
 	var followUp bool
 	for _, c := range f.calls {
 		if c.base == opsDN {
 			followUp = true
 		}
 		if strings.Contains(c.filter, "adminCount") || c.base == opsDN || c.filter == "(objectClass=domainDNS)" {
-			if c.sdflags != ldapx.SDFlagsDACL {
-				t.Errorf("SD query %v without DACL-only flags", c)
+			if c.sdflags != ldapx.SDFlagsOwner|ldapx.SDFlagsDACL {
+				t.Errorf("SD query %v without OWNER|DACL flags", c)
 			}
 		}
 	}
@@ -152,3 +152,35 @@ func TestPlanFiltersParse(t *testing.T) {
 }
 
 func metaForTest() snapshotMeta { return snapshotMeta{Provider: "ad", Target: "dc01"} }
+
+// TestRODCNotCollected: an RODC whose password replication attributes came back
+// empty is recorded as not collected, so DSA-0089 is never read as a clean pass.
+func TestRODCNotCollected(t *testing.T) {
+	dom := []uint32{21, 1, 2, 3}
+	rodc := func(name string, attrs map[string][]string) ldapx.Entry {
+		a := map[string][]string{"objectClass": {"top", "computer"}, "sAMAccountType": {"805306369"}, "userAccountControl": {"67112960"}}
+		for k, v := range attrs {
+			a[k] = v
+		}
+		return entry("CN="+name+",OU=Domain Controllers,"+base, a, nil)
+	}
+	f := &fake{results: map[string][]ldapx.Entry{
+		base + "|(objectClass=domainDNS)": {entry(base, map[string][]string{"objectClass": {"domainDNS"}}, map[string][][]byte{"objectSid": {sid(dom...)}})},
+		base + "|(sAMAccountType=805306369)": {
+			rodc("R1", map[string][]string{"msDS-NeverRevealGroup": {"CN=Denied RODC Password Replication Group,CN=Users," + base}}),
+			rodc("R2", nil),
+			rodc("R3", map[string][]string{"msDS-NeverRevealGroup": {"x"}, "msDS-RevealedList": {"CN=a," + base}}),
+		},
+	}}
+	snap, err := collect(context.Background(), searcher{RootDSE: f.RootDSE, SearchWith: f.SearchWith, Queries: f.Queries, Requests: f.Requests}, metaForTest(), func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, s := range snap.Skipped {
+		got[s.Query] = s.Detail
+	}
+	if !strings.HasPrefix(got["rodc-prp"], "1 ") || !strings.HasPrefix(got["rodc-revealed-list"], "2 ") {
+		t.Errorf("skipped = %+v", snap.Skipped)
+	}
+}

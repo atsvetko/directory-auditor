@@ -13,7 +13,7 @@ verified_by: ''
 verified_on: ''
 object: Schema naming-context head (CN=Schema,CN=Configuration,<forest root>)
 attributes:
-- nTSecurityDescriptor (DACL)
+- nTSecurityDescriptor
 condition: >-
   An allow ACE on the schema head grants a principal outside Tier 0 (Schema Admins, Enterprise Admins,
   Administrators, SYSTEM and Enterprise Domain Controllers are Tier 0) any of GENERIC_ALL, GENERIC_WRITE,
@@ -38,6 +38,8 @@ attack:
   name: Domain or Tenant Policy Modification
 - id: T1098
   name: Account Manipulation
+anssi:
+- vuln_permissions_schema
 engine: declarative
 query_sketch:
   base: <schema>
@@ -54,4 +56,22 @@ notes: >-
   Collector: the schema-head query reads objectVersion only; it needs the descriptor too (SD: true). Explicit
   ACEs on individual classSchema and attributeSchema objects are out of scope for this entry and planned with the
   AD CS / schema wave. ANSSI point vuln_permissions_schema is planned (status collect, wave 4) — tag it when
-  implemented. Open point: confirm the two rights GUIDs against the linked pages.
+  implemented. Open point: confirm the two rights GUIDs against the linked pages. Implementation notes: the
+  schema-head query now reads the descriptor (SD: true). "All control access rights" (0x100 with no object type)
+  is matched as well, because it includes both named rights; any CREATE_CHILD counts, whatever its object type.
+  Tier 0 is the TIER0.md set (trustee_tier0), which contains the five principals named above. vuln_permissions_schema
+  is tagged for the schema head only; explicit ACEs on classSchema/attributeSchema objects remain planned (see
+  frameworks/anssi-plan.yaml, status partial).
+evidence_principals: >-
+  aces(obj).filter(a, a.allow && a.effective && !a.trustee_tier0 && (mask_has(a.mask, 0x10000000) || mask_has(a.mask,
+  0x40000000) || mask_has(a.mask, 0x40000) || mask_has(a.mask, 0x80000) || mask_has(a.mask, 0x1) || (mask_has(a.mask,
+  0x20) && a.object_type == "") || (mask_has(a.mask, 0x100) && a.object_type in ["", "e12b56b6-0a95-11d1-adbb-00c04fd8d5cd",
+  "be2bb760-7f46-11d2-b9ad-00c04f79f805"]))).map(a, a.trustee)
+condition_cel: >-
+  obj.class.exists(c, c.lowerAscii() == "dmd") && sd_readable(obj) && aces(obj).exists(a, a.allow && a.effective
+  && !a.trustee_tier0 && (mask_has(a.mask, 0x10000000) || mask_has(a.mask, 0x40000000) || mask_has(a.mask, 0x40000)
+  || mask_has(a.mask, 0x80000) || mask_has(a.mask, 0x1) || (mask_has(a.mask, 0x20) && a.object_type == "")
+  || (mask_has(a.mask, 0x100) && a.object_type in ["", "e12b56b6-0a95-11d1-adbb-00c04fd8d5cd",
+  "be2bb760-7f46-11d2-b9ad-00c04f79f805"])))
+expect:
+- CN=Schema,CN=Configuration,DC=lab,DC=example

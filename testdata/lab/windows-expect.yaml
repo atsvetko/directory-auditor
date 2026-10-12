@@ -85,8 +85,10 @@ allow:
   - DSA-0070
   - DSA-0072
   - DSA-0075
+  - DSA-0076
   - DSA-0077
   - DSA-0078
+  - DSA-0079
   - DSA-0080
   - DSA-0081
   - DSA-0082
@@ -95,6 +97,8 @@ allow:
   - DSA-0085
   - DSA-0086
   - DSA-0087
+  - DSA-0088
+  - DSA-0089
 tier0_must_include:
   - CN=Administrator,CN=Users,DC=da,DC=test
   - CN=krbtgt,CN=Users,DC=da,DC=test
