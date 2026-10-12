@@ -20,6 +20,9 @@ type Detection struct {
 	Identity string `json:"identity,omitempty"`
 	Kerberos bool   `json:"kerberos"` // a current-logon Kerberos bind is plausible
 	Source   string `json:"source,omitempty"`
+	// Reachable: a DC for Domain answered a TCP connection from this computer.
+	// A detected domain that is not reachable must never look "connected".
+	Reachable bool `json:"reachable"`
 	// SmbConf is the readable Samba AD DC configuration on this machine, if any.
 	SmbConf string `json:"smbconf,omitempty"`
 }
@@ -54,7 +57,9 @@ func Detect(ctx context.Context) Detection {
 		}
 	}
 	if d.Domain != "" {
-		d.Server = findDC(ctx, d.Domain)
+		if h, _, ok, err := provider.LocateDC(ctx, d.Domain); err == nil {
+			d.Server, d.Reachable = h, ok
+		}
 	}
 	d.SmbConf = smbconf.Detect("")
 	if d.Server == "" && d.SmbConf != "" {
@@ -62,6 +67,9 @@ func Detect(ctx context.Context) Detection {
 		if h, err := os.Hostname(); err == nil {
 			d.Server = h
 		}
+	}
+	if d.Server != "" && !d.Reachable {
+		d.Reachable = provider.Reachable(ctx, d.Server)
 	}
 	return d
 }

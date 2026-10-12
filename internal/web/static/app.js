@@ -39,7 +39,12 @@ const T = {
  f_tls:["Connection security","Защита подключения"], o_ldaps:["LDAPS (636)","LDAPS (636)"], o_starttls:["StartTLS (389)","StartTLS (389)"],
  f_pin:["Certificate fingerprint (only if the DC certificate is not trusted here)","Отпечаток сертификата (только если сертификат КД здесь не доверенный)"],
  f_hint:["A normal user account covers ~80% of checks. The password is used once in memory and never saved.","Обычной учётной записи достаточно для ~80% проверок. Пароль используется один раз в памяти и нигде не сохраняется."],
- demo:["Try with demo data","Попробовать на демо-данных"], connect:["Connect","Подключиться"], connecting:["Connecting…","Подключение…"],
+ c_demo:["Demo — synthetic data","Демо — синтетические данные"],
+ c_demo_d:["No directory is contacted. Shows the product on a built-in synthetic domain (lab.example).","К каталогу не подключаемся. Продукт показан на встроенном синтетическом домене (lab.example)."],
+ open_demo:["Open demo","Открыть демо"],
+ connok_demo:["Demo mode: synthetic domain lab.example. No directory was contacted — results are not about your network.","Демо-режим: синтетический домен lab.example. К каталогу не подключались — результаты не относятся к вашей сети."],
+ auto_unreach:["This computer is in {d}, but its domain controller {s} does not answer from here.","Компьютер входит в домен {d}, но его контроллер домена {s} отсюда недоступен."],
+ connect:["Connect","Подключиться"], connecting:["Connecting…","Подключение…"],
  connok:["Connected to {s} as {i} · {k} · {t}.","Подключено к {s} как {i} · {k} · {t}."],
  unencrypted:["The connection is not encrypted (lab mode): directory data will cross the network in clear.","Подключение не зашифровано (режим стенда): данные каталога пойдут по сети в открытом виде."],
  o_auto:["Automatic — LDAPS, then StartTLS, then LDAP with Kerberos sealing (recommended)","Автоматически — LDAPS, затем StartTLS, затем LDAP с шифрованием Kerberos (рекомендуется)"],
@@ -109,7 +114,13 @@ document.addEventListener("click", e => {
   const c = e.target.closest(".copt"); if (!c) return;
   c.parentElement.querySelectorAll(":scope > .copt").forEach(x => { if (!!x.dataset.scan === !!c.dataset.scan) x.classList.toggle("sel", x === c); });
   if (c.dataset.scan) scanMode = c.dataset.scan;
-  if (c.dataset.mode) { mode = c.dataset.mode; $("mform").classList.toggle("hidden", mode !== "manual"); $("detectbox").classList.toggle("hidden", mode !== "auto" || !detected || !detected.domain); }
+  if (c.dataset.mode) {
+    if (c.dataset.mode !== mode) resetConn();
+    mode = c.dataset.mode;
+    $("mform").classList.toggle("hidden", mode !== "manual");
+    $("detectbox").classList.toggle("hidden", mode !== "auto" || !detected || !detected.domain || !detected.reachable);
+    $("connect").textContent = mode === "demo" ? t("open_demo") : t("connect");
+  }
 });
 function selectMode(m) { document.querySelector(`.copt[data-mode="${m}"]`).click(); }
 
@@ -117,7 +128,8 @@ function selectMode(m) { document.querySelector(`.copt[data-mode="${m}"]`).click
 function renderDetect() {
   const d = $("autodesc");
   if (!detected) return;
-  if (detected.domain && detected.kerberos) d.textContent = t("auto_ok", {d: detected.domain});
+  if (detected.domain && !detected.reachable) d.textContent = t("auto_unreach", {d: detected.domain, s: detected.server || "—"});
+  else if (detected.domain && detected.kerberos) d.textContent = t("auto_ok", {d: detected.domain});
   else if (detected.domain) d.textContent = t("auto_nokrb", {d: detected.domain});
   else d.textContent = t("auto_none");
   $("d_domain").textContent = detected.domain || "";
@@ -129,7 +141,8 @@ function renderDetect() {
 async function detect() {
   detected = await api("/api/detect");
   renderDetect();
-  if (detected.domain && detected.kerberos && detected.server) { $("detectbox").classList.remove("hidden"); }
+  $("optauto").classList.toggle("warn", !!detected.domain && !detected.reachable);
+  if (detected.domain && detected.kerberos && detected.server && detected.reachable) { $("detectbox").classList.remove("hidden"); }
   else { selectMode("manual"); if (detected.domain) $("m_domain").value = detected.domain; if (detected.server) $("m_server").value = detected.server; }
 }
 function showErr(prefix, msg, fix) {
@@ -137,15 +150,29 @@ function showErr(prefix, msg, fix) {
   $(prefix + "_msg").textContent = msg || "";
   if ($(prefix + "_fix")) $(prefix + "_fix").textContent = fix || "";
 }
+// resetConn forgets the current connection: the Scan and Results steps lock
+// again, so nothing can run against an earlier target (e.g. the demo).
+function resetConn() {
+  conn = null;
+  $("connok").classList.add("hidden"); $("connok").classList.remove("demo");
+  document.body.classList.remove("is-demo");
+  document.querySelector('.ptab[data-go="welcome"]').classList.remove("done");
+  ["scan", "report"].forEach(v => { document.querySelector(`.ptab[data-go="${v}"]`).disabled = true; });
+}
 function renderConn() {
+  if (conn.kind === "demo") {
+    $("connok").textContent = "⚠ " + t("connok_demo"); $("connok").classList.add("demo");
+    $("scantarget").textContent = "lab.example · " + t("c_demo");
+    return;
+  }
   const k = {samba: "Samba AD DC", demo: "demo", freeipa: "FreeIPA / IdM", "389ds": "389 Directory Server"}[conn.kind] || "Active Directory";
   $("connok").textContent = "✓ " + t("connok", {s: conn.server, i: conn.identity, k: k, t: conn.transport || "—"}) + (conn.smbconf ? " " + t("connok_smb") : "")
     + (conn.transport && !conn.encrypted ? " " + t("unencrypted") : "");
   $("scantarget").textContent = conn.domain + " · " + conn.identity;
 }
 async function connect(kind) {
-  showErr("connerr"); $("connok").classList.add("hidden");
-  const btn = $("connect"); btn.disabled = true; $("demo").disabled = true; btn.textContent = t("connecting");
+  showErr("connerr"); resetConn();
+  const btn = $("connect"); btn.disabled = true; btn.textContent = t("connecting");
   let body = {mode: kind, smbconf: !!(detected && detected.smbconf)};
   if (kind === "manual") {
     body = {mode: "manual", domain: $("m_domain").value.trim(), server: $("m_server").value.trim(), server_name: $("m_servername").value.trim(),
@@ -154,7 +181,7 @@ async function connect(kind) {
   }
   const r = await api("/api/connect", body);
   $("m_password").value = "";   // the server holds it in memory until the scan ends; the page never keeps it
-  btn.disabled = false; $("demo").disabled = false; btn.textContent = t("connect");
+  btn.disabled = false; btn.textContent = mode === "demo" ? t("open_demo") : t("connect");
   if (!r.ok) { showErr("connerr", r.error, r.hint); return; }
   conn = r; renderConn(); document.body.classList.toggle("is-demo", r.kind === "demo"); $("connok").classList.remove("hidden");
   document.querySelector('.ptab[data-go="welcome"]').classList.add("done");
@@ -168,7 +195,6 @@ const isIP = s => /^\d{1,3}(\.\d{1,3}){3}$/.test(s.trim()) || s.trim().includes(
 $("m_server").addEventListener("input", () => { $("servernamerow").classList.toggle("hidden", !isIP($("m_server").value)); });
 
 $("connect").addEventListener("click", () => connect(mode));
-$("demo").addEventListener("click", () => connect("demo"));
 
 /* ---------- 2 · scan ---------- */
 $("startscan").addEventListener("click", async () => {

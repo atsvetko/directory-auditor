@@ -170,3 +170,21 @@ func TestKrb5DefaultRealm(t *testing.T) {
 		t.Errorf("realm = %q", got)
 	}
 }
+
+// A failed connect after a demo connect must not leave the demo in place:
+// the next scan has to be refused, never run silently on synthetic data.
+func TestFailedConnectDropsEarlierDemo(t *testing.T) {
+	_, ts := start(t)
+	h := map[string]string{"X-DA-Token": "tok123", "Content-Type": "application/json"}
+	if code, body := do(t, ts, "POST", "/api/connect", `{"mode":"demo"}`, h); code != 200 || !strings.Contains(body, `"ok":true`) {
+		t.Fatalf("demo connect: %d %s", code, body)
+	}
+	// A manual target that cannot exist: no domain, no server.
+	if code, body := do(t, ts, "POST", "/api/connect", `{"mode":"manual","domain":"","server":""}`, h); code != 200 || strings.Contains(body, `"ok":true`) {
+		t.Fatalf("bad manual connect should fail: %d %s", code, body)
+	}
+	code, body := do(t, ts, "POST", "/api/scan", `{"quick":true}`, h)
+	if code != 409 || !strings.Contains(body, "connect first") {
+		t.Fatalf("scan after a failed connect must be refused, got %d %s", code, body)
+	}
+}

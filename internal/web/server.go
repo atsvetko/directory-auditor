@@ -294,6 +294,10 @@ func (s *Server) connect(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 409, connectResp{Error: "a scan is running"})
 		return
 	}
+	// Every attempt starts from "not connected": a failed connect must never
+	// leave an earlier target (a demo snapshot in particular) in place, or the
+	// next scan would silently run against it.
+	s.setTarget(nil, false, connectResp{})
 	if q.Mode == "demo" {
 		if len(s.opts.Demo) == 0 {
 			writeJSON(w, 200, connectResp{Error: "this build has no demo data"})
@@ -311,8 +315,18 @@ func (s *Server) connect(w http.ResponseWriter, r *http.Request) {
 	switch q.Mode {
 	case "auto":
 		d := Detect(r.Context())
-		if d.Domain == "" || d.Server == "" {
+		if d.Domain == "" {
 			writeJSON(w, 200, connectResp{Error: "no domain was detected on this computer", Hint: "choose “Enter domain and credentials”"})
+			return
+		}
+		if d.Server == "" {
+			writeJSON(w, 200, connectResp{Error: "this computer is in " + d.Domain + ", but DNS has no domain controller records for it",
+				Hint: "point this computer at the domain's DNS servers, or choose “Enter domain and credentials” and give the DC name or IP"})
+			return
+		}
+		if !d.Reachable {
+			writeJSON(w, 200, connectResp{Error: "this computer is in " + d.Domain + ", but its domain controller " + d.Server + " does not answer from here (LDAP 389/636)",
+				Hint: "check the network path to the DC, or choose “Enter domain and credentials” and give a reachable DC name or IP"})
 			return
 		}
 		t.Domain, t.Server = d.Domain, d.Server

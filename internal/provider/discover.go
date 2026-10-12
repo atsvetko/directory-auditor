@@ -87,9 +87,16 @@ func DiscoverDCs(ctx context.Context, domain string) (hosts []string, record str
 // answers, the first in SRV order is returned and the caller's connection
 // attempt reports the real error.
 func DiscoverDC(ctx context.Context, domain string) (host, record string, err error) {
+	host, record, _, err = LocateDC(ctx, domain)
+	return host, record, err
+}
+
+// LocateDC is DiscoverDC that also reports whether the chosen DC accepted a
+// TCP connection (false: DNS knows the domain, but no DC answers from here).
+func LocateDC(ctx context.Context, domain string) (host, record string, ok bool, err error) {
 	hosts, record, err := DiscoverDCs(ctx, domain)
 	if err != nil {
-		return "", "", err
+		return "", "", false, err
 	}
 	const maxProbe = 5
 	for i, h := range hosts {
@@ -97,11 +104,15 @@ func DiscoverDC(ctx context.Context, domain string) (host, record string, err er
 			break
 		}
 		if reachable(ctx, h) {
-			return h, record, nil
+			return h, record, true, nil
 		}
 	}
-	return hosts[0], record, nil
+	return hosts[0], record, false, nil
 }
+
+// Reachable reports whether host accepts a TCP connection on 636 or 389
+// (connect only; nothing is sent).
+func Reachable(ctx context.Context, host string) bool { return reachable(ctx, host) }
 
 // ResolveServer fills t.Server from DNS when only the domain is known. It is a
 // no-op when a server is already given, and returns a note naming the DC that

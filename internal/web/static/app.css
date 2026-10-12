@@ -287,3 +287,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .chip{font-size:11.5px;text-decoration:none;color:var(--accent);background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
 .chip:hover{border-color:var(--accent)}
 .librefs a{color:var(--accent)}
+
+/* demo connection and an unreachable detected domain must never look "connected" */
+#connok.demo{background:#fff4e5;border-color:#f0c36d;color:#7a4b00}
+.copt.warn .cd{color:#a33}
