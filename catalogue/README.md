@@ -18,18 +18,20 @@ ID blocks: `DSA-0001…0099` directory-core (AD and Samba AD DC, read over LDAP)
 FreeIPA / IdM (verified against the FreeIPA source tree, commit `13a1df3`, and Red Hat IdM
 documentation), `DSA-0201…0299` Samba AD DC configuration (smb.conf on the DC, tier 2; verified
 against the Samba source tree — docs-xml/smbdotconf, loadparm, provision LDIFs — and the release
-notes of the versions that changed each default). DNS and Group Policy blocks to follow.
+notes of the versions that changed each default), `DSA-0301…0399` DNS (AD-integrated zones, read over
+LDAP from the DNS application partitions). The Group Policy block is to follow.
 
 Implemented entries carry `condition_cel` (the pack condition, evaluated by the engine) and `expect`
 (the objects in the matching synthetic snapshot under `testdata/` that must fire). `go test
 ./internal/catalogue` runs every implemented entry against its snapshot, so a check is proven before
 the pack is written. Packs are still written only from entries with `verified_by` filled.
 
-Status: 72 directory-core, 23 FreeIPA and 21 Samba entries, all `draft` (awaiting human
-verification). All 116 carry `condition_cel` and are exercised by `go test ./internal/catalogue`
+Status: 89 directory-core, 2 DNS, 23 FreeIPA and 21 Samba entries, all `draft` (awaiting human
+verification). 118 of them carry `condition_cel` and are exercised by `go test ./internal/catalogue`
 against `testdata/synthetic-*.json.zst` (`synthetic-samba-hardened` is the negative control on
 which no entry may fire) and, in CI, against a live Samba AD DC on every push and a live FreeIPA
-server nightly (`testdata/lab/*-expect.yaml`, `tools/lab/`).
+server nightly (`testdata/lab/*-expect.yaml`, `tools/lab/`). The 17 group-A entries (DSA-0075…0089,
+DSA-0301, DSA-0302) are specs only: committed before any implementation, as clean-room rule 5 requires.
 
 Every entry with `condition_cel` is also built into the binary (`embed.go` in this directory,
 `go:embed */*.yaml`) and evaluated as a **preview check** — unsigned, labelled in every report,

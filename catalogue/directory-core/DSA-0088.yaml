@@ -1,0 +1,62 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0088
+title:
+  en: Traces of a rogue domain controller registration (DCShadow)
+  ru: Следы регистрации подложного контроллера домена (DCShadow)
+domain: directory-core
+tier: 0
+severity: critical
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  Computer accounts; server and nTDSDSA (NTDS Settings) objects under CN=Sites in the configuration partition
+attributes:
+- servicePrincipalName
+- userAccountControl
+- serverReference
+- objectClass
+condition: >-
+  Either of the following holds. (1) A computer account without SERVER_TRUST_ACCOUNT (0x2000) or
+  PARTIAL_SECRETS_ACCOUNT (0x4000000) has a servicePrincipalName starting with "GC/" or with the directory
+  replication service class "E3514235-4B06-11D1-AB04-00C04FC2DCD2/". (2) An nTDSDSA object exists under a server
+  object whose serverReference is missing or points to a computer account that is not a domain controller by the
+  same flags.
+threshold: any occurrence
+rationale: >-
+  To push changes into the directory through replication, a DCShadow-style attack briefly registers an ordinary
+  computer as a domain controller: it adds the global catalog and replication SPNs to the computer account and
+  creates a server object with NTDS Settings in the configuration partition, then removes them. Changes made this
+  way bypass most logging. The registration is normally cleaned up within seconds, so a leftover is rare — but when
+  an attack is interrupted, or a demotion failed, these objects stay behind, and either case needs attention.
+remediation:
+  en: >-
+    Investigate the computer and the time the objects were created (whenCreated, replication metadata). If no
+    failed promotion or demotion explains them, treat the domain as compromised: remove the objects with metadata
+    cleanup, review recent changes to Tier-0 objects, and rotate krbtgt and Tier-0 credentials.
+  ru: >-
+    Расследуйте компьютер и время создания объектов (whenCreated, метаданные репликации). Если их не объясняет
+    неудачное повышение или понижение роли контроллера домена, считайте домен скомпрометированным: удалите объекты
+    очисткой метаданных, проверьте недавние изменения объектов нулевого уровня и смените пароль krbtgt и учётные
+    данные нулевого уровня.
+attack:
+- id: T1207
+  name: Rogue Domain Controller
+engine: complex:rogue-dc
+query_sketch:
+  base: CN=Sites,<config>
+  scope: subtree
+  filter: (|(objectClass=server)(objectClass=nTDSDSA))
+references:
+- title: MITRE ATT&CK — T1207 Rogue Domain Controller
+  url: https://attack.mitre.org/techniques/T1207/
+- title: Microsoft Open Specifications — MS-DRSR (directory replication service, SPN of the DRS RPC interface)
+  url: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-drsr/f977faaa-673e-4f66-b9bf-48c640241d47
+- title: Benjamin Delpy and Vincent Le Toux — DCShadow (BlueHat IL 2018)
+  url: https://www.dcshadow.com/
+notes: >-
+  Collector: computer SPNs are already read; server and nTDSDSA objects under CN=Sites must be added (one subtree
+  query, readable by any user). Open point: confirm the MS-DRSR page for the replication SPN form. Complex engine
+  because condition (2) joins two object sets.

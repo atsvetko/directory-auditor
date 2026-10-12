@@ -1,0 +1,60 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0301
+title:
+  en: AD-integrated DNS zones controllable outside Tier 0
+  ru: Зоны DNS, интегрированные в AD, управляются вне нулевого уровня
+domain: dns
+providers: [ad, samba]
+tier: 0
+severity: high
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  dnsZone objects in DC=DomainDnsZones and DC=ForestDnsZones application partitions and in the legacy
+  CN=MicrosoftDNS,CN=System container of the domain partition
+attributes:
+- nTSecurityDescriptor (DACL)
+- name
+condition: >-
+  An allow ACE on a zone object grants a principal outside Tier 0 and other than DnsAdmins any of GENERIC_ALL,
+  GENERIC_WRITE, WRITE_DAC, WRITE_OWNER, or write to all properties. The default right of Authenticated Users to
+  create child objects (new DNS records) is not a finding here. The trust-anchor zones (RootDNSServers,
+  ..TrustAnchors) are checked like any other zone.
+threshold: any occurrence
+rationale: >-
+  Whoever controls a zone object can rewrite or delete any record in it, change its update policy, and point
+  names such as the domain controllers, the WPAD host or internal web services at a host they own. That turns DNS
+  into a man-in-the-middle and credential-relay platform for the whole domain. DnsAdmins is excluded because its
+  members already hold this control by design and are reported by DSA-0027 and DSA-0059.
+remediation:
+  en: >-
+    Remove the ACE from the zone. Delegate DNS record management through DnsAdmins or a dedicated group with
+    rights on specific records only, and record each such delegation.
+  ru: >-
+    Удалите запись ACE из списка доступа зоны. Делегируйте управление записями DNS через группу DnsAdmins или
+    отдельную группу с правами только на конкретные записи и документируйте каждое такое делегирование.
+attack:
+- id: T1557
+  name: Adversary-in-the-Middle
+- id: T1584.002
+  name: 'Compromise Infrastructure: DNS Server'
+engine: declarative
+query_sketch:
+  base: DC=DomainDnsZones,<root>
+  scope: subtree
+  filter: (objectClass=dnsZone)
+references:
+- title: Microsoft Learn — DNS-Zone class (AD schema)
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/c-dnszone
+- title: NetSPI (Kevin Robertson) — Exploiting Active Directory-integrated DNS
+  url: https://www.netspi.com/blog/technical-blog/network-pentesting/exploiting-adidns/
+- title: ANSSI / CERT-FR — Active Directory control points (vuln_permissions_msdns)
+  url: https://www.cert.ssi.gouv.fr/uploads/ad_checklist.html
+notes: >-
+  New block DSA-0301…0399 for the dns domain (catalogue/README.md). Collector: none of the DNS partitions is read
+  today; the provider must discover them from the partitions container (CN=Partitions in the configuration
+  partition) rather than assume their names. ANSSI point vuln_permissions_msdns is planned (wave 5) — tag it when
+  implemented. Record-level checks (wildcard and WPAD records, records anyone can overwrite) are a separate entry.

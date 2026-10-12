@@ -1,0 +1,61 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0087
+title:
+  en: Active member computers running an operating system out of vendor support
+  ru: Активные рядовые компьютеры с операционной системой без поддержки производителя
+domain: directory-core
+providers: [ad]   # Samba AD DC domains carry Windows members too, but operatingSystem on Linux members is free text
+tier: 0
+severity: medium
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: Enabled computer accounts that are not domain controllers
+attributes:
+- operatingSystem
+- operatingSystemVersion
+- userAccountControl
+- lastLogonTimestamp
+condition: >-
+  An enabled computer account without SERVER_TRUST_ACCOUNT or PARTIAL_SECRETS_ACCOUNT, with a lastLogonTimestamp
+  within 90 days of the snapshot time, reports an operating system whose servicing has ended on the snapshot date:
+  Windows XP, Vista, 7, 8 and 8.1; Windows 10 editions other than LTSC/LTSB after 14 October 2025; Windows 11
+  build 22000 (21H2) after 8 October 2024, build 22621 (22H2) after 14 October 2025 and build 22631 (23H2) after
+  10 November 2026; and the server releases already listed in DSA-0031, on the same dates.
+threshold: any active computer
+rationale: >-
+  An operating system out of support gets no security fixes, so every vulnerability published after its end date
+  stays open. On member computers this is the most common foothold for lateral movement and credential theft
+  that later reaches Tier 0. DSA-0031 covers domain controllers only. Computers enrolled in paid Extended Security
+  Updates still receive fixes, but the directory cannot show enrolment, so the finding asks for confirmation.
+remediation:
+  en: >-
+    Upgrade or replace each listed computer. Where that is not possible yet, confirm Extended Security Updates
+    enrolment, isolate the computer in its own network segment, and keep privileged accounts from logging on to it.
+  ru: >-
+    Обновите или замените каждый найденный компьютер. Если это пока невозможно, подтвердите подписку на
+    расширенные обновления безопасности (ESU), выделите компьютер в отдельный сегмент сети и запретите вход на него
+    привилегированным учётным записям.
+attack:
+- id: T1210
+  name: Exploitation of Remote Services
+engine: declarative
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (sAMAccountType=805306369)
+references:
+- title: Microsoft Lifecycle — Windows 10 Home and Pro, Enterprise and Education (end of servicing 14 October 2025)
+  url: https://learn.microsoft.com/en-us/lifecycle/products/windows-10-enterprise-and-education
+- title: Microsoft Lifecycle — Windows 11 Enterprise and Education
+  url: https://learn.microsoft.com/en-us/lifecycle/products/windows-11-enterprise-and-education
+- title: Microsoft Lifecycle — Windows Server 2012 R2
+  url: https://learn.microsoft.com/en-us/lifecycle/products/windows-server-2012-r2
+notes: >-
+  Already collected. Build numbers are matched on operatingSystemVersion, editions on operatingSystem. The
+  Windows 11 dates are the Enterprise and Education ones, the later of the two servicing tracks, so the check
+  never fires early. Open point: confirm every date against the Microsoft Lifecycle pages at verification and
+  keep the table in one place shared with DSA-0031. Inactive computers are excluded; stale computer accounts are a
+  separate finding.

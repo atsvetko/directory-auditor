@@ -1,0 +1,58 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0302
+title:
+  en: AD-integrated DNS zones accept nonsecure dynamic updates
+  ru: Зоны DNS, интегрированные в AD, принимают небезопасные динамические обновления
+domain: dns
+providers: [ad, samba]
+tier: 0
+severity: high
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: dnsZone objects in the DNS application partitions and in CN=MicrosoftDNS,CN=System
+attributes:
+- dNSProperty
+- name
+condition: >-
+  The zone's dNSProperty holds the allow-update property (DSPROPERTY_ZONE_ALLOW_UPDATE, property id 0x00000002)
+  with the value ZONE_UPDATE_UNSECURE (1), meaning both secure and nonsecure dynamic updates are accepted.
+  Reverse-lookup zones are reported at the same severity. Zones with updates off (0) or secure only (2) pass.
+threshold: any zone
+rationale: >-
+  With nonsecure updates on, any host that can reach a DNS server can create or overwrite records in the zone
+  without authenticating. An attacker on the network can register names that clients look up — a missing server,
+  WPAD, a mistyped host — and capture or relay the authentication traffic sent to them.
+remediation:
+  en: >-
+    Set dynamic updates on the zone to "Secure only". If DHCP servers register records for non-domain clients,
+    configure them with dedicated credentials for DNS updates instead of allowing nonsecure updates.
+  ru: >-
+    Установите для зоны режим динамических обновлений «только безопасные». Если серверы DHCP регистрируют записи
+    для компьютеров вне домена, задайте им отдельные учётные данные для обновления DNS вместо разрешения
+    небезопасных обновлений.
+attack:
+- id: T1557
+  name: Adversary-in-the-Middle
+engine: complex:dnsproperty
+query_sketch:
+  base: DC=DomainDnsZones,<root>
+  scope: subtree
+  filter: (objectClass=dnsZone)
+references:
+- title: Microsoft Open Specifications — MS-DNSP 2.2.6.1.1 DNS_ZONE_UPDATE
+  url: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dnsp/d4b84209-f00c-478f-80d7-8dd0f1633d9e
+- title: Microsoft Learn — DNS-Property attribute (AD schema)
+  url: https://learn.microsoft.com/en-us/windows/win32/adschema/a-dnsproperty
+- title: Samba bugzilla 9331 — the Samba DNS server honours the zone's allow-update property
+  url: https://bugzilla.samba.org/show_bug.cgi?id=9331
+- title: ANSSI / CERT-FR — Active Directory control points (vuln_dnszone_bad_prop)
+  url: https://www.cert.ssi.gouv.fr/uploads/ad_checklist.html
+notes: >-
+  dNSProperty is a multi-valued binary attribute; each value is a structure with a property id and data, decoded
+  by the engine (complex:dnsproperty), never by string matching. Open point: confirm the property id 0x00000002
+  against the MS-DNSP section on dnsProperty. Zone transfer settings are not stored in a form LDAP can read
+  reliably and are planned as a tier-1 probe (group Г), not here. ANSSI point vuln_dnszone_bad_prop is planned
+  (wave 5) — tag it when implemented.

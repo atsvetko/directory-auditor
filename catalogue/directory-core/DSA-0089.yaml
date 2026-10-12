@@ -1,0 +1,67 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0089
+title:
+  en: Read-only domain controllers may cache or have cached Tier-0 credentials
+  ru: Контроллеры домена только для чтения могут кэшировать или уже кэшировали учётные данные нулевого уровня
+domain: directory-core
+tier: 0
+severity: high
+quick: true
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  RODC computer accounts (PARTIAL_SECRETS_ACCOUNT, 0x4000000); the Allowed and Denied RODC Password Replication
+  groups (RIDs 571 and 572)
+attributes:
+- msDS-RevealOnDemandGroup
+- msDS-NeverRevealGroup
+- msDS-RevealedList
+- member
+condition: >-
+  Any of the following holds for an RODC. (1) msDS-RevealOnDemandGroup (the allowed list) contains, directly or
+  through group nesting, a Tier-0 principal. (2) msDS-NeverRevealGroup (the denied list) does not contain the Denied
+  RODC Password Replication Group. (3) msDS-RevealedList names a Tier-0 account, meaning its password is already
+  cached on the RODC. In addition, for the domain: (4) the Allowed RODC Password Replication Group has a Tier-0
+  member, or (5) the Denied RODC Password Replication Group has lost one of its default members (Domain Admins,
+  Enterprise Admins, Schema Admins, Cert Publishers, Group Policy Creator Owners, Domain Controllers, Read-only
+  Domain Controllers, krbtgt).
+threshold: any occurrence
+rationale: >-
+  An RODC is placed where physical security is weak, and is designed so that stealing it exposes only the
+  passwords it was allowed to cache. The password replication policy is what makes that true: Tier-0 credentials
+  must never be eligible, and the denied list must keep its defaults. If a privileged password is allowed or
+  already cached, whoever takes the RODC takes the domain.
+remediation:
+  en: >-
+    Remove Tier-0 principals from the allowed list and from the Allowed RODC Password Replication Group, restore
+    the default members of the denied group and the reference to it on each RODC, then reset the password of every
+    Tier-0 account found in msDS-RevealedList.
+  ru: >-
+    Исключите субъектов нулевого уровня из списка разрешённых и из группы Allowed RODC Password Replication Group,
+    восстановите участников группы Denied RODC Password Replication Group по умолчанию и ссылку на неё у каждого
+    RODC, затем смените пароли всех учётных записей нулевого уровня, найденных в msDS-RevealedList.
+attack:
+- id: T1003
+  name: OS Credential Dumping
+- id: T1558
+  name: Steal or Forge Kerberos Tickets
+engine: complex:rodc-prp
+query_sketch:
+  base: default
+  scope: subtree
+  filter: (&(sAMAccountType=805306369)(userAccountControl:1.2.840.113556.1.4.803:=67108864))
+references:
+- title: Microsoft Learn — Password Replication Policy (RODC)
+  url: https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-R2-and-2008/cc730883(v=ws.10)
+- title: Microsoft Learn — Administering the Password Replication Policy
+  url: https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-R2-and-2008/cc754646(v=ws.10)
+- title: ANSSI / CERT-FR — Active Directory control points (RODC points)
+  url: https://www.cert.ssi.gouv.fr/uploads/ad_checklist.html
+notes: >-
+  Collector: msDS-RevealOnDemandGroup, msDS-NeverRevealGroup and msDS-RevealedList must be added to the computer
+  query. Open point: msDS-RevealedList may need more than ordinary user rights; when unreadable, condition (3) is
+  reported as not collected and the rest still runs. ANSSI points vuln_rodc_priv_revealed, vuln_rodc_reveal,
+  vuln_rodc_never_reveal, vuln_rodc_allowed_group and vuln_rodc_denied_group are planned — tag them when
+  implemented. Open point: confirm the default denied-group membership list against the Microsoft page.
