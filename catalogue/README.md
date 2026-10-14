@@ -19,15 +19,23 @@ FreeIPA / IdM (verified against the FreeIPA source tree, commit `13a1df3`, and R
 documentation), `DSA-0201…0299` Samba AD DC configuration (smb.conf on the DC, tier 2; verified
 against the Samba source tree — docs-xml/smbdotconf, loadparm, provision LDIFs — and the release
 notes of the versions that changed each default), `DSA-0301…0399` DNS (AD-integrated zones, read over
-LDAP from the DNS application partitions). The Group Policy block is to follow.
+LDAP from the DNS application partitions), `DSA-0401…0499` Group Policy (reserved, to follow),
+`DSA-0501…0599` PKI / AD CS (certificate templates, CAs and the Public Key Services containers in the
+configuration partition, with the CA-side and DC-side settings their abuse depends on). The Group Policy
+block is still to follow.
 
 Implemented entries carry `condition_cel` (the pack condition, evaluated by the engine) and `expect`
 (the objects in the matching synthetic snapshot under `testdata/` that must fire). `go test
 ./internal/catalogue` runs every implemented entry against its snapshot, so a check is proven before
 the pack is written. Packs are still written only from entries with `verified_by` filled.
 
-Status: 89 directory-core, 2 DNS, 23 FreeIPA and 21 Samba entries, all `draft` (awaiting human
-verification). 135 of them carry `condition_cel` and are exercised by `go test ./internal/catalogue`
+Status: 89 directory-core, 2 DNS, 23 FreeIPA, 21 Samba and 16 PKI / AD CS entries, all `draft`
+(awaiting human verification). The PKI block (`DSA-0501…0520`) is spec-only — no `condition_cel` yet —
+and covers AD CS escalation ESC1–ESC16 (ESC12, shell access to the CA with a YubiHSM, is not detectable
+from the directory or over the network and is deliberately left as a reserved gap at `DSA-0512`) plus weak
+CA / NTAuth certificates (`DSA-0520`). The SID-security-extension entries, the CA-side flags (ESC6, ESC7,
+ESC11, ESC16) and the DC mapping mode (ESC10) are tier 1–2 reads flagged as such; the rest are tier-0 LDAP
+reads of the configuration partition. 135 of the other entries carry `condition_cel` and are exercised by `go test ./internal/catalogue`
 against `testdata/synthetic-*.json.zst` (`synthetic-samba-hardened` is the negative control on
 which no entry may fire) and, in CI, against a live Samba AD DC on every push and a live FreeIPA
 server nightly (`testdata/lab/*-expect.yaml`, `tools/lab/`). Group A (DSA-0075…0089, DSA-0301,

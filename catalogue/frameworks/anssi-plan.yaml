@@ -31,10 +31,12 @@ plan:
 - {id: vuln_group_loop,                      status: gap,     wave: 3, note: "cycles in the group membership graph"}
 - {id: vuln_silo_priv,                       status: collect, wave: 3, needs: "authentication policy silos (msDS-AssignedAuthNPolicySilo)"}
 # --- wave 4: AD CS ------------------------------------------------------------------------------------
-- {id: vuln_adcs_control,                    status: collect, wave: 4, needs: "Public Key Services containers (configuration partition) and their DACLs"}
-- {id: vuln_adcs_template_control,           status: collect, wave: 4, needs: "certificate template objects and their DACLs"}
-- {id: vuln_adcs_template_auth_enroll_with_name, status: collect, wave: 4, needs: "certificate template flags, EKUs and enrolment rights"}
-- {id: vuln_certificates_vuln,               status: collect, wave: 4, needs: "certificate parsing (CA and NTAuth certificates: key size, signature algorithm)"}
+# Specs committed (pki block DSA-0501…0520); each point below is declared by a draft entry, so it is
+# marked partial until the PKI collector and the packs land. See catalogue/pki and docs/clean-room.md rule 5.
+- {id: vuln_adcs_control,                    status: partial, wave: 4, note: "DSA-0505 specs the PKI container/CA/NTAuth DACLs; collector not written yet"}
+- {id: vuln_adcs_template_control,           status: partial, wave: 4, note: "DSA-0504 specs certificate-template owner and DACL; collector not written yet"}
+- {id: vuln_adcs_template_auth_enroll_with_name, status: partial, wave: 4, note: "DSA-0501 specs requester-named-subject auth templates (ESC1); collector not written yet"}
+- {id: vuln_certificates_vuln,               status: partial, wave: 4, note: "DSA-0520 specs weak CA/NTAuth key size and signature; key/signature only, not full path validation"}
 - {id: vuln_permissions_schema,              status: partial, wave: 4, note: "DSA-0079 covers the schema head; explicit ACEs on classSchema and attributeSchema objects are still to be read"}
 - {id: vuln_permissions_dfsr_sysvol,         status: collect, wave: 4, needs: "DFSR settings objects of the SYSVOL replication group"}
 # --- wave 5: DNS --------------------------------------------------------------------------------------

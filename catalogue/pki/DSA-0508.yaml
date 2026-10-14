@@ -1,0 +1,56 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0508
+title:
+  en: AD CS web enrollment endpoint accepts NTLM and is open to relay (ESC8)
+  ru: Веб-служба заявок AD CS принимает NTLM и уязвима к ретрансляции (ESC8)
+domain: pki
+providers: [ad]
+tier: 1
+severity: high
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  The HTTP(S) enrolment endpoints of each enterprise CA that runs web enrollment — the Web Enrollment pages
+  (/certsrv/) and the Certificate Enrollment Web Service (/<CA>_CES_*/service.svc) — discovered from the
+  pKIEnrollmentService hosts and probed over the network
+attributes:
+- dNSHostName
+condition: >-
+  An enrolment endpoint accepts NTLM authentication and either is reachable over plain HTTP, or is served over
+  HTTPS without Extended Protection for Authentication (channel binding) enforced.
+threshold: any reachable endpoint
+rationale: >-
+  These endpoints authenticate the caller with NTLM and will enrol a certificate for the authenticated
+  account. An attacker who coerces a privileged machine (for example a domain controller) into authenticating
+  and relays that NTLM exchange to the endpoint obtains a certificate for that machine, and with it domain-
+  wide impersonation. HTTPS with Extended Protection, or disabling NTLM, breaks the relay.
+remediation:
+  en: >-
+    Enforce HTTPS and set Extended Protection for Authentication to Required on the web-enrollment and CES
+    endpoints, or disable NTLM to the AD CS host and require Kerberos. Apply the mitigations in Microsoft
+    KB5005413.
+  ru: >-
+    Включите HTTPS и установите для расширенной защиты аутентификации режим «обязательно» на веб-службах заявок
+    и CES либо отключите NTLM к узлу AD CS и требуйте Kerberos. Примените меры из бюллетеня Microsoft KB5005413.
+attack:
+- id: T1649
+  name: Steal or Forge Authentication Certificates
+- id: T1557
+  name: Adversary-in-the-Middle
+engine: complex:esc8-web-enrollment
+references:
+- title: >-
+    Microsoft Support — KB5005413: mitigating NTLM relay attacks on Active Directory Certificate Services (AD
+    CS)
+  url: https://support.microsoft.com/en-us/topic/kb5005413-mitigating-ntlm-relay-attacks-on-active-directory-certificate-services-ad-cs-3612b773-4043-4aa9-b23d-b87910cd3429
+- title: >-
+    SpecterOps Certify documentation — ESC8 NTLM relay to AD CS HTTP endpoints
+  url: https://docs.specterops.io/ghostpack-docs/Certify.wik-mdx/4-escalation-techniques
+notes: >-
+  Tier 1: a network probe of the endpoints, not an LDAP read. The tool reports the endpoint's authentication
+  methods and transport; it never performs a relay. Enumerate endpoints from the pKIEnrollmentService hosts
+  (dNSHostName) and the standard paths /certsrv/ and the CES service URLs. Confirm the EPA detection method
+  (HTTP 401 WWW-Authenticate and channel-binding token behaviour) at verification.

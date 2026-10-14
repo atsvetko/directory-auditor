@@ -1,0 +1,64 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0503
+title:
+  en: Enrollment-agent template is enrollable outside Tier 0 (ESC3)
+  ru: Шаблон агента заявок доступен для записи вне нулевого уровня (ESC3)
+domain: pki
+providers: [ad]
+tier: 0
+severity: high
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  Published pKICertificateTemplate objects as for DSA-0501, and the enterprise CA objects
+  (pKIEnrollmentService) that publish them, for the enrolment-agent restriction
+attributes:
+- pKIExtendedKeyUsage
+- msPKI-Certificate-Application-Policy
+- msPKI-Enrollment-Flag
+- msPKI-RA-Signature
+- nTSecurityDescriptor
+condition: >-
+  A published template carries the Certificate Request Agent EKU (1.3.6.1.4.1.311.20.2.1), manager approval is
+  off and no issuance signature is required, and an Enroll or Autoenroll right is granted to a principal
+  outside Tier 0. A finding is strengthened when an enterprise CA also publishes a client-authentication
+  template that accepts a request-agent signature (msPKI-RA-Signature of 1 with the Certificate Request Agent
+  application policy) and the CA enforces no enrolment-agent restriction.
+threshold: any occurrence
+rationale: >-
+  A certificate with the Certificate Request Agent usage lets its holder enrol on behalf of other accounts.
+  Combined with an enrolment-on-behalf-of template that is valid for authentication, a principal who may
+  obtain the agent certificate can request authentication certificates for any account. CA-level enrolment-
+  agent restrictions, which limit who may act as an agent and for which templates, are the control that
+  contains this.
+remediation:
+  en: >-
+    Remove the Certificate Request Agent EKU from templates that do not need it, restrict enrolment to the
+    accounts that must have it, require manager approval, and configure enrolment-agent restrictions on each CA
+    so an agent may enrol only for the intended accounts and templates.
+  ru: >-
+    Удалите область «агент заявок на сертификат» из шаблонов, которым она не нужна, ограничьте права записи
+    нужными учётными записями, включите утверждение заявок администратором и настройте на каждом центре
+    сертификации ограничения агентов заявок, чтобы агент мог подавать заявки только для предусмотренных учётных
+    записей и шаблонов.
+attack:
+- id: T1649
+  name: Steal or Forge Authentication Certificates
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+engine: declarative
+references:
+- title: >-
+    Microsoft Learn — AD CS security posture assessments (ESC3: enrollment agent template)
+  url: https://learn.microsoft.com/en-us/defender-for-identity/security-posture-assessments/certificates
+- title: >-
+    SpecterOps Certify documentation — ESC3 misconfigured Certificate Request Agent templates
+  url: https://docs.specterops.io/ghostpack-docs/Certify.wik-mdx/esc3-misconfigured-certificate-request-agent
+notes: >-
+  The full attack is a two-template chain; the catalogue check detects the agent-capable template enrollable
+  outside Tier 0 (one object) and, as a separate signal, a target client-auth template that accepts an agent
+  signature. The Certificate Request Agent EKU OID is 1.3.6.1.4.1.311.20.2.1. Enrolment-agent restrictions
+  live on the CA and are a tier-2 read; note this at verification.

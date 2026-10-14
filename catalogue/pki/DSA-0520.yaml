@@ -1,0 +1,60 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0520
+title:
+  en: CA or NTAuth certificate uses a weak key or signature
+  ru: Сертификат центра сертификации или NTAuth использует нестойкий ключ или подпись
+domain: pki
+providers: [ad]
+tier: 0
+severity: medium
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  The cACertificate values of the certificationAuthority object (CN=Certification Authorities), the
+  pKIEnrollmentService objects (CN=Enrollment Services) and the NTAuthCertificates object, all under CN=Public
+  Key Services
+attributes:
+- cACertificate
+condition: >-
+  A published CA certificate or an NTAuth certificate has an RSA key shorter than 2048 bits, or is signed with
+  a broken hash algorithm (MD5 or SHA-1).
+threshold: any occurrence
+rationale: >-
+  Every certificate the forest trusts for authentication chains to these CA certificates. A CA key that can be
+  factored, or a signature algorithm that can be collided, lets an attacker forge a certificate that chains to
+  the trusted CA and is accepted for authentication, which defeats the whole PKI rather than one template.
+remediation:
+  en: >-
+    Re-key any CA whose certificate uses an RSA key below 2048 bits or an MD5/SHA-1 signature onto a 2048-bit-
+    or-stronger key and a SHA-256-or-stronger signature, reissue the chain, and remove the superseded
+    certificates from the NTAuth store once nothing depends on them.
+  ru: >-
+    Перевыпустите сертификат любого центра сертификации с ключом RSA менее 2048 бит или подписью MD5/SHA-1 на
+    ключ не менее 2048 бит и подпись не слабее SHA-256, перевыпустите цепочку и удалите устаревшие сертификаты
+    из хранилища NTAuth, когда от них ничего не зависит.
+attack:
+- id: T1649
+  name: Steal or Forge Authentication Certificates
+- id: T1552.004
+  name: 'Unsecured Credentials: Private Keys'
+anssi:
+- vuln_certificates_vuln
+engine: declarative
+query_sketch:
+  base: CN=Public Key Services,CN=Services,CN=Configuration,<forest root>
+  scope: subtree
+  filter: (|(objectClass=certificationAuthority)(objectClass=pKIEnrollmentService))
+references:
+- title: >-
+    Microsoft Learn — [MS-ADTS] cACertificate and the enterprise PKI objects
+  url: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/
+- title: >-
+    ANSSI / CERT-FR — Active Directory control points (vuln_certificates_vuln)
+  url: https://www.cert.ssi.gouv.fr/uploads/ad_checklist.html
+notes: >-
+  Parses the DER certificates in cACertificate; no network. Thresholds (RSA 2048, SHA-256) follow current
+  baselines — confirm the exact minimums and whether to warn on expiry at verification. Maps ANSSI
+  vuln_certificates_vuln (partial: key size and signature only, not full path validation).

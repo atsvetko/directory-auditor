@@ -1,0 +1,63 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0509
+title:
+  en: Certificate template omits the SID security extension (ESC9)
+  ru: Шаблон сертификата не добавляет расширение безопасности с SID (ESC9)
+domain: pki
+providers: [ad]
+tier: 0
+severity: high
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  Published pKICertificateTemplate objects as for DSA-0501
+attributes:
+- msPKI-Enrollment-Flag
+- pKIExtendedKeyUsage
+- msPKI-Certificate-Application-Policy
+- msPKI-RA-Signature
+- nTSecurityDescriptor
+condition: >-
+  A published, authentication-capable template has CT_FLAG_NO_SECURITY_EXTENSION (0x80000) set in msPKI-
+  Enrollment-Flag, so the CA leaves the SID security extension (szOID_NTDS_CA_SECURITY_EXT,
+  1.3.6.1.4.1.311.25.2) out of the issued certificate, while manager approval and an issuance signature are
+  not required and the template is enrollable outside Tier 0.
+threshold: any occurrence
+rationale: >-
+  The SID security extension binds a certificate to the account's SID so a domain controller can map it
+  strongly. Without it, a domain controller in compatibility mode falls back to mapping by the name in the
+  certificate. An attacker who can change a controlled account's name attribute (for example its
+  userPrincipalName) to match a target, enrol from this template, then change it back, obtains a certificate
+  that authenticates as the target.
+remediation:
+  en: >-
+    Clear CT_FLAG_NO_SECURITY_EXTENSION unless the template is genuinely incompatible with the extension, and
+    move domain controllers to full strong-mapping enforcement. Restrict who may write account name attributes.
+  ru: >-
+    Снимите флаг CT_FLAG_NO_SECURITY_EXTENSION, если шаблон действительно не требует его отсутствия, и
+    переведите контроллеры домена в режим полного строгого сопоставления. Ограничьте круг учётных записей,
+    которым разрешено изменять атрибуты имени учётных записей.
+attack:
+- id: T1649
+  name: Steal or Forge Authentication Certificates
+- id: T1098
+  name: Account Manipulation
+engine: declarative
+references:
+- title: >-
+    Microsoft Learn — [MS-CRTD] 2.27 msPKI-Enrollment-Flag (CT_FLAG_NO_SECURITY_EXTENSION,
+    szOID_NTDS_CA_SECURITY_EXT)
+  url: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-crtd/ec71fd43-61c2-407b-83c9-b52272dec8a1
+- title: >-
+    Microsoft Support — KB5014754: certificate-based authentication changes on Windows domain controllers
+  url: https://support.microsoft.com/help/5014754
+- title: >-
+    SpecterOps Certify documentation — ESC9 security extension disabled on certificate template
+  url: https://docs.specterops.io/ghostpack-docs/Certify.wik-mdx/esc9-security-extension-disabled-on-certificate-template
+notes: >-
+  The exploitability depends on the KDC StrongCertificateBindingEnforcement mode (see DSA-0510); the template
+  flag is the catalogue condition here, the DC mode is reported separately. CT_FLAG_NO_SECURITY_EXTENSION is
+  0x80000; the SID extension OID is 1.3.6.1.4.1.311.25.2.

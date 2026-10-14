@@ -1,0 +1,58 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0502
+title:
+  en: Certificate template has Any Purpose or no EKU and is enrollable outside Tier 0 (ESC2)
+  ru: Шаблон сертификата имеет область «любое применение» или без EKU и доступен для записи вне нулевого уровня (ESC2)
+domain: pki
+providers: [ad]
+tier: 0
+severity: high
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  Published pKICertificateTemplate objects in CN=Certificate Templates,CN=Public Key Services, as for DSA-0501
+attributes:
+- pKIExtendedKeyUsage
+- msPKI-Certificate-Application-Policy
+- msPKI-Enrollment-Flag
+- msPKI-RA-Signature
+- nTSecurityDescriptor
+condition: >-
+  A published template has either the Any Purpose EKU (2.5.29.37.0) or no EKU at all (pKIExtendedKeyUsage and
+  msPKI-Certificate-Application-Policy both empty), manager approval is off and no issuance signature is
+  required, and an Enroll or Autoenroll right is granted to a principal outside Tier 0.
+threshold: any occurrence
+rationale: >-
+  A certificate with the Any Purpose EKU, or with no EKU, can be used for any purpose the relying party will
+  accept, including client authentication; a no-EKU certificate from a subordinate-CA-capable template is even
+  broader. Anyone who may enrol obtains a certificate that is far more powerful than the template's apparent
+  purpose.
+remediation:
+  en: >-
+    Give the template only the extended key usages it needs, restrict enrolment to the required accounts,
+    require manager approval, or unpublish the template if it is unused.
+  ru: >-
+    Оставьте в шаблоне только необходимые области применения ключа, ограничьте права записи нужными учётными
+    записями, включите утверждение заявок администратором либо снимите публикацию неиспользуемого шаблона.
+attack:
+- id: T1649
+  name: Steal or Forge Authentication Certificates
+engine: declarative
+query_sketch:
+  base: CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,<forest root>
+  scope: one
+  filter: (objectClass=pKICertificateTemplate)
+references:
+- title: >-
+    Microsoft Learn — AD CS security posture assessments (ESC2: Any Purpose or No EKU)
+  url: https://learn.microsoft.com/en-us/defender-for-identity/security-posture-assessments/certificates
+- title: >-
+    SpecterOps Certify documentation — ESC2 misconfigured Any Purpose templates
+  url: https://docs.specterops.io/ghostpack-docs/Certify.wik-mdx/esc2-misconfigured-any-purpose
+notes: >-
+  Same collector and enrolment-right definitions as DSA-0501. The Any Purpose OID is 2.5.29.37.0; a template
+  with no EKU whose basic constraints allow it to act as a CA is the most dangerous case — flag it at higher
+  severity at verification.

@@ -12,11 +12,11 @@ sources; this page only maps identifiers. A point is **covered** when an entry d
 
 | ANSSI level | Points | Covered | Partial | Covered + partial |
 |---|---:|---:|---:|---:|
-| 1 | 37 | 28 | 3 | 84% |
+| 1 | 37 | 28 | 7 | 95% |
 | 2 | 18 | 17 | 0 | 94% |
 | 3 | 17 | 9 | 3 | 71% |
 | 4 | 4 | 2 | 0 | 50% |
-| **All** | **76** | **56** | **6** | **82%** |
+| **All** | **76** | **56** | **10** | **87%** |
 
 Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 2 · wave 3 (level-3/4) 10 · wave 4 (AD CS) 6 · wave 5 (DNS) 2.
 
@@ -24,10 +24,10 @@ Remaining points by wave: wave 2 (level-1/2 needing a targeted read) 2 · wave 3
 
 | Level | ANSSI point | Title | Status | Directory Auditor |
 |---|---|---|---|---|
-| 1 | `vuln_adcs_control` | Dangerous ACLs expose certificate containers (attack path) | ⬜ planned | wave 4 — needs Public Key Services containers (configuration partition) and their DACLs |
-| 1 | `vuln_adcs_template_auth_enroll_with_name` | Dangerous enrollment permission on authentication certificate templates | ⬜ planned | wave 4 — needs certificate template flags, EKUs and enrolment rights |
-| 1,2 | `vuln_adcs_template_control` | Dangerous ACLs expose certificate template objects (attack path) | ⬜ planned | wave 4 — needs certificate template objects and their DACLs |
-| 1,2,3 | `vuln_certificates_vuln` | Weak or vulnerable certificates | ⬜ planned | wave 4 — needs certificate parsing (CA and NTAuth certificates: key size, signature algorithm) |
+| 1 | `vuln_adcs_control` | Dangerous ACLs expose certificate containers (attack path) | 🟡 partial | DSA-0505 — wave 4: DSA-0505 specs the PKI container/CA/NTAuth DACLs; collector not written yet |
+| 1 | `vuln_adcs_template_auth_enroll_with_name` | Dangerous enrollment permission on authentication certificate templates | 🟡 partial | DSA-0501 — wave 4: DSA-0501 specs requester-named-subject auth templates (ESC1); collector not written yet |
+| 1,2 | `vuln_adcs_template_control` | Dangerous ACLs expose certificate template objects (attack path) | 🟡 partial | DSA-0504 — wave 4: DSA-0504 specs certificate-template owner and DACL; collector not written yet |
+| 1,2,3 | `vuln_certificates_vuln` | Weak or vulnerable certificates | 🟡 partial | DSA-0520 — wave 4: DSA-0520 specs weak CA/NTAuth key size and signature; key/signature only, not full path validation |
 | 1 | `vuln_critical_objects` | Critical objects unavailable | ✅ covered | DSA-0037 |
 | 1 | `vuln_dc_inconsistent_uac` | Domain controllers in inconsistent state | ✅ covered | DSA-0030 |
 | 1 | `vuln_dc_obsolete` | DC/RODC with an obsolete operating system | ✅ covered | DSA-0031 |

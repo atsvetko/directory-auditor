@@ -1,0 +1,64 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0514
+title:
+  en: Certificate-mapping attributes are writable outside Tier 0 (ESC14)
+  ru: Атрибуты сопоставления сертификатов доступны для записи вне нулевого уровня (ESC14)
+domain: pki
+providers: [ad]
+tier: 0
+severity: high
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  All user and computer accounts, for write rights over the certificate-mapping and subject-source attributes
+  in their security descriptors
+attributes:
+- nTSecurityDescriptor
+- altSecurityIdentities
+- userPrincipalName
+- mail
+- dNSHostName
+condition: >-
+  An allow ACE grants a principal outside Tier 0 the right to write altSecurityIdentities on an account
+  (directly, through write of the Public Information property set, or through GENERIC_ALL / WRITE_PROPERTY-
+  all), or to write the attributes a weak mapping is built from (userPrincipalName, mail, cn/name,
+  dNSHostName) on an account that holds or could hold a weak explicit mapping. SELF and CREATOR OWNER are
+  excluded.
+threshold: any occurrence
+rationale: >-
+  Explicit certificate mappings live in altSecurityIdentities. Whoever may write that attribute on an account
+  can add a strong mapping to a certificate they can obtain and then authenticate as that account — this works
+  even under full strong-mapping enforcement. Write access to the name attributes a weak mapping resolves
+  against gives the same result where weak mapping is still accepted.
+remediation:
+  en: >-
+    Limit write access to altSecurityIdentities and the Public Information property set to Tier-0 principals,
+    and review who may write userPrincipalName, mail and the subject-name attributes of privileged accounts.
+    Replace weak explicit mappings with strong ones (see DSA-0052 and DSA-0053).
+  ru: >-
+    Ограничьте права записи на altSecurityIdentities и набор свойств Public Information учётными записями
+    нулевого уровня и проверьте, кому разрешено изменять userPrincipalName, mail и атрибуты имени субъекта у
+    привилегированных учётных записей. Замените нестойкие явные сопоставления на стойкие (см. DSA-0052 и
+    DSA-0053).
+attack:
+- id: T1649
+  name: Steal or Forge Authentication Certificates
+- id: T1098
+  name: Account Manipulation
+engine: declarative
+references:
+- title: >-
+    Microsoft Learn — altSecurityIdentities and certificate mapping (KB5014754)
+  url: https://support.microsoft.com/help/5014754
+- title: >-
+    SpecterOps — ADCS ESC14 abuse technique (explicit certificate mapping)
+  url: https://specterops.io/blog/2024/02/28/adcs-esc14-abuse-technique/
+notes: >-
+  Overlaps the weak-mapping content of DSA-0052/0053, which judge the mapping values; this entry judges who
+  may write the mapping and subject-source attributes. ACL semantics as in DSA-0059. Scenario A (write a
+  strong mapping) is independent of the DC enforcement mode; the weak-mapping scenarios depend on it (see
+  DSA-0510). The Public Information property set GUID and the per-attribute ACEs are to be confirmed at
+  verification.
