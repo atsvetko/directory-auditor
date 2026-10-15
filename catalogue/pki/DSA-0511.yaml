@@ -48,4 +48,16 @@ references:
 notes: >-
   Tier 2: InterfaceFlags is a CA registry value (CertSvc Configuration\<CA>\InterfaceFlags), read over remote
   registry or ICertAdmin with CA access. The flag is set by default on Windows Server 2012 and later but is
-  sometimes cleared for legacy clients; the finding is its absence.
+  sometimes cleared for legacy clients; the finding is its absence. Preview reads the out-of-band representation
+  documented as the collector contract in internal/provider/ad/collect.go ('Out-of-band AD CS configuration
+  snapshot'): a dirauditorCaConfig object per CA under cn=certsvc,cn=dirauditor whose InterfaceFlags holds one
+  flag name per value; the finding is a CA config object that does not list IF_ENFORCEENCRYPTICERTREQUEST.
+query_sketch:
+  base: cn=certsvc,cn=dirauditor
+  scope: one
+  filter: (objectClass=dirauditorCaConfig)
+  attributes:
+  - InterfaceFlags
+condition_cel: '!attrs(obj, "InterfaceFlags").exists(f, f == "IF_ENFORCEENCRYPTICERTREQUEST")'
+expect:
+- cn=esc11-CA,cn=certsvc,cn=dirauditor

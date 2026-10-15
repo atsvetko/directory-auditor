@@ -54,6 +54,59 @@ var pkiAttrs = []string{"objectClass", "cn", "name", "displayName",
 	"msPKI-Enrollment-Flag", "msPKI-RA-Signature", "msPKI-Template-Schema-Version", "msPKI-Certificate-Policy",
 	"certificateTemplates", "cACertificate", "msPKI-Cert-Template-OID", "msDS-OIDToGroupLink", "whenChanged"}
 
+// Out-of-band AD CS configuration snapshot (contract for the ESC6/7/8/10/11/16
+// collector).
+//
+// DSA-0506 (ESC6), 0507 (ESC7), 0508 (ESC8), 0510 (ESC10), 0511 (ESC11) and
+// 0516 (ESC16) read facts that do NOT live in LDAP: the CA host registry (policy
+// module EditFlags and DisableExtensionList, the CA security roles, the RPC
+// InterfaceFlags), the domain-controller registry (Kdc and Schannel certificate-
+// mapping keys) and the HTTP(S) behaviour of the web-enrollment endpoints. Those
+// collectors are Windows- and network-dependent (remote registry / ICertAdmin /
+// HTTP probe) and are not built yet.
+//
+// Until they exist, the checks read a synthetic representation that mirrors the
+// smb.conf collector (internal/local/smbconf): dirauditor-namespaced snapshot
+// objects whose attributes carry the facts, read from the catalogue with the
+// ordinary attr()/attrs()/intattr()/flags()/mask_has() helpers. The real
+// collector, when written, MUST emit objects in exactly this shape so the
+// committed conditions keep working unchanged. tools/mksynth/main.go populates
+// positive and clean-negative instances of each.
+//
+// CA configuration — one object per enterprise CA:
+//
+//	DN          cn=<caName>,cn=certsvc,cn=dirauditor
+//	objectClass dirauditorCaConfig
+//	caName      the CA's common name
+//	caDN        DN of the CA's LDAP pKIEnrollmentService object (cross-link)
+//	EditFlags            policy-module EditFlags, one flag NAME per value
+//	                     (e.g. EDITF_ATTRIBUTESUBJECTALTNAME2) — ESC6
+//	InterfaceFlags       CA InterfaceFlags, one flag NAME per value
+//	                     (e.g. IF_ENFORCEENCRYPTICERTREQUEST) — ESC11
+//	DisableExtensionList disabled-extension OIDs, one per value
+//	                     (SID extension = 1.3.6.1.4.1.311.25.2) — ESC16
+//	ManageCA             SIDs holding the CA-administrator role — ESC7
+//	ManageCertificates   SIDs holding the certificate-manager role — ESC7
+//
+// Domain-controller configuration — one object per DC:
+//
+//	DN          cn=<dcName>,cn=kdc,cn=dirauditor
+//	objectClass dirauditorDcConfig
+//	dcName      the DC's name
+//	StrongCertificateBindingEnforcement  Kdc value 0/1/2 — ESC10
+//	CertificateMappingMethods            Schannel bitmask, int or 0x-hex; UPN bit 0x4 — ESC10
+//
+// Web-enrollment endpoint — one object per discovered endpoint:
+//
+//	DN          cn=<url>,cn=adcs-web,cn=dirauditor
+//	objectClass dirauditorAdcsEndpoint
+//	url         the probed endpoint URL
+//	auth        accepted auth schemes, one per value (e.g. ntlm, negotiate) — ESC8
+//	https       TRUE when served over TLS, else FALSE — ESC8
+//	epa         Extended Protection for Authentication: none | allow | require — ESC8
+//
+// The probe reports only what an endpoint advertises; it never performs a relay.
+
 var accountAttrs = []string{
 	"objectClass", "objectCategory", "sAMAccountType", "sAMAccountName", "userPrincipalName", "objectSid", "objectGUID", "sIDHistory",
 	"userAccountControl", "pwdLastSet", "lastLogonTimestamp", "whenCreated", "whenChanged",

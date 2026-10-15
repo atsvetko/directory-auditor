@@ -50,4 +50,15 @@ notes: >-
   Tier 2: the EditFlags value lives in the CA's registry
   (HKLM\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\<CA>\PolicyModules\...), read over remote
   registry or ICertAdmin with CA access; it is not an LDAP attribute. Confirm the exact value name and bit for
-  EDITF_ATTRIBUTESUBJECTALTNAME2 at verification.
+  EDITF_ATTRIBUTESUBJECTALTNAME2 at verification. Preview reads the out-of-band representation documented as the
+  collector contract in internal/provider/ad/collect.go ('Out-of-band AD CS configuration snapshot'): a
+  dirauditorCaConfig object per CA under cn=certsvc,cn=dirauditor whose EditFlags holds one flag name per value.
+query_sketch:
+  base: cn=certsvc,cn=dirauditor
+  scope: one
+  filter: (objectClass=dirauditorCaConfig)
+  attributes:
+  - EditFlags
+condition_cel: attrs(obj, "EditFlags").exists(f, f == "EDITF_ATTRIBUTESUBJECTALTNAME2")
+expect:
+- cn=esc6-CA,cn=certsvc,cn=dirauditor

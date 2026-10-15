@@ -53,4 +53,15 @@ notes: >-
   Tier 2: DisableExtensionList is in the CA registry (CertSvc Configuration\<CA>\PolicyModules), read over
   remote registry or ICertAdmin with CA access. First described by Will Schroeder (2022) as an ESC7/ESC6 side
   effect and later catalogued as ESC16 by Oliver Lyak. Confirm the exact value name and OID format stored in
-  the list at verification.
+  the list at verification. Preview reads the out-of-band representation documented as the collector contract in
+  internal/provider/ad/collect.go ('Out-of-band AD CS configuration snapshot'): a dirauditorCaConfig object per
+  CA under cn=certsvc,cn=dirauditor whose DisableExtensionList holds one disabled-extension OID per value.
+query_sketch:
+  base: cn=certsvc,cn=dirauditor
+  scope: one
+  filter: (objectClass=dirauditorCaConfig)
+  attributes:
+  - DisableExtensionList
+condition_cel: attrs(obj, "DisableExtensionList").exists(o, o == "1.3.6.1.4.1.311.25.2")
+expect:
+- cn=esc16-CA,cn=certsvc,cn=dirauditor

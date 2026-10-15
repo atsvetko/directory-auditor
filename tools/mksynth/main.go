@@ -60,7 +60,11 @@ func main() {
 		Collected: collected,
 		Meta: snapshot.Meta{
 			Provider: "ad", Dialect: "ad", Target: "dc01.lab.example", Domain: "lab.example", BaseDN: base,
-			Identity: "audit@lab.example", Tier: 0, Tool: "mksynth", QueryCount: 9, DomainSID: dom,
+			// Tier 2: the lab now also carries out-of-band AD CS facts (CA-host and
+			// DC registry, web-enrollment probe) modelled as dirauditor-namespaced
+			// objects, which are administrator-level data — as the smb.conf collector
+			// raises its snapshot to tier 2 for the same reason.
+			Identity: "audit@lab.example", Tier: 2, Tool: "mksynth", QueryCount: 9, DomainSID: dom,
 		},
 	}
 	add := func(dn string, class []string, attrs map[string][]string) {
@@ -483,6 +487,76 @@ func main() {
 		"sAMAccountName": {"esc14.target"}, "objectSid": {dom + "-1190"}, "primaryGroupID": {"513"}, "sAMAccountType": {"805306368"},
 		"userAccountControl": {"512"}, "pwdLastSet": {ft(10)}, "lastLogonTimestamp": {ft(3)}, "whenCreated": {"20200115100000.0Z"},
 		"nTSecurityDescriptor": {sd(false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-1201", 0x00000020, escAttrs[0].guid})}}) // Helpdesk may write altSecurityIdentities
+
+	// DSA-0506/0507/0508/0510/0511/0516: out-of-band AD CS facts that do not live
+	// in LDAP (CA-host registry, DC registry, web-enrollment HTTP probe). They are
+	// modelled as synthetic dirauditor-namespaced objects exactly as the smb.conf
+	// collector models its facts (internal/local/smbconf), so the preview checks
+	// can be exercised before the real Windows/network collector exists. The
+	// representation (DNs, classes, attrs) is documented in internal/provider/ad/
+	// collect.go ("Out-of-band AD CS configuration snapshot").
+	//
+	// CA config, one object per enterprise CA (dirauditorCaConfig). Baseline is
+	// clean for every CA check; each positive flips exactly one fact.
+	caCfg := func(name string, attrs map[string][]string) {
+		a := map[string][]string{"objectClass": {"dirauditorCaConfig"}, "cn": {name}, "name": {name},
+			"caName": {name}, "caDN": {"CN=" + name + "," + esBase}}
+		for k, v := range attrs {
+			a[k] = v
+		}
+		add("cn="+name+",cn=certsvc,cn=dirauditor", []string{"dirauditorCaConfig"}, a)
+	}
+	// Clean baseline values reused below. ManageCA/ManageCertificates list only
+	// Tier-0 principals plus SELF (excluded by the ESC7 condition); InterfaceFlags
+	// carries the enforcement flag; EditFlags has no SAN flag; no disabled extensions.
+	cleanEdit := []string{"EDITF_ENABLEAKIKEYID", "EDITF_ENABLEDEFAULTSMIME"}
+	cleanIface := []string{"IF_ENFORCEENCRYPTICERTREQUEST", "IF_LOCKICERTREQUEST"}
+	t0ManageCA := []string{dom + "-512", "S-1-5-18"}    // Domain Admins, Local System
+	t0ManageCerts := []string{dom + "-519", "S-1-5-10"} // Enterprise Admins, SELF (excluded)
+	caCfg("lab-CA", map[string][]string{                // negative: clean on every CA check
+		"EditFlags": cleanEdit, "InterfaceFlags": cleanIface, "ManageCA": t0ManageCA, "ManageCertificates": t0ManageCerts})
+	caCfg("esc6-CA", map[string][]string{ // DSA-0506 (ESC6): requester-supplied SAN for all templates
+		"EditFlags": {"EDITF_ENABLEAKIKEYID", "EDITF_ATTRIBUTESUBJECTALTNAME2"}, "InterfaceFlags": cleanIface,
+		"ManageCA": t0ManageCA, "ManageCertificates": t0ManageCerts})
+	caCfg("esc7-CA", map[string][]string{ // DSA-0507 (ESC7): j.doe (non-Tier-0) holds ManageCertificates
+		"EditFlags": cleanEdit, "InterfaceFlags": cleanIface,
+		"ManageCA": t0ManageCA, "ManageCertificates": {dom + "-519", dom + "-1105"}})
+	caCfg("esc11-CA", map[string][]string{ // DSA-0511 (ESC11): RPC enrollment without packet privacy
+		"EditFlags": cleanEdit, "InterfaceFlags": {"IF_LOCKICERTREQUEST"},
+		"ManageCA": t0ManageCA, "ManageCertificates": t0ManageCerts})
+	caCfg("esc16-CA", map[string][]string{ // DSA-0516 (ESC16): SID security extension disabled CA-wide
+		"EditFlags": cleanEdit, "InterfaceFlags": cleanIface, "ManageCA": t0ManageCA, "ManageCertificates": t0ManageCerts,
+		"DisableExtensionList": {"1.3.6.1.4.1.311.25.2"}})
+	// DC config, one object per domain controller (dirauditorDcConfig). DSA-0510 (ESC10).
+	dcCfg := func(name string, attrs map[string][]string) {
+		a := map[string][]string{"objectClass": {"dirauditorDcConfig"}, "cn": {name}, "name": {name}, "dcName": {name}}
+		for k, v := range attrs {
+			a[k] = v
+		}
+		add("cn="+name+",cn=kdc,cn=dirauditor", []string{"dirauditorDcConfig"}, a)
+	}
+	dcCfg("DC01", map[string][]string{ // negative: full enforcement, no UPN bit
+		"StrongCertificateBindingEnforcement": {"2"}, "CertificateMappingMethods": {"0x18"}})
+	dcCfg("OLDDC", map[string][]string{ // DSA-0510: strong binding disabled
+		"StrongCertificateBindingEnforcement": {"0"}, "CertificateMappingMethods": {"0x18"}})
+	dcCfg("STALEDC", map[string][]string{ // DSA-0510: Schannel UPN bit (0x4) set
+		"StrongCertificateBindingEnforcement": {"2"}, "CertificateMappingMethods": {"0x1f"}})
+	// Web-enrollment endpoints (dirauditorAdcsEndpoint). DSA-0508 (ESC8).
+	endpoint := func(url string, attrs map[string][]string) {
+		a := map[string][]string{"objectClass": {"dirauditorAdcsEndpoint"}, "url": {url}}
+		for k, v := range attrs {
+			a[k] = v
+		}
+		add("cn="+url+",cn=adcs-web,cn=dirauditor", []string{"dirauditorAdcsEndpoint"}, a)
+	}
+	endpoint("http://ca01.lab.example/certsrv/", map[string][]string{ // DSA-0508: NTLM over plain HTTP
+		"auth": {"ntlm", "negotiate"}, "https": {"FALSE"}, "epa": {"none"}})
+	endpoint("https://ca01.lab.example/certsrv/", map[string][]string{ // DSA-0508: NTLM over HTTPS without EPA
+		"auth": {"ntlm"}, "https": {"TRUE"}, "epa": {"allow"}})
+	endpoint("https://ca01.lab.example/lab-CA_CES_Kerberos/service.svc", map[string][]string{ // negative: EPA required
+		"auth": {"ntlm"}, "https": {"TRUE"}, "epa": {"require"}})
+	endpoint("https://ca01.lab.example/ADPolicyProvider_CEP_Kerberos/service.svc", map[string][]string{ // negative: Kerberos only, no NTLM
+		"auth": {"negotiate"}, "https": {"FALSE"}, "epa": {"none"}})
 
 	s.Skipped = []snapshot.Skipped{{Query: "sysvol", Reason: "tier", Detail: "tier 1 not requested"}}
 

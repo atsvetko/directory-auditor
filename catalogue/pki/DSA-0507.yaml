@@ -50,4 +50,19 @@ references:
 notes: >-
   Tier 2: the CA security descriptor is in the CA registry (CertSvc Configuration\<CA>\Security), read via
   ICertAdminD2 GetCASecurity or remote registry with CA access — not LDAP. ManageCA and ManageCertificates are
-  the two CA roles; confirm their bit values and the read path at verification.
+  the two CA roles; confirm their bit values and the read path at verification. Preview reads the out-of-band
+  representation documented as the collector contract in internal/provider/ad/collect.go ('Out-of-band AD CS
+  configuration snapshot'): a dirauditorCaConfig object per CA under cn=certsvc,cn=dirauditor whose ManageCA and
+  ManageCertificates list the SIDs holding each role. SELF (S-1-5-10) and CREATOR OWNER (S-1-3-0) are excluded.
+query_sketch:
+  base: cn=certsvc,cn=dirauditor
+  scope: one
+  filter: (objectClass=dirauditorCaConfig)
+  attributes:
+  - ManageCA
+  - ManageCertificates
+condition_cel: >-
+  attrs(obj, "ManageCA").exists(s, !tier0_sid(s) && s != "S-1-5-10" && s != "S-1-3-0") || attrs(obj,
+  "ManageCertificates").exists(s, !tier0_sid(s) && s != "S-1-5-10" && s != "S-1-3-0")
+expect:
+- cn=esc7-CA,cn=certsvc,cn=dirauditor

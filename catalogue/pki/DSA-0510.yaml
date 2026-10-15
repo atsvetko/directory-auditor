@@ -56,4 +56,20 @@ notes: >-
   HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\Schannel\CertificateMappingMethods — read over
   remote registry with admin access. Per KB5014754 the Kdc default is full enforcement since the Sept 2025
   update and the key is no longer supported after it; a value of 0 is the finding. The Schannel UPN bit is
-  0x4. Confirm current defaults at verification.
+  0x4. Confirm current defaults at verification. Preview reads the out-of-band representation documented as the
+  collector contract in internal/provider/ad/collect.go ('Out-of-band AD CS configuration snapshot'): a
+  dirauditorDcConfig object per DC under cn=kdc,cn=dirauditor with StrongCertificateBindingEnforcement (0/1/2)
+  and CertificateMappingMethods (int or 0x-hex). An absent StrongCertificateBindingEnforcement is not read as 0.
+query_sketch:
+  base: cn=kdc,cn=dirauditor
+  scope: one
+  filter: (objectClass=dirauditorDcConfig)
+  attributes:
+  - StrongCertificateBindingEnforcement
+  - CertificateMappingMethods
+condition_cel: >-
+  (hasattr(obj, "StrongCertificateBindingEnforcement") && intattr(obj, "StrongCertificateBindingEnforcement") ==
+  0) || mask_has(intval(attr(obj, "CertificateMappingMethods")), 0x4)
+expect:
+- cn=OLDDC,cn=kdc,cn=dirauditor
+- cn=STALEDC,cn=kdc,cn=dirauditor

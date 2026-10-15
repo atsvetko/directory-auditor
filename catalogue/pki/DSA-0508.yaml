@@ -53,4 +53,22 @@ notes: >-
   Tier 1: a network probe of the endpoints, not an LDAP read. The tool reports the endpoint's authentication
   methods and transport; it never performs a relay. Enumerate endpoints from the pKIEnrollmentService hosts
   (dNSHostName) and the standard paths /certsrv/ and the CES service URLs. Confirm the EPA detection method
-  (HTTP 401 WWW-Authenticate and channel-binding token behaviour) at verification.
+  (HTTP 401 WWW-Authenticate and channel-binding token behaviour) at verification. Preview reads the out-of-band
+  representation documented as the collector contract in internal/provider/ad/collect.go ('Out-of-band AD CS
+  configuration snapshot'): a dirauditorAdcsEndpoint object per endpoint under cn=adcs-web,cn=dirauditor with
+  the accepted auth schemes, the transport (https) and the EPA mode (none/allow/require).
+query_sketch:
+  base: cn=adcs-web,cn=dirauditor
+  scope: one
+  filter: (objectClass=dirauditorAdcsEndpoint)
+  attributes:
+  - url
+  - auth
+  - https
+  - epa
+condition_cel: >-
+  attrs(obj, "auth").exists(a, a.lowerAscii() == "ntlm") && (!smbbool(obj, "https", false) || attr(obj,
+  "epa").lowerAscii() != "require")
+expect:
+- cn=http://ca01.lab.example/certsrv/,cn=adcs-web,cn=dirauditor
+- cn=https://ca01.lab.example/certsrv/,cn=adcs-web,cn=dirauditor
