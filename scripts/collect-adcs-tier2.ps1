@@ -142,6 +142,10 @@ function Get-CaRoleHolders {
     return $result
 }
 
+# When dot-sourced (e.g. by collect-adcs-tier2.Tests.ps1) stop here: only the
+# parsing functions above are needed; the collection below must not run.
+if ($MyInvocation.InvocationName -eq '.') { return }
+
 # ---- collection ----------------------------------------------------------
 Write-Log "collect-adcs-tier2 starting on $env:COMPUTERNAME"
 $objects = [System.Collections.Generic.List[object]]::new()
