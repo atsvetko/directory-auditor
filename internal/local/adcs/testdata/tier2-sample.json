@@ -1,0 +1,59 @@
+{
+  "schema": "dirauditor-adcs-offline/1",
+  "generated_at": "2026-10-15T10:00:00Z",
+  "host": "CA01",
+  "objects": [
+    {
+      "dn": "cn=lab-CA,cn=certsvc,cn=dirauditor",
+      "class": ["dirauditorCaConfig"],
+      "attrs": {
+        "caName": ["lab-CA"],
+        "EditFlags": ["EDITF_ENABLEAKIKEYID", "EDITF_ENABLEDEFAULTSMIME"],
+        "InterfaceFlags": ["IF_ENFORCEENCRYPTICERTREQUEST", "IF_LOCKICERTREQUEST"],
+        "ManageCA": ["S-1-5-21-111-222-333-512", "S-1-5-18"],
+        "ManageCertificates": ["S-1-5-21-111-222-333-519", "S-1-5-10"]
+      }
+    },
+    {
+      "dn": "cn=esc6-CA,cn=certsvc,cn=dirauditor",
+      "class": ["dirauditorCaConfig"],
+      "attrs": {
+        "caName": ["esc6-CA"],
+        "EditFlags": ["EDITF_ENABLEAKIKEYID", "EDITF_ATTRIBUTESUBJECTALTNAME2"],
+        "InterfaceFlags": ["IF_ENFORCEENCRYPTICERTREQUEST"],
+        "ManageCA": ["S-1-5-21-111-222-333-512"],
+        "ManageCertificates": ["S-1-5-21-111-222-333-519"],
+        "DisableExtensionList": ["1.3.6.1.4.1.311.25.2"]
+      }
+    },
+    {
+      "dn": "cn=esc7-11-CA,cn=certsvc,cn=dirauditor",
+      "class": ["dirauditorCaConfig"],
+      "attrs": {
+        "caName": ["esc7-11-CA"],
+        "EditFlags": ["EDITF_ENABLEAKIKEYID"],
+        "InterfaceFlags": ["IF_LOCKICERTREQUEST"],
+        "ManageCA": ["S-1-5-21-111-222-333-1105"],
+        "ManageCertificates": ["S-1-5-21-111-222-333-519"]
+      }
+    },
+    {
+      "dn": "cn=DC01,cn=kdc,cn=dirauditor",
+      "class": ["dirauditorDcConfig"],
+      "attrs": {
+        "dcName": ["DC01"],
+        "StrongCertificateBindingEnforcement": ["2"],
+        "CertificateMappingMethods": ["0x18"]
+      }
+    },
+    {
+      "dn": "cn=OLDDC,cn=kdc,cn=dirauditor",
+      "class": ["dirauditorDcConfig"],
+      "attrs": {
+        "dcName": ["OLDDC"],
+        "StrongCertificateBindingEnforcement": ["0"],
+        "CertificateMappingMethods": ["0x1f"]
+      }
+    }
+  ]
+}
