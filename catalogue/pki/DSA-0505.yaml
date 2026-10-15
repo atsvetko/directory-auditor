@@ -1,0 +1,68 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0505
+title:
+  en: PKI container, CA or NTAuth object is writable outside Tier 0 (ESC5)
+  ru: Права записи на контейнер PKI, объект центра сертификации или NTAuth предоставлены вне нулевого уровня (ESC5)
+domain: pki
+providers: [ad]
+tier: 0
+severity: high
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  The containers and objects under CN=Public Key Services,CN=Services,CN=Configuration — CN=Certificate
+  Templates, CN=Enrollment Services, CN=Certification Authorities, CN=NTAuthCertificates, CN=AIA, CN=CDP,
+  CN=OID — and the pKIEnrollmentService and certificationAuthority objects within them
+attributes:
+- nTSecurityDescriptor
+- cACertificate
+condition: >-
+  The owner of one of these objects is outside Tier 0, or an allow ACE grants a principal outside Tier 0
+  GENERIC_ALL, WRITE_OWNER, WRITE_DAC, or WRITE_PROPERTY over all properties. Write to the NTAuthCertificates
+  object (cACertificate) outside Tier 0 is a critical finding in its own right. SELF and CREATOR OWNER are
+  excluded.
+threshold: any occurrence
+rationale: >-
+  These objects govern which CAs the forest trusts for authentication and the settings of every template.
+  Write access to the NTAuthCertificates object lets an attacker publish a CA certificate of their own, after
+  which certificates they issue authenticate across the forest. Control of the Certificate Templates or
+  Enrollment Services container reaches every template and publication at once.
+remediation:
+  en: >-
+    Restrict ownership and write rights on every Public Key Services object to Tier-0 principals. Treat the
+    NTAuthCertificates object as a Tier-0 asset and alert on any change to it.
+  ru: >-
+    Ограничьте владение и права записи на все объекты контейнера Public Key Services учётными записями нулевого
+    уровня. Рассматривайте объект NTAuthCertificates как ресурс нулевого уровня и уведомляйте о любом его
+    изменении.
+attack:
+- id: T1649
+  name: Steal or Forge Authentication Certificates
+- id: T1222
+  name: File and Directory Permissions Modification
+anssi:
+- vuln_adcs_control
+engine: declarative
+query_sketch:
+  base: CN=Public Key Services,CN=Services,CN=Configuration,<forest root>
+  scope: subtree
+  filter: (objectClass=*)
+references:
+- title: >-
+    Microsoft Learn — Public Key Services containers in the configuration partition
+  url: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory-certificate-services
+- title: >-
+    SpecterOps Certify documentation — ESC5 vulnerable PKI object access control
+  url: https://docs.specterops.io/ghostpack-docs/Certify.wik-mdx/esc5-vulnerable-pki-object-access-control
+notes: >-
+  Collector reads the whole Public Key Services subtree with owner and DACL. The CA server's own computer
+  object and its RPC/DCOM rights are part of ESC5 too but are a host/AD-object read elsewhere (directory-core
+  ACLs); cross-reference at verification. Severity is per object type — NTAuthCertificates and the Enrollment
+  Services container are the most sensitive.
+condition_cel: >-
+  obj.dn.lowerAscii().contains("cn=public key services,cn=services,cn=configuration,") && !obj.class.exists(c, c.lowerAscii() == "pkicertificatetemplate") && sd_readable(obj) && ((sd_owner(obj) != "" && !tier0_sid(sd_owner(obj)) && !(sd_owner(obj) in ["S-1-5-10", "S-1-3-0"])) || aces(obj).exists(a, a.allow && a.effective && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"]) && (mask_has(a.mask, 0x10000000) || mask_has(a.mask, 0x40000000) || mask_has(a.mask, 0x40000) || mask_has(a.mask, 0x80000) || (mask_has(a.mask, 0x20) && a.object_type == ""))))
+expect:
+- CN=NTAuthCertificates,CN=Public Key Services,CN=Services,CN=Configuration,DC=lab,DC=example

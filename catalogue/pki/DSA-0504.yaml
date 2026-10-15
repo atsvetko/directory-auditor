@@ -1,0 +1,65 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0504
+title:
+  en: Certificate template is owned or writable outside Tier 0 (ESC4)
+  ru: Владение или права записи на шаблон сертификата предоставлены вне нулевого уровня (ESC4)
+domain: pki
+providers: [ad]
+tier: 0
+severity: high
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  pKICertificateTemplate objects in CN=Certificate Templates,CN=Public Key Services (every template, published
+  or not)
+attributes:
+- nTSecurityDescriptor
+condition: >-
+  The owner of a template is a principal outside Tier 0, or an allow ACE grants a principal outside Tier 0 any
+  of GENERIC_ALL, WRITE_OWNER, WRITE_DAC, WRITE_PROPERTY over all properties, or the specific write of msPKI-
+  Enrollment-Flag, msPKI-Certificate-Name-Flag, pKIExtendedKeyUsage or msPKI-Certificate-Application-Policy.
+  SELF and CREATOR OWNER are excluded.
+threshold: any occurrence
+rationale: >-
+  Whoever owns a template or can write its security descriptor or its enrolment and name flags can turn a
+  harmless template into an ESC1-style one, then enrol — so control of the template is equivalent to the
+  escalation it enables. The owner always holds WRITE_DAC implicitly, which is why a template owned outside
+  Tier 0 is itself a finding.
+remediation:
+  en: >-
+    Set the owner of every template to a Tier-0 principal and remove write and control rights granted to
+    accounts outside Tier 0. Review the templates' security descriptors against a known-good baseline.
+  ru: >-
+    Назначьте владельцем каждого шаблона учётную запись нулевого уровня и удалите права записи и управления,
+    предоставленные учётным записям вне нулевого уровня. Сверьте дескрипторы безопасности шаблонов с эталонной
+    конфигурацией.
+attack:
+- id: T1649
+  name: Steal or Forge Authentication Certificates
+- id: T1222
+  name: File and Directory Permissions Modification
+anssi:
+- vuln_adcs_template_control
+engine: declarative
+query_sketch:
+  base: CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,<forest root>
+  scope: one
+  filter: (objectClass=pKICertificateTemplate)
+references:
+- title: >-
+    Microsoft Learn — AD CS security posture assessments (ESC4: template owner and ACL)
+  url: https://learn.microsoft.com/en-us/defender-for-identity/security-posture-assessments/certificates
+- title: >-
+    SpecterOps Certify documentation — ESC4 vulnerable certificate template access control
+  url: https://docs.specterops.io/ghostpack-docs/Certify.wik-mdx/4-escalation-techniques
+notes: >-
+  ACL semantics mirror DSA-0059/0301 (effective allow ACEs, exclude SELF S-1-5-10 and CREATOR OWNER S-1-3-0,
+  Tier 0 from TIER0.md). WRITE_PROPERTY to one named safe property is not a finding; the named flags above are
+  the dangerous ones. The matching control-path output should name the principals, as DSA-0061 does.
+condition_cel: >-
+  obj.class.exists(c, c.lowerAscii() == "pkicertificatetemplate") && sd_readable(obj) && ((sd_owner(obj) != "" && !tier0_sid(sd_owner(obj)) && !(sd_owner(obj) in ["S-1-5-10", "S-1-3-0"])) || aces(obj).exists(a, a.allow && a.effective && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"]) && (mask_has(a.mask, 0x10000000) || mask_has(a.mask, 0x40000000) || mask_has(a.mask, 0x40000) || mask_has(a.mask, 0x80000) || (mask_has(a.mask, 0x20) && a.object_type == ""))))
+expect:
+- CN=VulnACLTemplate,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,DC=lab,DC=example

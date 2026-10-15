@@ -1,0 +1,64 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0506
+title:
+  en: CA accepts a requester-supplied SAN for every template (EDITF_ATTRIBUTESUBJECTALTNAME2, ESC6)
+  ru: Центр сертификации принимает SAN из заявки для всех шаблонов (EDITF_ATTRIBUTESUBJECTALTNAME2, ESC6)
+domain: pki
+providers: [ad]
+tier: 2
+severity: critical
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  The policy module configuration of each enterprise CA (the EditFlags value read from the CA host),
+  correlated with the pKIEnrollmentService object of that CA
+attributes:
+- EditFlags
+condition: >-
+  A CA's policy-module EditFlags value has EDITF_ATTRIBUTESUBJECTALTNAME2 set, which lets any requester add an
+  arbitrary subject alternative name to a request for any template — including templates valid for
+  authentication — regardless of the template's own name-flag settings.
+threshold: any occurrence
+rationale: >-
+  This flag makes every authentication-capable template behave like an ESC1 template: a requester can name any
+  account in the subject alternative name and receive a certificate for it. Because it is a CA-wide setting it
+  defeats per-template hardening, so a single misconfigured CA undermines the whole issuance policy.
+remediation:
+  en: >-
+    Clear the flag with 'certutil -setreg policy\\EditFlags -EDITF_ATTRIBUTESUBJECTALTNAME2' and restart the
+    certificate service. Then review every certificate issued while the flag was set for an unexpected subject
+    alternative name.
+  ru: >-
+    Снимите флаг командой 'certutil -setreg policy\\EditFlags -EDITF_ATTRIBUTESUBJECTALTNAME2' и перезапустите
+    службу центра сертификации. После этого проверьте все сертификаты, выданные за период действия флага, на
+    наличие постороннего субъектного альтернативного имени.
+attack:
+- id: T1649
+  name: Steal or Forge Authentication Certificates
+engine: declarative
+references:
+- title: >-
+    Microsoft Learn — AD CS security posture assessments (ESC6: EDITF_ATTRIBUTESUBJECTALTNAME2)
+  url: https://learn.microsoft.com/en-us/defender-for-identity/security-posture-assessments/certificates
+- title: >-
+    SpecterOps Certify documentation — ESC6 request attribute SAN
+  url: https://docs.specterops.io/ghostpack-docs/Certify.wik-mdx/esc6-request-attribute-san-editf-attributesubjectaltname2
+notes: >-
+  Tier 2: the EditFlags value lives in the CA's registry
+  (HKLM\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\<CA>\PolicyModules\...), read over remote
+  registry or ICertAdmin with CA access; it is not an LDAP attribute. Confirm the exact value name and bit for
+  EDITF_ATTRIBUTESUBJECTALTNAME2 at verification. Preview reads the out-of-band representation documented as the
+  collector contract in internal/provider/ad/collect.go ('Out-of-band AD CS configuration snapshot'): a
+  dirauditorCaConfig object per CA under cn=certsvc,cn=dirauditor whose EditFlags holds one flag name per value.
+query_sketch:
+  base: cn=certsvc,cn=dirauditor
+  scope: one
+  filter: (objectClass=dirauditorCaConfig)
+  attributes:
+  - EditFlags
+condition_cel: attrs(obj, "EditFlags").exists(f, f == "EDITF_ATTRIBUTESUBJECTALTNAME2")
+expect:
+- cn=esc6-CA,cn=certsvc,cn=dirauditor

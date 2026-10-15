@@ -1,0 +1,75 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0510
+title:
+  en: Domain controllers map certificates weakly (ESC10)
+  ru: Контроллеры домена сопоставляют сертификаты по нестойким правилам (ESC10)
+domain: pki
+providers: [ad]
+tier: 2
+severity: high
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  The certificate-mapping registry settings of each domain controller (read from the DC)
+attributes:
+- StrongCertificateBindingEnforcement
+- CertificateMappingMethods
+condition: >-
+  A domain controller has StrongCertificateBindingEnforcement set to 0 (the strong-mapping check disabled)
+  under the Kdc key, or has the UPN bit (0x4) set in CertificateMappingMethods under the Schannel key, so
+  Kerberos (PKINIT) or Schannel maps a certificate to an account by a name the certificate carries rather than
+  by the account's SID.
+threshold: any domain controller
+rationale: >-
+  Weak mapping lets a certificate be matched to an account by a name — a UPN or an explicit mapping value —
+  that a party who can obtain or influence that name can reuse. It is the domain-controller-side condition
+  that makes name-based certificate abuse (ESC9 and the weak explicit mappings of DSA-0052/0053) succeed, so
+  the two sides should be read together.
+remediation:
+  en: >-
+    Set StrongCertificateBindingEnforcement to 2 (full enforcement) on every domain controller and clear the UPN
+    bit (0x4) from CertificateMappingMethods, after replacing any weak explicit mappings with strong ones.
+    Microsoft has removed the option to run in compatibility mode in current updates.
+  ru: >-
+    Установите StrongCertificateBindingEnforcement в значение 2 (полное применение) на всех контроллерах домена
+    и снимите бит UPN (0x4) в CertificateMappingMethods, предварительно заменив нестойкие явные сопоставления на
+    стойкие. В актуальных обновлениях Microsoft режим совместимости уже недоступен.
+attack:
+- id: T1649
+  name: Steal or Forge Authentication Certificates
+- id: T1556
+  name: Modify Authentication Process
+engine: declarative
+references:
+- title: >-
+    Microsoft Support — KB5014754 (StrongCertificateBindingEnforcement and Schannel CertificateMappingMethods)
+  url: https://support.microsoft.com/help/5014754
+- title: >-
+    SpecterOps Certify documentation — ESC10 Schannel weak certificate mapping
+  url: https://docs.specterops.io/ghostpack-docs/Certify.wik-mdx/esc10-schannel-weak-certificate-mapping
+notes: >-
+  Tier 2: both values are DC registry keys —
+  HKLM\SYSTEM\CurrentControlSet\Services\Kdc\StrongCertificateBindingEnforcement and
+  HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\Schannel\CertificateMappingMethods — read over
+  remote registry with admin access. Per KB5014754 the Kdc default is full enforcement since the Sept 2025
+  update and the key is no longer supported after it; a value of 0 is the finding. The Schannel UPN bit is
+  0x4. Confirm current defaults at verification. Preview reads the out-of-band representation documented as the
+  collector contract in internal/provider/ad/collect.go ('Out-of-band AD CS configuration snapshot'): a
+  dirauditorDcConfig object per DC under cn=kdc,cn=dirauditor with StrongCertificateBindingEnforcement (0/1/2)
+  and CertificateMappingMethods (int or 0x-hex). An absent StrongCertificateBindingEnforcement is not read as 0.
+query_sketch:
+  base: cn=kdc,cn=dirauditor
+  scope: one
+  filter: (objectClass=dirauditorDcConfig)
+  attributes:
+  - StrongCertificateBindingEnforcement
+  - CertificateMappingMethods
+condition_cel: >-
+  (hasattr(obj, "StrongCertificateBindingEnforcement") && intattr(obj, "StrongCertificateBindingEnforcement") ==
+  0) || mask_has(intval(attr(obj, "CertificateMappingMethods")), 0x4)
+expect:
+- cn=OLDDC,cn=kdc,cn=dirauditor
+- cn=STALEDC,cn=kdc,cn=dirauditor

@@ -1,0 +1,69 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0513
+title:
+  en: Certificate template carries an issuance policy linked to a privileged group (ESC13)
+  ru: Шаблон сертификата несёт политику выдачи, связанную с привилегированной группой (ESC13)
+domain: pki
+providers: [ad]
+tier: 0
+severity: high
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  Published pKICertificateTemplate objects (msPKI-Certificate-Policy) correlated with the msPKI-Enterprise-Oid
+  objects in CN=OID,CN=Public Key Services that carry msDS-OIDToGroupLink
+attributes:
+- msPKI-Certificate-Policy
+- pKIExtendedKeyUsage
+- msPKI-Certificate-Application-Policy
+- nTSecurityDescriptor
+- msDS-OIDToGroupLink
+condition: >-
+  A published, client-authentication-capable template lists in msPKI-Certificate-Policy an issuance-policy OID
+  whose msPKI-Enterprise-Oid object has a non-empty msDS-OIDToGroupLink, and the template is enrollable by a
+  principal outside the linked group, so enrolment yields a certificate whose authentication adds the linked
+  group to the account's token.
+threshold: any occurrence
+rationale: >-
+  An issuance policy OID can be linked to an AD group through msDS-OIDToGroupLink (authentication mechanism
+  assurance). When a template carries such a policy, anyone who may enrol and authenticate with the resulting
+  certificate is treated as a member of the linked group for that logon — without ever being added to it. If
+  the linked group is privileged, enrolment rights become group membership.
+remediation:
+  en: >-
+    Review every issuance policy with an msDS-OIDToGroupLink; remove links to privileged groups, keep the linked
+    groups empty and universal only where the feature is needed, and restrict enrolment on templates that carry
+    a linked policy to Tier-0 principals.
+  ru: >-
+    Проверьте все политики выдачи с атрибутом msDS-OIDToGroupLink; удалите связи с привилегированными группами,
+    оставляйте связанные группы пустыми и универсальными только там, где функция действительно нужна, и
+    ограничьте права записи на шаблоны со связанной политикой учётными записями нулевого уровня.
+attack:
+- id: T1649
+  name: Steal or Forge Authentication Certificates
+- id: T1078.002
+  name: 'Valid Accounts: Domain Accounts'
+engine: complex:esc13-issuance-policy-link
+references:
+- title: >-
+    Microsoft Learn — [MS-CRTD] msPKI-Certificate-Policy / issuance policies in certificate templates
+  url: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-crtd/ec71fd43-61c2-407b-83c9-b52272dec8a1
+- title: >-
+    SpecterOps — ADCS ESC13 abuse technique (issuance policy to group link)
+  url: https://specterops.io/blog/2024/02/14/adcs-esc13-abuse-technique/
+notes: >-
+  Cross-object (complex): resolve each policy OID in the template to its msPKI-Enterprise-Oid object in the
+  OID container and read msDS-OIDToGroupLink. The linked group's RID appears in the PKINIT TGT PAC. Client-
+  auth EKU is required (e.g. 1.3.6.1.5.5.7.3.2). Confirm the OID-object attribute names and the
+  universal/empty-group constraints at verification.
+query_sketch:
+  base: CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,<forest root>
+  scope: one
+  filter: (objectClass=pKICertificateTemplate)
+condition_cel: >-
+  obj.class.exists(c, c.lowerAscii() == "pkicertificatetemplate") && sd_readable(obj) && published_template(obj) && (attrs(obj, "pKIExtendedKeyUsage").exists(o, o in ["1.3.6.1.5.5.7.3.2", "1.3.6.1.4.1.311.20.2.2", "1.3.6.1.5.2.3.4", "2.5.29.37.0"]) || attrs(obj, "msPKI-Certificate-Application-Policy").exists(o, o in ["1.3.6.1.5.5.7.3.2", "1.3.6.1.4.1.311.20.2.2", "1.3.6.1.5.2.3.4", "2.5.29.37.0"]) || !hasattr(obj, "pKIExtendedKeyUsage")) && attrs(obj, "msPKI-Certificate-Policy").exists(p, oid_group_link(p) != "" && tier0_sid(dn_sid(oid_group_link(p)))) && aces(obj).exists(a, a.allow && a.effective && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"]) && (mask_has(a.mask, 0x10000000) || (mask_has(a.mask, 0x100) && (a.object_type == "" || a.object_type == "0e10c968-78fb-11d2-90d4-00c04f79dc55" || a.object_type == "a05b8cc2-17bc-4802-a710-e7c15ab866a2"))))
+expect:
+- CN=VulnIssuancePolicy,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,DC=lab,DC=example

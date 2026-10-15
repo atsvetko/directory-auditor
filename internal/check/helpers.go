@@ -1,6 +1,8 @@
 package check
 
 import (
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/base64"
 	"fmt"
 	"strconv"
@@ -69,6 +71,13 @@ import (
 //	                                              "" when no collected object has it
 //	dns_zone_property(obj, 0x2)                   scalar value of a dNSProperty entry by property id
 //	                                              ([MS-DNSP] 2.3.2.1, see dnsprop.go); -1 when not set
+//	published_template(obj)                       the certificate template's name appears in some enterprise
+//	                                              CA's certificateTemplates (published on a CA); AD CS tier-0
+//	oid_group_link("1.3.6.1.4.1…")                DN named by the msDS-OIDToGroupLink of the msPKI-Enterprise-Oid
+//	                                              object whose msPKI-Cert-Template-OID is this issuance-policy
+//	                                              OID; "" when no linked OID object matches (ESC13)
+//	cert_weak(obj, "cACertificate")               any DER certificate in that attribute has an RSA key under
+//	                                              2048 bits or an MD5/SHA-1 signature; read-only, no network
 func helperOptions() []cel.EnvOption {
 	mapT := cel.MapType(cel.StringType, cel.DynType)
 	aceList := cel.ListType(cel.MapType(cel.StringType, cel.DynType))
@@ -280,7 +289,60 @@ func helperOptions() []cel.EnvOption {
 		cel.Function("aces_of",
 			cel.Overload("aces_of_map_string", []*cel.Type{mapT, cel.StringType}, aceList,
 				cel.BinaryBinding(func(o, name ref.Val) ref.Val { return aceVals(o, string(name.(types.String))) }))),
+		cel.Function("published_template",
+			cel.Overload("published_template_map", []*cel.Type{mapT}, cel.BoolType,
+				cel.UnaryBinding(func(o ref.Val) ref.Val {
+					if currentPublishedTemplates == nil {
+						return types.False
+					}
+					m, _ := o.Value().(map[string]any)
+					dn, _ := m["dn"].(string)
+					for _, c := range []string{shortDN(dn), firstAttr(o, "cn"), firstAttr(o, "name")} {
+						if c != "" && currentPublishedTemplates[strings.ToLower(c)] {
+							return types.True
+						}
+					}
+					return types.False
+				}))),
+		cel.Function("oid_group_link",
+			cel.Overload("oid_group_link_string", []*cel.Type{cel.StringType}, cel.StringType,
+				cel.UnaryBinding(func(s ref.Val) ref.Val {
+					return types.String(currentOIDGroupLink[strings.ToLower(string(s.(types.String)))])
+				}))),
+		cel.Function("cert_weak",
+			cel.Overload("cert_weak_map_string", []*cel.Type{mapT, cel.StringType}, cel.BoolType,
+				cel.BinaryBinding(func(o, name ref.Val) ref.Val {
+					for _, v := range allAttr(o, string(name.(types.String))) {
+						if certWeak(v) {
+							return types.True
+						}
+					}
+					return types.False
+				}))),
 	}
+}
+
+// certWeak reports whether a base64 DER certificate uses an RSA key shorter
+// than 2048 bits or a broken signature algorithm (MD5 or SHA-1). A value that
+// is not a parseable certificate cannot be judged and is reported as not weak,
+// so the check never fires on what it cannot read. Parsing only; no network.
+func certWeak(b64 string) bool {
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(b64))
+	if err != nil {
+		return false
+	}
+	c, err := x509.ParseCertificate(raw)
+	if err != nil {
+		return false
+	}
+	if pub, ok := c.PublicKey.(*rsa.PublicKey); ok && pub.N.BitLen() < 2048 {
+		return true
+	}
+	switch c.SignatureAlgorithm {
+	case x509.MD5WithRSA, x509.SHA1WithRSA, x509.DSAWithSHA1, x509.ECDSAWithSHA1:
+		return true
+	}
+	return false
 }
 
 // intOf reads an attribute as an unsigned bit field. AD stores 32-bit flag
@@ -466,6 +528,9 @@ var (
 	currentGPOToTier0  map[string]bool               // lower(GPO DN) -> linked to a Tier-0-affecting container
 	currentByPrimary   map[string][]*snapshot.Object // upper(group SID) -> accounts with it as primary group
 	currentSAM         map[string]string             // upper(SID) -> sAMAccountName ("" entries omitted)
+	// AD CS (pki domain) indexes, built per evaluation like the above.
+	currentPublishedTemplates map[string]bool   // lower(template name) listed in some CA's certificateTemplates
+	currentOIDGroupLink       map[string]string // lower(issuance-policy OID) -> msDS-OIDToGroupLink group DN
 )
 
 func indexSnapshot(snap *snapshot.Snapshot) map[string]*snapshot.Object {
@@ -523,6 +588,30 @@ func indexSnapshot(snap *snapshot.Snapshot) map[string]*snapshot.Object {
 		}
 	}
 	currentDNSDomain = dnsDomainOf(snap.Meta.BaseDN)
+
+	// AD CS: which templates are published (named in a CA's certificateTemplates)
+	// and which issuance-policy OIDs link to a group (msDS-OIDToGroupLink).
+	currentPublishedTemplates = map[string]bool{}
+	currentOIDGroupLink = map[string]string{}
+	for i := range snap.Objects {
+		o := &snap.Objects[i]
+		if hasClass(o, "pKIEnrollmentService") {
+			for k, vals := range o.Attrs {
+				if strings.EqualFold(k, "certificateTemplates") {
+					for _, v := range vals {
+						currentPublishedTemplates[strings.ToLower(v)] = true
+					}
+				}
+			}
+		}
+		if hasClass(o, "msPKI-Enterprise-Oid") {
+			if link := o.Attr("msDS-OIDToGroupLink"); link != "" {
+				if oid := o.Attr("msPKI-Cert-Template-OID"); oid != "" {
+					currentOIDGroupLink[strings.ToLower(oid)] = link
+				}
+			}
+		}
+	}
 	return idx
 }
 

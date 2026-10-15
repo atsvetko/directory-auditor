@@ -1,0 +1,63 @@
+# Catalogue entry — clean-room spec (docs/clean-room.md). Facts in our own words,
+# primary references only. A pack may be written only after `verified_by` is filled.
+id: DSA-0511
+title:
+  en: CA RPC enrollment interface does not require packet privacy (ESC11)
+  ru: RPC-интерфейс заявок центра сертификации не требует шифрования пакетов (ESC11)
+domain: pki
+providers: [ad]
+tier: 2
+severity: high
+quick: false
+status: draft
+verified_by: ''
+verified_on: ''
+object: >-
+  The interface configuration of each enterprise CA (the InterfaceFlags value read from the CA host)
+attributes:
+- InterfaceFlags
+condition: >-
+  A CA's InterfaceFlags value does not have IF_ENFORCEENCRYPTICERTREQUEST set, so the RPC certificate-
+  enrollment interface (MS-ICPR) accepts requests without packet privacy (RPC_C_AUTHN_LEVEL_PKT_PRIVACY).
+threshold: any occurrence
+rationale: >-
+  Without enforced packet privacy the RPC enrolment interface accepts an unprotected NTLM exchange, which an
+  attacker can relay from a coerced privileged account to obtain a certificate for it — the RPC counterpart of
+  the web-endpoint relay in ESC8.
+remediation:
+  en: >-
+    Set the flag with 'certutil -setreg CA\\InterfaceFlags +IF_ENFORCEENCRYPTICERTREQUEST' and restart the
+    certificate service, after confirming that no required client depends on unencrypted enrolment.
+  ru: >-
+    Установите флаг командой 'certutil -setreg CA\\InterfaceFlags +IF_ENFORCEENCRYPTICERTREQUEST' и
+    перезапустите службу центра сертификации, предварительно убедившись, что ни один нужный клиент не зависит от
+    незашифрованной подачи заявок.
+attack:
+- id: T1649
+  name: Steal or Forge Authentication Certificates
+- id: T1557
+  name: Adversary-in-the-Middle
+engine: declarative
+references:
+- title: >-
+    Microsoft Learn — security assessment: enforce encryption for RPC certificate enrollment interface (ESC11)
+  url: https://learn.microsoft.com/en-us/defender-for-identity/security-assessment-enforce-encryption-rpc
+- title: >-
+    Compass Security — relaying to AD Certificate Services over RPC
+  url: https://blog.compass-security.com/2022/11/relaying-to-ad-certificate-services-over-rpc/
+notes: >-
+  Tier 2: InterfaceFlags is a CA registry value (CertSvc Configuration\<CA>\InterfaceFlags), read over remote
+  registry or ICertAdmin with CA access. The flag is set by default on Windows Server 2012 and later but is
+  sometimes cleared for legacy clients; the finding is its absence. Preview reads the out-of-band representation
+  documented as the collector contract in internal/provider/ad/collect.go ('Out-of-band AD CS configuration
+  snapshot'): a dirauditorCaConfig object per CA under cn=certsvc,cn=dirauditor whose InterfaceFlags holds one
+  flag name per value; the finding is a CA config object that does not list IF_ENFORCEENCRYPTICERTREQUEST.
+query_sketch:
+  base: cn=certsvc,cn=dirauditor
+  scope: one
+  filter: (objectClass=dirauditorCaConfig)
+  attributes:
+  - InterfaceFlags
+condition_cel: '!attrs(obj, "InterfaceFlags").exists(f, f == "IF_ENFORCEENCRYPTICERTREQUEST")'
+expect:
+- cn=esc11-CA,cn=certsvc,cn=dirauditor
