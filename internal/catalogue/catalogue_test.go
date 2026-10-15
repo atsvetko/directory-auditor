@@ -47,6 +47,8 @@ func TestImplementedEntries(t *testing.T) {
 		"directory-core": {"../../testdata/synthetic-lab.json.zst", "../../testdata/synthetic-samba.json.zst"},
 		// AD-integrated DNS zones exist in both AD and Samba AD DC directories.
 		"dns": {"../../testdata/synthetic-lab.json.zst", "../../testdata/synthetic-samba.json.zst"},
+		// AD CS lives in the AD forest configuration partition only.
+		"pki": {"../../testdata/synthetic-lab.json.zst"},
 	}
 	loaded := map[string]*snapshot.Snapshot{}
 	ran := 0

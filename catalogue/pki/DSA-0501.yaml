@@ -76,3 +76,7 @@ notes: >-
   Autoenroll (a05b8cc2-17bc-4802-a710-e7c15ab866a2) ACEs; Tier 0 is the TIER0.md set. 'Published' means the
   template name appears in some enterprise CA's certificateTemplates. At verification confirm the EKU OID list
   and whether an empty pKIExtendedKeyUsage should count as client-auth-capable.
+condition_cel: >-
+  obj.class.exists(c, c.lowerAscii() == "pkicertificatetemplate") && sd_readable(obj) && published_template(obj) && (anyflag(obj, "msPKI-Certificate-Name-Flag", 0x1) || anyflag(obj, "msPKI-Certificate-Name-Flag", 0x10000)) && (attrs(obj, "pKIExtendedKeyUsage").exists(o, o in ["1.3.6.1.5.5.7.3.2", "1.3.6.1.4.1.311.20.2.2", "1.3.6.1.5.2.3.4", "2.5.29.37.0"]) || attrs(obj, "msPKI-Certificate-Application-Policy").exists(o, o in ["1.3.6.1.5.5.7.3.2", "1.3.6.1.4.1.311.20.2.2", "1.3.6.1.5.2.3.4", "2.5.29.37.0"]) || !hasattr(obj, "pKIExtendedKeyUsage")) && !flags(obj, "msPKI-Enrollment-Flag", 0x2) && intattr(obj, "msPKI-RA-Signature") == 0 && aces(obj).exists(a, a.allow && a.effective && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"]) && (mask_has(a.mask, 0x10000000) || (mask_has(a.mask, 0x100) && (a.object_type == "" || a.object_type == "0e10c968-78fb-11d2-90d4-00c04f79dc55" || a.object_type == "a05b8cc2-17bc-4802-a710-e7c15ab866a2"))))
+expect:
+- CN=VulnClientAuth,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,DC=lab,DC=example

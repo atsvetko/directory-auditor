@@ -58,3 +58,7 @@ notes: >-
   Parses the DER certificates in cACertificate; no network. Thresholds (RSA 2048, SHA-256) follow current
   baselines — confirm the exact minimums and whether to warn on expiry at verification. Maps ANSSI
   vuln_certificates_vuln (partial: key size and signature only, not full path validation).
+condition_cel: >-
+  (obj.class.exists(c, c.lowerAscii() == "certificationauthority") || obj.class.exists(c, c.lowerAscii() == "pkienrollmentservice")) && cert_weak(obj, "cACertificate")
+expect:
+- CN=weak-CA,CN=Enrollment Services,CN=Public Key Services,CN=Services,CN=Configuration,DC=lab,DC=example

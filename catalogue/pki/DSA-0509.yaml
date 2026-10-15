@@ -61,3 +61,11 @@ notes: >-
   The exploitability depends on the KDC StrongCertificateBindingEnforcement mode (see DSA-0510); the template
   flag is the catalogue condition here, the DC mode is reported separately. CT_FLAG_NO_SECURITY_EXTENSION is
   0x80000; the SID extension OID is 1.3.6.1.4.1.311.25.2.
+query_sketch:
+  base: CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,<forest root>
+  scope: one
+  filter: (objectClass=pKICertificateTemplate)
+condition_cel: >-
+  obj.class.exists(c, c.lowerAscii() == "pkicertificatetemplate") && sd_readable(obj) && published_template(obj) && flags(obj, "msPKI-Enrollment-Flag", 0x80000) && (attrs(obj, "pKIExtendedKeyUsage").exists(o, o in ["1.3.6.1.5.5.7.3.2", "1.3.6.1.4.1.311.20.2.2", "1.3.6.1.5.2.3.4", "2.5.29.37.0"]) || attrs(obj, "msPKI-Certificate-Application-Policy").exists(o, o in ["1.3.6.1.5.5.7.3.2", "1.3.6.1.4.1.311.20.2.2", "1.3.6.1.5.2.3.4", "2.5.29.37.0"]) || !hasattr(obj, "pKIExtendedKeyUsage")) && !flags(obj, "msPKI-Enrollment-Flag", 0x2) && intattr(obj, "msPKI-RA-Signature") == 0 && aces(obj).exists(a, a.allow && a.effective && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"]) && (mask_has(a.mask, 0x10000000) || (mask_has(a.mask, 0x100) && (a.object_type == "" || a.object_type == "0e10c968-78fb-11d2-90d4-00c04f79dc55" || a.object_type == "a05b8cc2-17bc-4802-a710-e7c15ab866a2"))))
+expect:
+- CN=VulnNoSecExt,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,DC=lab,DC=example

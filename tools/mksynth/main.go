@@ -4,10 +4,15 @@
 package main
 
 import (
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/binary"
 	"flag"
 	"fmt"
+	"math/big"
+	mrand "math/rand"
 	"os"
 	"strconv"
 	"strings"
@@ -398,6 +403,87 @@ func main() {
 	add("DC=nosd.lab.example,"+ddz, zone, map[string][]string{"name": {"nosd.lab.example"}, // negative both: descriptor not readable, allow-update absent
 		"dNSProperty": {dnsProp(0x01, 1, 0, 0, 0)}})
 
+	// DSA-0501…0520: AD CS objects under CN=Public Key Services in the configuration partition.
+	// Enrol right (extended right) GUID, the issuance-policy OID used by the ESC13 fixture, and a
+	// clean Tier-0-only descriptor reused by every object that must not trip an ACL check.
+	pks := "CN=Public Key Services,CN=Services,CN=Configuration," + base
+	ctBase, esBase, caBase, oidBase := "CN=Certificate Templates,"+pks, "CN=Enrollment Services,"+pks, "CN=Certification Authorities,"+pks, "CN=OID,"+pks
+	enrollGUID := "0e10c968-78fb-11d2-90d4-00c04f79dc55"
+	policyOID := "1.3.6.1.4.1.311.21.8.1.2.3.4.5.6"
+	cleanPKI := func(extra ...ace) string {
+		return sdOwned(dom+"-512", false, append([]ace{{"S-1-5-18", 0x000F01FF, ""}, {dom + "-512", 0x000F01FF, ""}}, extra...)...)
+	}
+	enrollAce := ace{dom + "-513", 0x00000100, enrollGUID} // Domain Users may enrol — a principal outside Tier 0
+	tmplClass := []string{"top", "pKICertificateTemplate"}
+	tmpl := func(cn string, sd string, attrs map[string][]string) {
+		a := map[string][]string{"cn": {cn}, "name": {cn}, "displayName": {cn}, "nTSecurityDescriptor": {sd}, "whenChanged": {gt(20)}}
+		for k, v := range attrs {
+			a[k] = v
+		}
+		add("CN="+cn+","+ctBase, tmplClass, a)
+	}
+	// Positive cases: one template per template-based ESC check, each firing only its own check.
+	tmpl("VulnClientAuth", cleanPKI(enrollAce), map[string][]string{"msPKI-Template-Schema-Version": {"2"}, // DSA-0501 (ESC1)
+		"msPKI-Certificate-Name-Flag": {"1"}, "pKIExtendedKeyUsage": {"1.3.6.1.5.5.7.3.2"}, "msPKI-Enrollment-Flag": {"0"}, "msPKI-RA-Signature": {"0"}})
+	tmpl("VulnAnyPurpose", cleanPKI(enrollAce), map[string][]string{"msPKI-Template-Schema-Version": {"2"}, // DSA-0502 (ESC2)
+		"msPKI-Certificate-Name-Flag": {"0"}, "pKIExtendedKeyUsage": {"2.5.29.37.0"}, "msPKI-Enrollment-Flag": {"0"}, "msPKI-RA-Signature": {"0"}})
+	tmpl("VulnEnrollAgent", cleanPKI(enrollAce), map[string][]string{"msPKI-Template-Schema-Version": {"2"}, // DSA-0503 (ESC3)
+		"msPKI-Certificate-Name-Flag": {"0"}, "pKIExtendedKeyUsage": {"1.3.6.1.4.1.311.20.2.1"}, "msPKI-Enrollment-Flag": {"0"}, "msPKI-RA-Signature": {"0"}})
+	tmpl("VulnNoSecExt", cleanPKI(enrollAce), map[string][]string{"msPKI-Template-Schema-Version": {"2"}, // DSA-0509 (ESC9): 0x80000
+		"msPKI-Certificate-Name-Flag": {"0"}, "pKIExtendedKeyUsage": {"1.3.6.1.5.5.7.3.2"}, "msPKI-Enrollment-Flag": {"524288"}, "msPKI-RA-Signature": {"0"}})
+	tmpl("VulnSchemaV1", cleanPKI(enrollAce), map[string][]string{"msPKI-Template-Schema-Version": {"1"}, // DSA-0515 (ESC15): non-auth EKU so ESC1 stays quiet
+		"msPKI-Certificate-Name-Flag": {"1"}, "pKIExtendedKeyUsage": {"1.3.6.1.4.1.311.10.3.4"}, "msPKI-Enrollment-Flag": {"0"}, "msPKI-RA-Signature": {"0"}})
+	tmpl("VulnIssuancePolicy", cleanPKI(enrollAce), map[string][]string{"msPKI-Template-Schema-Version": {"2"}, // DSA-0513 (ESC13)
+		"msPKI-Certificate-Name-Flag": {"0"}, "pKIExtendedKeyUsage": {"1.3.6.1.5.5.7.3.2"}, "msPKI-Certificate-Policy": {policyOID},
+		"msPKI-Enrollment-Flag": {"0"}, "msPKI-RA-Signature": {"0"}})
+	tmpl("VulnACLTemplate", sdOwned(dom+"-1105", false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-512", 0x000F01FF, ""}), // DSA-0504 (ESC4): owned by j.doe
+		map[string][]string{"msPKI-Template-Schema-Version": {"2"}, "msPKI-Certificate-Name-Flag": {"0"}, "pKIExtendedKeyUsage": {"1.3.6.1.5.5.7.3.2"},
+			"msPKI-Enrollment-Flag": {"0"}, "msPKI-RA-Signature": {"0"}})
+	// Negative templates: each resembles a positive but is safe for a different reason.
+	tmpl("CleanUser", cleanPKI(), map[string][]string{"msPKI-Template-Schema-Version": {"2"}, // enrolment only for Tier 0
+		"msPKI-Certificate-Name-Flag": {"0"}, "pKIExtendedKeyUsage": {"1.3.6.1.5.5.7.3.2"}, "msPKI-Enrollment-Flag": {"0"}, "msPKI-RA-Signature": {"0"}})
+	tmpl("PendingApproval", cleanPKI(enrollAce), map[string][]string{"msPKI-Template-Schema-Version": {"2"}, // manager approval on (0x2)
+		"msPKI-Certificate-Name-Flag": {"1"}, "pKIExtendedKeyUsage": {"1.3.6.1.5.5.7.3.2"}, "msPKI-Enrollment-Flag": {"2"}, "msPKI-RA-Signature": {"0"}})
+	tmpl("UnpubClientAuth", cleanPKI(enrollAce), map[string][]string{"msPKI-Template-Schema-Version": {"2"}, // ESC1 shape but not published on any CA
+		"msPKI-Certificate-Name-Flag": {"1"}, "pKIExtendedKeyUsage": {"1.3.6.1.5.5.7.3.2"}, "msPKI-Enrollment-Flag": {"0"}, "msPKI-RA-Signature": {"0"}})
+	// Enterprise CAs and the NTAuth store. lab-CA publishes the templates (names in certificateTemplates).
+	published := []string{"VulnClientAuth", "VulnAnyPurpose", "VulnEnrollAgent", "VulnNoSecExt", "VulnSchemaV1", "VulnIssuancePolicy", "CleanUser", "PendingApproval"}
+	strongCert, weakCert := caCertDER(2, 2048), caCertDER(3, 1024)
+	add("CN=lab-CA,"+esBase, []string{"top", "pKIEnrollmentService"}, map[string][]string{
+		"cn": {"lab-CA"}, "name": {"lab-CA"}, "dNSHostName": {"ca01.lab.example"},
+		"certificateTemplates": published, "cACertificate": {strongCert}, "nTSecurityDescriptor": {cleanPKI()}})
+	add("CN=weak-CA,"+esBase, []string{"top", "pKIEnrollmentService"}, map[string][]string{ // DSA-0520: RSA-1024 CA certificate
+		"cn": {"weak-CA"}, "name": {"weak-CA"}, "dNSHostName": {"ca02.lab.example"},
+		"cACertificate": {weakCert}, "nTSecurityDescriptor": {cleanPKI()}})
+	add("CN=lab-CA,"+caBase, []string{"top", "certificationAuthority"}, map[string][]string{ // negative DSA-0520: strong root
+		"cn": {"lab-CA"}, "cACertificate": {strongCert}, "nTSecurityDescriptor": {cleanPKI()}})
+	add("CN=NTAuthCertificates,"+pks, []string{"top", "certificationAuthority"}, map[string][]string{ // DSA-0505 (ESC5)
+		"cn": {"NTAuthCertificates"}, "cACertificate": {strongCert},
+		"nTSecurityDescriptor": {cleanPKI(ace{dom + "-1201", 0x00040000, ""})}}) // Helpdesk WriteDacl on the NTAuth store
+	// Issuance-policy OID objects (ESC13 cross-object link).
+	add("CN=15-ESC13-linked,"+oidBase, []string{"top", "msPKI-Enterprise-Oid"}, map[string][]string{
+		"cn": {"15-ESC13-linked"}, "name": {"15-ESC13-linked"}, "msPKI-Cert-Template-OID": {policyOID},
+		"msDS-OIDToGroupLink": {"CN=Domain Admins,CN=Users," + base}, "nTSecurityDescriptor": {cleanPKI()}})
+	add("CN=16-clean,"+oidBase, []string{"top", "msPKI-Enterprise-Oid"}, map[string][]string{ // negative: no group link
+		"cn": {"16-clean"}, "name": {"16-clean"}, "msPKI-Cert-Template-OID": {"1.3.6.1.4.1.311.21.8.9.9.9.9.9.9"},
+		"nTSecurityDescriptor": {cleanPKI()}})
+	// DSA-0514 (ESC14): schemaIDGUIDs of the mapping/subject-source attributes (invented; the product reads
+	// the real GUIDs from the schema) and an account whose altSecurityIdentities is writable by Helpdesk.
+	escAttrs := []struct{ name, guid string }{
+		{"altSecurityIdentities", "a1000000-0000-0000-0000-00000000e514"},
+		{"userPrincipalName", "a2000000-0000-0000-0000-00000000e514"},
+		{"mail", "a3000000-0000-0000-0000-00000000e514"},
+		{"dNSHostName", "a4000000-0000-0000-0000-00000000e514"},
+	}
+	for _, m := range escAttrs {
+		add("CN="+m.name+",CN=Schema,CN=Configuration,"+base, []string{"top", "attributeSchema"},
+			map[string][]string{"lDAPDisplayName": {m.name}, "schemaIDGUID": {m.guid}})
+	}
+	add("CN=esc14.target,CN=Users,"+base, user, map[string][]string{
+		"sAMAccountName": {"esc14.target"}, "objectSid": {dom + "-1190"}, "primaryGroupID": {"513"}, "sAMAccountType": {"805306368"},
+		"userAccountControl": {"512"}, "pwdLastSet": {ft(10)}, "lastLogonTimestamp": {ft(3)}, "whenCreated": {"20200115100000.0Z"},
+		"nTSecurityDescriptor": {sd(false, ace{"S-1-5-18", 0x000F01FF, ""}, ace{dom + "-1201", 0x00000020, escAttrs[0].guid})}}) // Helpdesk may write altSecurityIdentities
+
 	s.Skipped = []snapshot.Skipped{{Query: "sysvol", Reason: "tier", Detail: "tier 1 not requested"}}
 
 	for _, path := range []string{*out, "internal/demo/synthetic-lab.json.zst"} {
@@ -408,6 +494,32 @@ func main() {
 	}
 	h, _ := snapshot.Hash(s)
 	fmt.Printf("wrote %s (%d objects, sha256 %s)\n", *out, len(s.Objects), h[:16])
+}
+
+// caCertDER builds a self-signed CA certificate and returns its DER, base64 as
+// the collector stores cACertificate. A fixed seed and fixed validity dates keep
+// the output reproducible. bits below 2048 makes it a weak key (DSA-0520). Test
+// data only; the product parses certificates, it never issues them.
+func caCertDER(seed int64, bits int) string {
+	r := mrand.New(mrand.NewSource(seed))
+	key, err := rsa.GenerateKey(r, bits)
+	if err != nil {
+		panic(err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(seed),
+		Subject:               pkix.Name{CommonName: "lab issuing CA (synthetic)"},
+		NotBefore:             time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		NotAfter:              time.Date(2034, 1, 1, 0, 0, 0, 0, time.UTC),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	der, err := x509.CreateCertificate(r, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		panic(err)
+	}
+	return base64.StdEncoding.EncodeToString(der)
 }
 
 // dnsProp encodes one dNSProperty value as [MS-DNSP] 2.3.2.1 lays it out

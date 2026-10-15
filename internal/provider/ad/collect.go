@@ -37,13 +37,22 @@ var (
 	guidAttrs = []string{"objectGUID", "schemaIDGUID"}
 	sdAttrs   = []string{"nTSecurityDescriptor", "msDS-AllowedToActOnBehalfOfOtherIdentity", "msDS-GroupMSAMembership"}
 	// binAttrs are other binary attributes, stored base64 and decoded by the
-	// engine: dNSProperty holds [MS-DNSP] 2.3.2.1 property structures.
-	binAttrs = []string{"dNSProperty"}
+	// engine: dNSProperty holds [MS-DNSP] 2.3.2.1 property structures and
+	// cACertificate holds DER-encoded CA certificates (DSA-0520).
+	binAttrs = []string{"dNSProperty", "cACertificate"}
 )
 
 // zoneAttrs are read from every dnsZone object (DSA-0301, DSA-0302). Records
 // (dnsNode objects) are not read.
 var zoneAttrs = []string{"objectClass", "name", "dNSProperty", "whenChanged"}
+
+// pkiAttrs are read from the AD CS objects under CN=Public Key Services (the
+// pki domain, DSA-0501…0520): template settings, published-template lists on
+// enterprise CAs, CA certificates and the issuance-policy OID→group links.
+var pkiAttrs = []string{"objectClass", "cn", "name", "displayName",
+	"msPKI-Certificate-Name-Flag", "pKIExtendedKeyUsage", "msPKI-Certificate-Application-Policy",
+	"msPKI-Enrollment-Flag", "msPKI-RA-Signature", "msPKI-Template-Schema-Version", "msPKI-Certificate-Policy",
+	"certificateTemplates", "cACertificate", "msPKI-Cert-Template-OID", "msDS-OIDToGroupLink", "whenChanged"}
 
 var accountAttrs = []string{
 	"objectClass", "objectCategory", "sAMAccountType", "sAMAccountName", "userPrincipalName", "objectSid", "objectGUID", "sIDHistory",
@@ -177,6 +186,17 @@ var Plan = []Query{
 	{Name: "protected-sd", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(adminCount=1)", SD: true,
 		Attrs:   []string{"objectClass"},
 		Purpose: "ACLs, owners and inheritance state of protected objects (DSA-0015, DSA-0019, DSA-0076)"},
+	{Name: "pki", Base: "CN=Public Key Services,CN=Services,<config>", Scope: ldapx.ScopeSubtree, SD: true,
+		Filter: "(|(objectClass=pKICertificateTemplate)(objectClass=pKIEnrollmentService)(objectClass=certificationAuthority)" +
+			"(objectClass=msPKI-Enterprise-Oid)(objectClass=container)(objectClass=msPKI-Enterprise-Oid-Container))",
+		Classes: []string{"pKICertificateTemplate", "pKIEnrollmentService", "certificationAuthority", "msPKI-Enterprise-Oid", "container"},
+		Attrs:   pkiAttrs,
+		Purpose: "AD CS certificate templates, enterprise CAs, the NTAuth store, the Public Key Services containers and the " +
+			"issuance-policy OID objects, with owner and DACL (DSA-0501…0505, DSA-0509, DSA-0513, DSA-0515, DSA-0520)"},
+	{Name: "schema-mapping", Base: "<schema>", Scope: ldapx.ScopeOneLevel, Classes: []string{"attributeSchema"},
+		Filter:  "(|(lDAPDisplayName=altSecurityIdentities)(lDAPDisplayName=userPrincipalName)(lDAPDisplayName=mail)(lDAPDisplayName=dNSHostName))",
+		Attrs:   []string{"objectClass", "lDAPDisplayName", "schemaIDGUID"},
+		Purpose: "schemaIDGUIDs of the certificate-mapping and subject-source attributes, for ACL matching (DSA-0514)"},
 }
 
 // SDBaseQuery describes the follow-up per-object reads of Tier-0 objects whose

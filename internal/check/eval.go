@@ -251,6 +251,7 @@ func EvaluateWith(snap *snapshot.Snapshot, packs []Pack, opts EvalOptions) (*Res
 		currentSchemaGUIDs, currentT0Parents, currentHosts, currentDNSDomain = nil, nil, nil, ""
 		currentNames, currentReachers, currentReachPath, currentGPOToTier0, currentByPrimary = nil, nil, nil, nil, nil
 		currentSAM = nil
+		currentPublishedTemplates, currentOIDGroupLink = nil, nil
 	}()
 	now := snap.Collected.Unix()
 	inv := Inventory{Objects: len(snap.Objects), Collected: snap.Collected, Identity: snap.Meta.Identity,

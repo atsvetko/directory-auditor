@@ -59,3 +59,7 @@ notes: >-
   ACL semantics mirror DSA-0059/0301 (effective allow ACEs, exclude SELF S-1-5-10 and CREATOR OWNER S-1-3-0,
   Tier 0 from TIER0.md). WRITE_PROPERTY to one named safe property is not a finding; the named flags above are
   the dangerous ones. The matching control-path output should name the principals, as DSA-0061 does.
+condition_cel: >-
+  obj.class.exists(c, c.lowerAscii() == "pkicertificatetemplate") && sd_readable(obj) && ((sd_owner(obj) != "" && !tier0_sid(sd_owner(obj)) && !(sd_owner(obj) in ["S-1-5-10", "S-1-3-0"])) || aces(obj).exists(a, a.allow && a.effective && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"]) && (mask_has(a.mask, 0x10000000) || mask_has(a.mask, 0x40000000) || mask_has(a.mask, 0x40000) || mask_has(a.mask, 0x80000) || (mask_has(a.mask, 0x20) && a.object_type == ""))))
+expect:
+- CN=VulnACLTemplate,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,DC=lab,DC=example
