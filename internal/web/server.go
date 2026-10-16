@@ -483,6 +483,14 @@ func (s *Server) runJob(ctx context.Context, j *job, t provider.Target, demo, qu
 				smbconf.Augment(snap, r)
 			}
 		}
+		// TODO(adcs): the AD CS tier-1 ESC8 probe (internal/local/adcs.Probe/
+		// AugmentProbe) and the tier-2 offline ingest (adcs.Ingest/AugmentOffline)
+		// are wired into the CLI (`scan --adcs-probe` / `--adcs-offline`) but not
+		// the wizard: the probe must stay strictly opt-in (never probe unless
+		// asked), so it needs an explicit consent control in the Connect form, and
+		// the offline ingest needs a file-path field. Both are UI additions; until
+		// they exist, run these from the CLI and then `analyse` the snapshot, or
+		// open the snapshot in the wizard.
 	}
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
