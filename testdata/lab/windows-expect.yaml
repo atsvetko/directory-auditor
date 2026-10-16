@@ -101,6 +101,28 @@ allow:
   - DSA-0089
   - DSA-0301
   - DSA-0302
+  # AD CS / PKI (DSA-0501…0520) — fire only on a windows-dc built with `adcs: true`
+  # (tools/lab/windows/provision-adcs.ps1). Kept in `allow` because the ESC
+  # template checks cross-fire across the Lab* templates; promote to `must` with
+  # exact DNs after the first live run. The tier-1/2 PKI checks fire only when
+  # the scan is given --adcs-offline / --adcs-probe. scripts/validate-adcs.ps1
+  # does the precise per-check assertion.
+  - DSA-0501
+  - DSA-0502
+  - DSA-0503
+  - DSA-0504
+  - DSA-0505
+  - DSA-0506
+  - DSA-0507
+  - DSA-0508
+  - DSA-0509
+  - DSA-0510
+  - DSA-0511
+  - DSA-0513
+  - DSA-0514
+  - DSA-0515
+  - DSA-0516
+  - DSA-0520
 tier0_must_include:
   - CN=Administrator,CN=Users,DC=da,DC=test
   - CN=krbtgt,CN=Users,DC=da,DC=test

@@ -90,6 +90,40 @@ Write-Host 'windows provisioning done'
 		psQuote(provPath), psQuote(popPath),
 		psQuote(m.Name), psQuote(m.Domain), psQuote(m.IP),
 		psQuote(m.Name), psQuote(m.Domain))
+	if err := psEnv(ctx, j, script, map[string]string{"LAB_ADMIN_PASSWORD": cr.AdminPassword}); err != nil {
+		return err
+	}
+	if m.ADCS {
+		return provisionWindowsADCS(ctx, j, l, m, cr)
+	}
+	return nil
+}
+
+// provisionWindowsADCS installs a lab Enterprise CA with intentionally
+// vulnerable AD CS configuration on an already-promoted windows-dc, over
+// PowerShell Direct, so the AD CS checks (DSA-0501…0520) have something to
+// find. It runs tools/lab/windows/provision-adcs.ps1 as the domain admin,
+// after provision+populate. Lab only: the script writes vulnerable state and
+// refuses to run without DIRAUDITOR_LAB=1.
+func provisionWindowsADCS(ctx context.Context, j *Job, l *Lab, m *Machine, cr Creds) error {
+	caPath := filepath.Join(l.RepoDir, "tools", "lab", "windows", "provision-adcs.ps1")
+	if _, err := os.Stat(caPath); err != nil {
+		return fmt.Errorf("missing %s (is repo_dir correct?)", caPath)
+	}
+	script := fmt.Sprintf(`
+$ErrorActionPreference = 'Stop'
+$pw  = ConvertTo-SecureString $env:LAB_ADMIN_PASSWORD -AsPlainText -Force
+$dacred = New-Object System.Management.Automation.PSCredential('%s\Administrator', $pw)
+$adcs = Get-Content -Raw %s
+Write-Host 'installing lab Enterprise CA with vulnerable AD CS config...'
+Invoke-Command -VMName %s -Credential $dacred -ScriptBlock {
+  param($code,$dom)
+  $env:DIRAUDITOR_LAB='1'; & ([scriptblock]::Create($code)) -DomainName $dom -Confirm:$false
+} -ArgumentList $adcs, %s
+Write-Host 'AD CS provisioning done'
+`,
+		netbios(m.Domain), psQuote(caPath),
+		psQuote(m.Name), psQuote(m.Domain))
 	return psEnv(ctx, j, script, map[string]string{"LAB_ADMIN_PASSWORD": cr.AdminPassword})
 }
 

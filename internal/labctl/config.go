@@ -40,6 +40,7 @@ type Machine struct {
 	MemGB      int    `yaml:"mem_gb" json:"mem_gb"`           // RAM in GB (default 4)
 	DiskGB     int    `yaml:"disk_gb" json:"disk_gb"`         // system disk in GB (default 60)
 	ForestMode string `yaml:"forest_mode" json:"forest_mode"` // windows-dc only
+	ADCS       bool   `yaml:"adcs" json:"adcs"`               // windows-dc only: also install a lab Enterprise CA with vulnerable AD CS config
 	Expect     string `yaml:"expect" json:"expect"`           // optional verify expectation file
 }
 
@@ -132,6 +133,9 @@ func (l *Lab) Validate() error {
 		seen[strings.ToLower(m.Name)] = true
 		if !kinds[m.Kind] {
 			add("%s: kind must be windows-dc or alt-dc", m.Name)
+		}
+		if m.ADCS && m.Kind != "windows-dc" {
+			add("%s: adcs is only valid on a windows-dc", m.Name)
 		}
 		if !domainRe.MatchString(m.Domain) {
 			add("%s: domain %q is invalid", m.Name, m.Domain)
