@@ -100,21 +100,17 @@ func (Samba) Check(ctx context.Context, t provider.Target) (provider.CheckResult
 }
 
 func doCheck(ctx context.Context, t provider.Target) (provider.CheckResult, error) {
-	c, err := dial(ctx, t)
+	c, id, note, err := connect(ctx, t)
 	if err != nil {
 		return provider.CheckResult{}, err
 	}
 	defer c.Close()
-	id, err := bind(c, t)
-	if err != nil {
-		return provider.CheckResult{}, err
-	}
 	root, err := c.RootDSE(ctx)
 	if err != nil {
 		return provider.CheckResult{}, fmt.Errorf("rootDSE: %w", err)
 	}
 	return provider.CheckResult{Identity: id, Dialect: Fingerprint(root), BaseDN: root["defaultNamingContext"],
-		Domain: DomainFromDN(root["defaultNamingContext"]), Transport: c.Transport(), Encrypted: c.Encrypted()}, nil
+		Domain: DomainFromDN(root["defaultNamingContext"]), Transport: c.Transport(), Encrypted: c.Encrypted(), AuthNote: note}, nil
 }
 
 // DomainFromDN turns DC=corp,DC=example,DC=com into corp.example.com.
@@ -145,14 +141,14 @@ func collectAs(ctx context.Context, t provider.Target, progress func(string), na
 	if progress == nil {
 		progress = func(string) {}
 	}
-	c, err := dial(ctx, t)
+	c, identity, note, err := connect(ctx, t)
 	if err != nil {
 		return nil, err
 	}
 	defer c.Close()
-	identity, err := bind(c, t)
-	if err != nil {
-		return nil, err
+	extra := map[string]string{"transport": c.Transport(), "encrypted": fmt.Sprint(c.Encrypted())}
+	if note != "" {
+		extra["auth_note"] = note
 	}
 	return collect(ctx, connSearcher(c), snapshot.Meta{
 		Provider: name,
@@ -162,32 +158,65 @@ func collectAs(ctx context.Context, t provider.Target, progress func(string), na
 		Identity: identity,
 		Tier:     t.Tier,
 		Tool:     "dirauditor " + buildinfo.Version,
-		Extra:    map[string]string{"transport": c.Transport(), "encrypted": fmt.Sprint(c.Encrypted())},
+		Extra:    extra,
 	}, progress)
 }
 
-// bind authenticates. Kerberos is preferred: the current logon when no
-// account is given, otherwise a ticket obtained with the password at the DC's
-// KDC — so the password never crosses the network and an unencrypted
-// connection still ends up sealed. A simple bind is the fallback for an
-// account Kerberos cannot serve (and is refused without TLS unless the lab
-// flag is set). The identity string says which path was taken.
-func bind(c *ldapx.Conn, t provider.Target) (string, error) {
-	if t.BindUser == "" {
-		id, err := c.BindCurrentUser()
-		if err != nil {
-			return "", fmt.Errorf("ad: %w", err)
-		}
-		return id + " (Kerberos)", nil
+// connect dials and authenticates. Kerberos is preferred: the current logon
+// when no account is given, otherwise a ticket obtained with the password at
+// the DC's KDC — so the password never crosses the network and an unencrypted
+// connection still ends up sealed.
+//
+// Samba (ldap server require strong auth = yes, its default) refuses a
+// Kerberos bind over TLS that selects no SASL layer, which is what Windows
+// requires. In auto mode connect then reconnects over plain LDAP, where the
+// bind negotiates sealing. A simple bind is the last resort, for an account
+// Kerberos cannot serve (refused without TLS unless the lab flag is set).
+//
+// The identity string says which path was taken; note, when not empty, says
+// why Kerberos over the first connection did not succeed, for the run log and
+// the report.
+func connect(ctx context.Context, t provider.Target) (*ldapx.Conn, string, string, error) {
+	c, err := dial(ctx, t)
+	if err != nil {
+		return nil, "", "", err
 	}
-	id, kerr := c.BindKerberos(t.BindUser, t.BindPassword)
+	id, kerr := kerberos(c, t)
 	if kerr == nil {
-		return id + " (Kerberos)", nil
+		return c, id + " (Kerberos)", "", nil
+	}
+	note := "Kerberos over " + c.Transport() + " refused: " + kerr.Error()
+	if c.TLS() && ldapx.NeedsSASLLayer(kerr) && (t.TLS == "" || t.TLS == string(ldapx.TLSAuto)) {
+		plain := t
+		plain.TLS = string(ldapx.TLSNone)
+		pc, err := dial(ctx, plain)
+		if err != nil {
+			note += "; plain LDAP for Kerberos sealing unreachable: " + err.Error()
+		} else if id, err := kerberos(pc, plain); err != nil {
+			pc.Close()
+			note += "; Kerberos-sealed LDAP also failed: " + err.Error()
+		} else {
+			c.Close()
+			return pc, id + " (Kerberos)", note + "; reconnected over plain LDAP with Kerberos sealing", nil
+		}
+	}
+	if t.BindUser == "" {
+		c.Close()
+		return nil, "", "", fmt.Errorf("ad: %w", kerr)
 	}
 	if err := c.BindSimple(t.BindUser, t.BindPassword); err != nil {
-		return "", fmt.Errorf("bind as %s: %w (Kerberos was tried first: %v)", t.BindUser, err, kerr)
+		c.Close()
+		return nil, "", "", fmt.Errorf("bind as %s: %w (Kerberos was tried first: %v)", t.BindUser, err, kerr)
 	}
-	return t.BindUser + " (simple bind)", nil
+	return c, t.BindUser + " (simple bind)", note + "; used a simple bind — the password was sent to the DC inside the " + c.Transport() + " session", nil
+}
+
+// kerberos binds as the current logon, or as t.BindUser with its password.
+func kerberos(c *ldapx.Conn, t provider.Target) (string, error) {
+	if t.BindUser == "" {
+		return c.BindCurrentUser()
+	}
+	return c.BindKerberos(t.BindUser, t.BindPassword)
 }
 
 func dial(ctx context.Context, t provider.Target) (*ldapx.Conn, error) {

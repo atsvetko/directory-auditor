@@ -276,7 +276,8 @@ type connectResp struct {
 	Provider  string `json:"provider,omitempty"`
 	Transport string `json:"transport,omitempty"` // how the session is protected
 	Encrypted bool   `json:"encrypted,omitempty"`
-	SmbConf   string `json:"smbconf,omitempty"` // local configuration that will be included
+	AuthNote  string `json:"auth_note,omitempty"` // why Kerberos did not succeed on the first connection
+	SmbConf   string `json:"smbconf,omitempty"`   // local configuration that will be included
 	Error     string `json:"error,omitempty"`
 	Hint      string `json:"hint,omitempty"`
 }
@@ -363,7 +364,7 @@ func (s *Server) connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := connectResp{OK: true, Domain: firstNonEmpty(t.Domain, res.Domain), Server: t.Server, Identity: res.Identity, Kind: res.Dialect, Provider: p.Name(),
-		Transport: res.Transport, Encrypted: res.Encrypted}
+		Transport: res.Transport, Encrypted: res.Encrypted, AuthNote: res.AuthNote}
 	if q.SmbConf {
 		resp.SmbConf = smbconf.Detect("")
 	}

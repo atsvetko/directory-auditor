@@ -5,6 +5,7 @@
 # reasons listed in allow_skip.
 lab: samba
 min_objects: 50
+expect_auth: kerberos             # a password from --user is turned into a ticket; never a silent simple bind
 allow_skip: [provider, tier]      # FreeIPA entries skip by provider; tier-2 entries skip when --local is absent
 must:
   DSA-0001: ["CN=j.legacy,CN=Users,DC=lab,DC=example"]        # DONT_REQ_PREAUTH
