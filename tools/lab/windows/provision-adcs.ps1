@@ -156,8 +156,19 @@ function New-LabTemplate {
 function Publish-LabTemplate {
     param([Parameter(Mandatory)][string]$Name)
     if (-not $PSCmdlet.ShouldProcess($Name, 'publish template on the CA')) { return }
-    try { & certutil.exe -SetCATemplates "+$Name" 2>&1 | Out-Null; Write-Log "published $Name on the CA" }
-    catch { Write-Log "  WARN: could not publish $Name — $_" 'WARN' }
+    # certutil -SetCATemplates refuses these hand-built templates ("Invalid
+    # Template": no registered template OID, key usage, …) and, as a native
+    # command, never threw — the old log said "published" regardless. The audit
+    # reads publication from LDAP (certificateTemplates on the enrollment
+    # service), so write it there. The CA itself cannot issue from them.
+    $cfg = Get-ConfigNC
+    $enr = Get-ADObject -SearchBase "CN=Enrollment Services,CN=Public Key Services,CN=Services,$cfg" `
+        -LDAPFilter '(objectClass=pKIEnrollmentService)' -Properties certificateTemplates | Select-Object -First 1
+    if (-not $enr) { Write-Log "  WARN: no enrollment service object; $Name not published" 'WARN'; return }
+    if ($enr.certificateTemplates -notcontains $Name) {
+        Set-ADObject -Identity $enr -Add @{ certificateTemplates = $Name }
+    }
+    Write-Log "published $Name in LDAP on $($enr.Name) (not issuable: the template is hand-built)"
 }
 
 # ---- CA registry flags via certutil -setreg (ESC6/11/16) -------------------
