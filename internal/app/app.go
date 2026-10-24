@@ -228,6 +228,9 @@ func finish(snap *snapshot.Snapshot, o analyseOptions, out, errw io.Writer) int 
 	fmt.Fprintf(errw, "snapshot: %s (%d objects, %d searches, %d requests, %s)\n", snapPath, len(snap.Objects), snap.Meta.QueryCount, snap.Meta.Requests, snap.Meta.Duration)
 	if tr := snap.Meta.Extra["transport"]; tr != "" {
 		fmt.Fprintf(errw, "  session: %s as %s\n", tr, snap.Meta.Identity)
+		if n := snap.Meta.Extra["auth_note"]; n != "" {
+			fmt.Fprintln(errw, "  NOTE:", n)
+		}
 		if snap.Meta.Extra["encrypted"] == "false" {
 			fmt.Fprintln(errw, "  WARNING: the session was not encrypted — directory data crossed the network in clear (lab mode)")
 		}

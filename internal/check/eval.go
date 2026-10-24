@@ -62,6 +62,7 @@ type Inventory struct {
 	Searches    int                `json:"searches"`
 	Transport   string             `json:"transport,omitempty"`   // how the session was protected
 	Unencrypted bool               `json:"unencrypted,omitempty"` // directory data crossed the network in clear (lab mode)
+	AuthNote    string             `json:"auth_note,omitempty"`   // why Kerberos did not succeed on the first connection
 }
 
 // Tier0Entry is one Tier-0 principal or object with the path that makes it so.
@@ -256,7 +257,8 @@ func EvaluateWith(snap *snapshot.Snapshot, packs []Pack, opts EvalOptions) (*Res
 	now := snap.Collected.Unix()
 	inv := Inventory{Objects: len(snap.Objects), Collected: snap.Collected, Identity: snap.Meta.Identity,
 		Transport: snap.Meta.Extra["transport"], Unencrypted: snap.Meta.Extra["encrypted"] == "false",
-		Domain: snap.Meta.Domain, BaseDN: snap.Meta.BaseDN, Unresolved: t0.Unresolved, NotRead: snap.Skipped,
+		AuthNote: snap.Meta.Extra["auth_note"],
+		Domain:   snap.Meta.Domain, BaseDN: snap.Meta.BaseDN, Unresolved: t0.Unresolved, NotRead: snap.Skipped,
 		Duration: snap.Meta.Duration, Searches: snap.Meta.QueryCount, Tier0: []Tier0Entry{}}
 	for _, o := range snap.Objects {
 		if ok, why := t0.IsDN(o.DN); ok {

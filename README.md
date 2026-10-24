@@ -72,7 +72,12 @@ Authentication is Kerberos first: the current logon (Windows SSPI with TLS chann
 Linux `kinit` cache) when no account is given, otherwise `--user` with a password, which is turned
 into a ticket at the DC's KDC so the password never crosses the network. A simple bind is the
 fallback, and is refused on an unencrypted connection unless `--insecure-plaintext` is set (labs).
-The report and `run.log` record how each session was protected.
+Samba (with its default `ldap server require strong auth = yes`) refuses a Kerberos bind over TLS
+without a SASL signing layer, which is the only kind Windows accepts there; in `--tls auto` the
+binary then reconnects over plain LDAP with Kerberos sealing, and with LDAPS or StartTLS forced it
+falls back to a simple bind inside TLS. Either way a `NOTE` says why.
+The report and `run.log` record how each session was protected and, in `auth_note`, why Kerberos
+did not succeed on the first connection.
 Self-generated Samba certificates (before 4.24.0) often carry a negative serial number, which Go
 rejects by default; the binary accepts them (`//go:debug x509negativeserial=1` in `cmd/dirauditor`),
 since chain verification and `--pin` still apply.

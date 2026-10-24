@@ -25,7 +25,8 @@ type expect struct {
 	Tier0MustInclude []string            `yaml:"tier0_must_include"`
 	Tier0MustExclude []string            `yaml:"tier0_must_exclude"`
 	CollectedQueries []string            `yaml:"collected_queries"`
-	DNGlob           bool                `yaml:"dn_glob"` // expected DNs may contain '*' (generated RDNs such as ipaUniqueID)
+	DNGlob           bool                `yaml:"dn_glob"`     // expected DNs may contain '*' (generated RDNs such as ipaUniqueID)
+	ExpectAuth       string              `yaml:"expect_auth"` // kerberos | simple: how the scan must have authenticated
 }
 
 func main() {
@@ -117,6 +118,15 @@ func main() {
 			if sk.Query == q {
 				bad("query %s was not collected: %s (%s)", q, sk.Reason, sk.Detail)
 			}
+		}
+	}
+	if e.ExpectAuth != "" {
+		want := map[string]string{"kerberos": "(Kerberos)", "simple": "(simple bind)"}[e.ExpectAuth]
+		switch {
+		case want == "":
+			bad("expect_auth %q: use kerberos or simple", e.ExpectAuth)
+		case !strings.HasSuffix(r.Inventory.Identity, want):
+			bad("authenticated as %q, expected a %s bind (%s)", r.Inventory.Identity, e.ExpectAuth, r.Inventory.AuthNote)
 		}
 	}
 	if len(problems) > 0 {

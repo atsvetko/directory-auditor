@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"strings"
+
+	"github.com/go-ldap/ldap/v3"
 )
 
 // BindKerberos authenticates with Kerberos (SASL/GSSAPI). With an empty
@@ -52,9 +54,20 @@ func (c *Conn) BindKerberos(account, password string) (string, error) {
 // BindCurrentUser is BindKerberos with the identity already signed in.
 func (c *Conn) BindCurrentUser() (string, error) { return c.BindKerberos("", "") }
 
+// NeedsSASLLayer reports whether a Kerberos bind over TLS was refused because
+// the server wants a SASL signing or sealing layer even on a TLS session
+// (Samba with "ldap server require strong auth = yes", its default, answers
+// "Sign or Seal are required"). Windows refuses such a layer over TLS, so the
+// bind selects none there; over plain LDAP the same bind negotiates sealing.
+func NeedsSASLLayer(err error) bool {
+	return ldap.IsErrorWithCode(err, ldap.LDAPResultStrongAuthRequired)
+}
+
 func kerberosHint(err error, overTLS bool) string {
 	m := err.Error()
 	switch {
+	case overTLS && strings.Contains(m, "Sign or Seal are required"):
+		return " (Samba requires a GSSAPI signing or sealing layer even over TLS — 'ldap server require strong auth = yes'; --tls none gives a Kerberos-sealed session)"
 	case strings.Contains(m, "Stronger") || strings.Contains(m, "strongerAuthRequired") || strings.Contains(m, "Result Code 8"):
 		if overTLS {
 			return " (the server wants channel binding or signing on this TLS session)"

@@ -46,6 +46,7 @@ type CheckResult struct {
 	BaseDN    string
 	Transport string // how the session is protected (ldapx.Conn.Transport)
 	Encrypted bool   // TLS or SASL sealing
+	AuthNote  string // why Kerberos did not succeed on the first connection, when it did not
 }
 
 var (

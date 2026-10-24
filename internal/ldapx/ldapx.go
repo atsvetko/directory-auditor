@@ -88,6 +88,9 @@ func (c *Conn) Transport() string {
 	return "LDAP, unencrypted"
 }
 
+// TLS reports whether the session runs over TLS (LDAPS or StartTLS).
+func (c *Conn) TLS() bool { return c.transport != "ldap" }
+
 // Encrypted reports whether the session is confidential (TLS or SASL sealing).
 func (c *Conn) Encrypted() bool { return c.transport != "ldap" || c.protection == "sasl-seal" }
 
