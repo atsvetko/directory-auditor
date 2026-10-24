@@ -1,0 +1,26 @@
+# Weekly dependency updates, one grouped PR per ecosystem. Every PR runs the
+# full ci and lab-samba checks that main requires. The Go toolchain itself
+# (go.mod `toolchain`) is guarded by govulncheck in ci, not by this file.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go-modules:
+        patterns: ["*"]
+    commit-message:
+      prefix: deps
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+    open-pull-requests-limit: 5
