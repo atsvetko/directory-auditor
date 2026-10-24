@@ -59,23 +59,29 @@ $outDir  = Join-Path $WorkDir 'report'
 $collector = Join-Path $here 'collect-adcs-tier2.ps1'
 
 Write-Host "== 1/3 collecting tier-2 CA/DC facts =="
-& pwsh -NoProfile -File $collector -OutFile $offline
+# In this PowerShell: Windows Server ships 5.1 only and the collector runs on it.
+& $collector -OutFile $offline
 if (-not (Test-Path $offline)) { throw "collector did not produce $offline" }
 
 Write-Host "== 2/3 scanning with the auditor (tier 0 LDAP + offline tier-2 + HTTP probe) =="
 # Credentials: the audit user is prompted once; the password is piped on stdin,
 # never placed on the command line.
-$sec = Read-Host -AsSecureString "password for $User (read-only audit account)"
-$plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
-$args = @(
+# LAB_AUDIT_PASSWORD for unattended runs (an SSH session cannot answer Read-Host).
+if ($env:LAB_AUDIT_PASSWORD) {
+    $plain = $env:LAB_AUDIT_PASSWORD
+} else {
+    $sec = Read-Host -AsSecureString "password for $User (read-only audit account)"
+    $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+}
+$scanArgs = @(
     'scan', '--server', $Server, '--domain', $Domain, '--user', $User,
     '--password-stdin', '--tier', '2',
     '--adcs-offline', $offline, '--adcs-probe',
     '--catalogue', (Join-Path (Split-Path $here) 'catalogue'),
     '--packs', '', '--out', $outDir, '--lang', 'en'
 )
-$plain | & $Auditor @args
+$plain | & $Auditor @scanArgs
 $report = Join-Path $outDir 'report.json'
 if (-not (Test-Path $report)) { throw "no report at $report" }
 

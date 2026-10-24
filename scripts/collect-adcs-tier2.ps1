@@ -1,4 +1,4 @@
-﻿#requires -Version 7.0
+﻿#requires -Version 5.1
 <#
 .SYNOPSIS
     Collect the out-of-band AD CS facts that the Directory Auditor tier-2 checks
@@ -34,8 +34,8 @@
     Path of the run log. Default: <OutFile>.log
 
 .EXAMPLE
-    pwsh -File .\collect-adcs-tier2.ps1
-    pwsh -File .\collect-adcs-tier2.ps1 -OutFile C:\audit\ca01.json
+    powershell -File .\collect-adcs-tier2.ps1        # Windows PowerShell 5.1 or PowerShell 7
+    powershell -File .\collect-adcs-tier2.ps1 -OutFile C:\audit\ca01.json
 
 .NOTES
     Needs local administrator rights on the CA (to read the CA Security
