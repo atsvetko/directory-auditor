@@ -79,9 +79,16 @@ $scanArgs = @(
     '--password-stdin', '--tier', '2',
     '--adcs-offline', $offline, '--adcs-probe',
     '--catalogue', (Join-Path (Split-Path $here) 'catalogue'),
-    '--packs', '', '--out', $outDir, '--lang', 'en'
+    '--packs=', '--out', $outDir, '--lang', 'en'   # '--packs=': PowerShell 5.1 drops an empty '' argument
 )
+# The auditor writes progress to stderr; under 5.1 with stderr redirected (SSH,
+# CI, PowerShell Direct) each line becomes an error record, which 'Stop' would
+# turn into a failure. Judge the run by its exit code instead.
+$ErrorActionPreference = 'Continue'
 $plain | & $Auditor @scanArgs
+$scanExit = $LASTEXITCODE
+$ErrorActionPreference = 'Stop'
+if ($scanExit -ne 0) { throw "dirauditor exited with $scanExit" }
 $report = Join-Path $outDir 'report.json'
 if (-not (Test-Path $report)) { throw "no report at $report" }
 
