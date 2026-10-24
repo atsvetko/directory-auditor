@@ -16,6 +16,7 @@ import (
 	"github.com/jcmturner/gokrb5/v8/gssapi"
 	"github.com/jcmturner/gokrb5/v8/iana/chksumtype"
 	"github.com/jcmturner/gokrb5/v8/iana/etypeID"
+	"github.com/jcmturner/gokrb5/v8/iana/flags"
 	"github.com/jcmturner/gokrb5/v8/iana/keyusage"
 	"github.com/jcmturner/gokrb5/v8/messages"
 	"github.com/jcmturner/gokrb5/v8/spnego"
@@ -77,9 +78,12 @@ func (k *krb5Context) Step(in []byte) ([]byte, bool, error) {
 		if err != nil {
 			return nil, false, err
 		}
-		// Mutual authentication is requested through the GSS checksum flags in
-		// the authenticator, not the AP-REQ mutual-required option — matching
-		// what MIT/Windows GSSAPI send, which Samba and AD expect.
+		// Mutual authentication is requested twice, as MIT and Windows GSSAPI
+		// do: GSS_C_MUTUAL_FLAG in the checksum and mutual-required in the
+		// AP-REQ options. Samba accepts the flag alone; a Windows DC refuses a
+		// context whose flags ask for mutual authentication without the AP
+		// option (AcceptSecurityContext error, data 57 — seen in the KVM lab).
+		types.SetFlag(&apReq.APOptions, flags.APOptionMutualRequired)
 		body, err := apReq.Marshal()
 		if err != nil {
 			return nil, false, err
