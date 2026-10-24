@@ -16,6 +16,9 @@ baseline snapshot, and adds a DC-side check that the scan wrote nothing.
 | `da-lab.xml` | the network definition |
 | `verify-da-lab.sh` | independent isolation check: a throwaway namespace on the bridge must reach 10.55.0.1 and must not reach the LAN gateway or the internet |
 | `samba-lab.sh` | `create` · `provision` · `snapshot` · `reset` · `scan` · `ssh` · `destroy` for VM `da-samba-dc1` (10.55.0.20) |
+| `windows-lab.sh` | the same for a **Windows Server 2025** DC, VM `da-win2025-dc1` (10.55.0.10, forest `da.test`), plus `populate`, `adcs` and named snapshots |
+| `windows/` | `autounattend.xml` and `firstlogon.ps1`: unattended install, static IP, OpenSSH with the lab key |
+| `setup-runner.sh` | once: a GitHub Actions runner (`self-hosted, linux, kvm-lab`) as the unprivileged user `labrunner` |
 
 ## One-time setup
 
@@ -62,6 +65,39 @@ checkout, scans inside the VM as the ordinary `audit` user (`--tls auto` with `-
 It ends with `LAB PASS` or `LAB FAIL`. Samba listens on 127.0.0.1 only (as in CI), so the
 scan runs inside the VM; the host reaches the VM over SSH on `da-lab`.
 
+## Windows Server 2025 DC
+
+You supply the ISO (an evaluation ISO from Microsoft works); `virtio-win` is optional
+(guest tools). The VM never has a route out: AD DS and AD CS install from the ISO.
+
+```bash
+export DIRAUDITOR_LAB=1 WIN_ISO=~/iso/Win2025.iso
+tools/lab/kvm/windows-lab.sh create             # unattended install + first logon (~30 min)
+tools/lab/kvm/windows-lab.sh provision          # tools/lab/windows: new forest, reboot, weak objects
+tools/lab/kvm/windows-lab.sh snapshot baseline
+tools/lab/kvm/windows-lab.sh adcs               # Enterprise CA + weak templates (when provision-adcs.ps1 exists)
+tools/lab/kvm/windows-lab.sh snapshot adcs
+
+tools/lab/kvm/windows-lab.sh reset baseline
+tools/lab/kvm/windows-lab.sh scan               # EXPECT=… to choose the expectation file
+```
+
+`scan` runs from the host as `audit@da.test` with `--server 10.55.0.10 --server-name dc1.da.test`
+(the host does not resolve `da.test`), logs on once first so the account's
+`lastLogonTimestamp` update is not counted, and checks `highestCommittedUSN` like the Samba lane.
+Shutdown for a snapshot goes through SSH (`Stop-Computer`): Windows Server ignores the ACPI
+button when nobody is logged on.
+
+## CI runner
+
+`setup-runner.sh <actions-runner tarball> <token file>` creates `labrunner` (member of `libvirt`
+only; no sudo, no access to your home), gives it the lab SSH key, registers the runner and
+installs it as a service. Ubuntu 26.10 ships OpenSSL 4, which the runner's .NET cannot load;
+the script installs the side-by-side `libssl3t64`. `.github/workflows/lab-kvm.yml` runs the
+Samba lane on it nightly, on pushes to `main` and on same-repository pull requests (never forks).
+Note that membership in `libvirt` gives `labrunner` control of every system VM on the host.
+
 ## Resources
 
-2 vCPU, 2 GB RAM, ~3 GB disk for the Samba VM (copy-on-write over the base image).
+2 vCPU, 2 GB RAM, ~3 GB disk for the Samba VM (copy-on-write over the base image);
+2 vCPU, 4 GB RAM, ~20 GB disk for the Windows DC.

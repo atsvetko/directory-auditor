@@ -6,6 +6,8 @@
 # Also prints libvirt's definition and firewall rules for the bridge.
 # Removes everything it creates. Run as your normal user; it asks for sudo.
 set -uo pipefail
+# grep that reads all its input (with pipefail, grep -q can fail a pipeline whose condition held)
+has() { grep "$@" >/dev/null; }
 
 ns=dalab-probe
 br=da-lab0
@@ -20,7 +22,7 @@ cleanup
 
 echo "== libvirt definition"
 $virsh net-dumpxml da-lab
-$virsh net-dumpxml da-lab | grep -q '<forward' && { echo "FAIL: <forward> present"; fail=1; }
+$virsh net-dumpxml da-lab | has '<forward' && { echo "FAIL: <forward> present"; fail=1; }
 
 echo "== firewall rules mentioning $br"
 if sudo nft list ruleset >/dev/null 2>&1; then

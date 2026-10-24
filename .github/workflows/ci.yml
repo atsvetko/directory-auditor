@@ -25,6 +25,18 @@ jobs:
       - name: gofmt
         run: |
           out="$(gofmt -l .)"; if [ -n "$out" ]; then echo "unformatted:"; echo "$out"; exit 1; fi
+      - name: PowerShell scripts with non-ASCII text start with a UTF-8 BOM
+        # Windows PowerShell 5.1 reads a BOM-less script as Windows-1252: the last
+        # byte of an em dash (0x94) becomes a closing quote and the script no longer
+        # parses (found by the first run of provision.ps1 on Windows Server 2025).
+        run: |
+          bad=0
+          for f in $(git ls-files '*.ps1'); do
+            if grep -q -P '[^\x00-\x7F]' "$f" && [ "$(head -c3 "$f" | od -An -tx1 | tr -d ' ')" != efbbbf ]; then
+              echo "::error file=$f::non-ASCII text without a UTF-8 BOM; Windows PowerShell 5.1 will misread it"; bad=1
+            fi
+          done
+          exit $bad
       - name: go vet
         run: go vet ./...
       - name: go test

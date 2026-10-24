@@ -42,6 +42,9 @@ USER_PW='Lab-User-Pass-2026!'   # populate.sh default; throwaway lab value
 SSH=(ssh -i "$KEY" -o UserKnownHostsFile="$LAB/state/known_hosts" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -o BatchMode=yes lab@$IP)
 SCP=(scp -q -i "$KEY" -o UserKnownHostsFile="$LAB/state/known_hosts" -o StrictHostKeyChecking=accept-new -o BatchMode=yes)
 
+# grep that reads all its input: with pipefail, grep -q exits at the first match and
+# the writer dies on SIGPIPE, which would fail a pipeline whose condition held
+has() { grep "$@" >/dev/null; }
 log() { printf '\n== %s\n' "$*"; }
 die() { echo "error: $*" >&2; exit 1; }
 vssh() { "${SSH[@]}" "$@"; }
@@ -136,7 +139,7 @@ EOF
 }
 
 cmd_provision() {
-  virsh domiflist "$VM" | grep -q "$MAC_NAT" && die "NAT NIC still attached; refusing to weaken a VM with internet access"
+  virsh domiflist "$VM" | has "$MAC_NAT" && die "NAT NIC still attached; refusing to weaken a VM with internet access"
   log "copying lab scripts"
   vssh 'rm -rf ~/lab && mkdir -p ~/lab'
   "${SCP[@]}" "$REPO"/tools/lab/samba/{provision.sh,populate.sh} lab@$IP:lab/
@@ -154,8 +157,8 @@ start_samba() {
 cmd_snapshot() {
   log "shutting down for the baseline snapshot"
   virsh shutdown "$VM" >/dev/null
-  for i in $(seq 1 60); do virsh domstate "$VM" | grep -q 'shut off' && break; sleep 2; done
-  virsh domstate "$VM" | grep -q 'shut off' || die "$VM did not shut down"
+  for i in $(seq 1 60); do virsh domstate "$VM" | has 'shut off' && break; sleep 2; done
+  virsh domstate "$VM" | has 'shut off' || die "$VM did not shut down"
   virsh snapshot-delete "$VM" baseline >/dev/null 2>&1 || true
   virsh snapshot-create-as "$VM" baseline "provisioned + populated weak Samba DC" >/dev/null
   virsh snapshot-list "$VM"
