@@ -38,3 +38,20 @@ func TestKerberosHintSambaOverTLS(t *testing.T) {
 		t.Errorf("plain LDAP: hint %q", h)
 	}
 }
+
+// With --server an IP and --server-name the DC's name, the name is for the SPN
+// and certificate checks; the KDC must be the address that was dialled (the
+// name may not resolve on the scanning machine — found in the KVM Windows lab).
+func TestKDCIsDialledAddress(t *testing.T) {
+	c := &Conn{opts: Options{Server: "10.55.0.10", ServerName: "dc1.da.test"}}
+	if got := c.addrHost(); got != "10.55.0.10" {
+		t.Errorf("addrHost = %q, want the dialled IP", got)
+	}
+	if got := c.host(); got != "dc1.da.test" {
+		t.Errorf("host (SPN) = %q, want the server name", got)
+	}
+	c = &Conn{opts: Options{Server: "dc1.da.test:636"}}
+	if got := c.addrHost(); got != "dc1.da.test" {
+		t.Errorf("addrHost with a port = %q", got)
+	}
+}
