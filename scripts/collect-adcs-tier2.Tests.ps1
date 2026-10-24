@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Pester tests for the parsing cores of collect-adcs-tier2.ps1.
 

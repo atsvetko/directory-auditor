@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     LAB ONLY. Installs an Enterprise Root CA on an already-promoted lab domain

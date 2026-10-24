@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     End-to-end AD CS validation runner for the lab. Run on the lab CA/DC built by

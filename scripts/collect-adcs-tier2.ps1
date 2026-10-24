@@ -1,4 +1,4 @@
-#requires -Version 7.0
+﻿#requires -Version 7.0
 <#
 .SYNOPSIS
     Collect the out-of-band AD CS facts that the Directory Auditor tier-2 checks
