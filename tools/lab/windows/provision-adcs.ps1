@@ -126,12 +126,16 @@ function New-LabTemplate {
     $t.Put('msPKI-Minimal-Key-Size', 2048)
     $t.Put('pKIExpirationPeriod', [byte[]](0,0x80,0x72,0x0e,0x5d,0xc2,0xff,0xff))   # 1 year
     $t.Put('pKIOverlapPeriod',    [byte[]](0,0x80,0xa6,0x0a,0xff,0xde,0xff,0xff))   # 6 weeks
+    $t.SetInfo()
+    # Multi-valued EKUs only after the object exists, and as a VARIANT array:
+    # PutEx on an uncommitted object, or with a [string[]], fails with
+    # "Unspecified error" (seen on Windows Server 2025).
     if ($Eku -and $Eku.Count) {
-        $t.PutEx(2, 'pKIExtendedKeyUsage', [string[]]$Eku)           # 2 = ADS_PROPERTY_UPDATE
-        $t.PutEx(2, 'msPKI-Certificate-Application-Policy', [string[]]$Eku)
+        $t.PutEx(2, 'pKIExtendedKeyUsage', [object[]]$Eku)           # 2 = ADS_PROPERTY_UPDATE
+        $t.PutEx(2, 'msPKI-Certificate-Application-Policy', [object[]]$Eku)
+        $t.SetInfo()
     }
     # ANY PURPOSE (ESC2): leave both EKU attributes unset entirely.
-    $t.SetInfo()
     Write-Log "created template $Name (schemaV=$SchemaVersion nameFlag=0x$("{0:x}" -f $NameFlag) enrollFlag=0x$("{0:x}" -f $EnrollmentFlag) eku=$($Eku -join ','))"
 
     # Grant Authenticated Users Enroll (extended right 0e10c968-…) so the ESC
