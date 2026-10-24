@@ -80,7 +80,10 @@ jobs:
           # prototype layout: binary alone, no packs directory → built-in preview checks
           mkdir -p proto && cp dist/dirauditor-linux-amd64 proto/dirauditor && cd proto
           ./dirauditor analyse --snapshot ../testdata/synthetic-lab.json.zst --out out
-          python3 -c "import json; r=json.load(open('out/report.json')); assert r['preview_checks']==116 and not r['unsigned_packs'], r['preview_checks']"
+          # expected count comes from the binary's own manifest, so adding catalogue entries needs no edit here
+          want=$(./dirauditor manifest | sed -n 's/^Preview checks built in (\([0-9]*\);.*/\1/p')
+          test -n "$want" && test "$want" -gt 0
+          python3 -c "import json,sys; r=json.load(open('out/report.json')); assert r['preview_checks']==int(sys.argv[1]) and not r['unsigned_packs'], (r['preview_checks'], sys.argv[1])" "$want"
           grep -q 'Preview checks' out/report.html
           ! ./dirauditor analyse --snapshot ../testdata/synthetic-lab.json.zst --out out2 --no-preview
       - uses: actions/upload-artifact@v4
@@ -110,11 +113,13 @@ jobs:
           # exit codes are checked by hand: expected failures must not throw
           $ErrorActionPreference = "Continue"; $PSNativeCommandUseErrorActionPreference = $false
           .\dirauditor.exe version
-          .\dirauditor.exe manifest | Select-String -Pattern "Preview checks built in" | Out-String | Write-Host
+          $want = [int](.\dirauditor.exe manifest | Select-String -Pattern 'Preview checks built in \((\d+);').Matches[0].Groups[1].Value
+          if ($want -lt 1) { throw "manifest lists no preview checks" }
+          Write-Host "preview checks built in: $want"
           .\dirauditor.exe analyse --snapshot testdata\synthetic-lab.json.zst --out out
           if ($LASTEXITCODE -ne 0) { throw "analyse failed" }
           $r = Get-Content out\report.json -Raw | ConvertFrom-Json
-          if ($r.preview_checks -ne 116) { throw "preview_checks = $($r.preview_checks)" }
+          if ($r.preview_checks -ne $want) { throw "preview_checks = $($r.preview_checks)" }
           if (-not (Test-Path out\report.html)) { throw "no report.html" }
           $log = Get-ChildItem out\run-*.log | Select-Object -First 1
           if (-not (Select-String -Path $log -Pattern "finished: exit 0")) { throw "run log incomplete" }
@@ -141,8 +146,10 @@ jobs:
           if (-not $url) { Get-Content ui.err, ui.out; throw "wizard did not print its address" }
           $base = $url -replace '/\?t=.*$', ''; $tok = ($url -split 't=')[1]
           $h = @{ "X-DA-Token" = $tok }
+          $want = [int](.\dirauditor.exe manifest | Select-String -Pattern 'Preview checks built in \((\d+);').Matches[0].Groups[1].Value
+          if ($want -lt 1) { throw "manifest lists no preview checks" }
           $info = Invoke-RestMethod "$base/api/info" -Headers $h
-          if ($info.preview -ne 116) { throw "info.preview = $($info.preview)" }
+          if ($info.preview -ne $want) { throw "info.preview = $($info.preview)" }
           $c = Invoke-RestMethod "$base/api/connect" -Method Post -Headers $h -ContentType "application/json" -Body '{"mode":"demo"}'
           if (-not $c.ok) { throw "connect: $($c | ConvertTo-Json)" }
           $null = Invoke-RestMethod "$base/api/scan" -Method Post -Headers $h -ContentType "application/json" -Body '{"quick":false}'
@@ -150,7 +157,7 @@ jobs:
           for ($i = 0; $i -lt 100 -and $state -ne "done"; $i++) { Start-Sleep -Milliseconds 200; $state = (Invoke-RestMethod "$base/api/status" -Headers $h).state; if ($state -eq "error") { throw "scan error" } }
           if ($state -ne "done") { throw "scan did not finish" }
           $res = Invoke-RestMethod "$base/api/result" -Headers $h
-          if ($res.preview_checks -ne 116 -or $res.inventory.tier0.Count -lt 5) { throw "result: preview $($res.preview_checks), tier0 $($res.inventory.tier0.Count)" }
+          if ($res.preview_checks -ne $want -or $res.inventory.tier0.Count -lt 5) { throw "result: preview $($res.preview_checks), tier0 $($res.inventory.tier0.Count)" }
           $log = Invoke-WebRequest "$base/api/run.log?t=$tok" -UseBasicParsing
           if ($log.Content -notmatch "finished: exit 0") { throw "run log: $($log.Content)" }
           # the page itself renders (static assets served, CSP present)
