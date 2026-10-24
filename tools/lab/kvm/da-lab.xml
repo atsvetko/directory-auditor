@@ -1,0 +1,10 @@
+<!-- Directory Auditor lab network: isolated (no <forward> element), so libvirt
+     installs firewall rules that reject traffic between this bridge and any
+     other interface. Guests reach each other and the host (10.55.0.1) only.
+     No DHCP and no libvirt DNS: lab DCs use static IPs and are the lab's DNS. -->
+<network>
+  <name>da-lab</name>
+  <bridge name="da-lab0" stp="on" delay="0"/>
+  <dns enable="no"/>
+  <ip address="10.55.0.1" netmask="255.255.255.0"/>
+</network>
