@@ -110,9 +110,11 @@ function New-LabTemplate {
     $cfg = Get-ConfigNC
     $tmplRoot = "LDAP://CN=Certificate Templates,CN=Public Key Services,CN=Services,$cfg"
     $container = [ADSI]$tmplRoot
+    $dn = "CN=$Name,CN=Certificate Templates,CN=Public Key Services,CN=Services,$cfg"
     $existing = $container.psbase.Children | Where-Object { $_.Name -eq $Name }
-    if ($existing) { Write-Log "template $Name already exists — leaving it"; return }
-
+    if ($existing) {
+        Write-Log "template $Name already exists — topping up its EKUs and Enroll right"
+    } else {
     $t = $container.Create('pKICertificateTemplate', "CN=$Name")
     $t.Put('distinguishedName', "CN=$Name,CN=Certificate Templates,CN=Public Key Services,CN=Services,$cfg")
     $t.Put('displayName', $Name)
@@ -127,13 +129,11 @@ function New-LabTemplate {
     $t.Put('pKIExpirationPeriod', [byte[]](0,0x80,0x72,0x0e,0x5d,0xc2,0xff,0xff))   # 1 year
     $t.Put('pKIOverlapPeriod',    [byte[]](0,0x80,0xa6,0x0a,0xff,0xde,0xff,0xff))   # 6 weeks
     $t.SetInfo()
-    # Multi-valued EKUs only after the object exists, and as a VARIANT array:
-    # PutEx on an uncommitted object, or with a [string[]], fails with
-    # "Unspecified error" (seen on Windows Server 2025).
+    }
+    # Multi-valued EKUs through the AD module: ADSI PutEx fails here with
+    # "Unspecified error" on Windows Server 2025, before and after SetInfo.
     if ($Eku -and $Eku.Count) {
-        $t.PutEx(2, 'pKIExtendedKeyUsage', [object[]]$Eku)           # 2 = ADS_PROPERTY_UPDATE
-        $t.PutEx(2, 'msPKI-Certificate-Application-Policy', [object[]]$Eku)
-        $t.SetInfo()
+        Set-ADObject -Identity $dn -Replace @{ 'pKIExtendedKeyUsage' = [string[]]$Eku; 'msPKI-Certificate-Application-Policy' = [string[]]$Eku }
     }
     # ANY PURPOSE (ESC2): leave both EKU attributes unset entirely.
     Write-Log "created template $Name (schemaV=$SchemaVersion nameFlag=0x$("{0:x}" -f $NameFlag) enrollFlag=0x$("{0:x}" -f $EnrollmentFlag) eku=$($Eku -join ','))"
