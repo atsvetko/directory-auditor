@@ -3,20 +3,15 @@
 # user over LDAPS and over plain LDAP with Kerberos SSPI sealing, and checks the
 # findings against testdata/lab/windows-expect.yaml. Matrix: Windows Server 2022
 # and 2025. See tools/lab/windows/README.md for the one-time host setup.
+#
+# Retired as a scheduled lane: no Hyper-V runner was ever registered, so every
+# nightly and push run queued and was cancelled. The Windows Server 2025 DC now
+# runs on the KVM host (lab-kvm.yml, tools/lab/kvm/windows-lab.sh). Kept for a
+# manual run on a Hyper-V host with the labels below.
 name: lab-windows
 
 on:
-  schedule:
-    - cron: "0 3 * * *"        # nightly, 03:00 UTC
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "catalogue/**"
-      - "internal/provider/ad/**"
-      - "internal/check/**"
-      - "tools/lab/windows/**"
-      - "testdata/lab/windows-expect.yaml"
 
 permissions:
   contents: read

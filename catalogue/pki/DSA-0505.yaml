@@ -23,7 +23,9 @@ condition: >-
   The owner of one of these objects is outside Tier 0, or an allow ACE grants a principal outside Tier 0
   GENERIC_ALL, WRITE_OWNER, WRITE_DAC, or WRITE_PROPERTY over all properties. Write to the NTAuthCertificates
   object (cACertificate) outside Tier 0 is a critical finding in its own right. SELF and CREATOR OWNER are
-  excluded.
+  excluded, and so are Cert Publishers' rights on CN=AIA, CN=CDP and CN=Certification Authorities and the objects
+  under them: Windows grants Cert Publishers full control there by default so that CA servers (its members) can
+  publish their certificates and CRLs.
 threshold: any occurrence
 rationale: >-
   These objects govern which CAs the forest trusts for authentication and the settings of every template.
@@ -61,8 +63,10 @@ notes: >-
   Collector reads the whole Public Key Services subtree with owner and DACL. The CA server's own computer
   object and its RPC/DCOM rights are part of ESC5 too but are a host/AD-object read elsewhere (directory-core
   ACLs); cross-reference at verification. Severity is per object type — NTAuthCertificates and the Enrollment
-  Services container are the most sensitive.
+  Services container are the most sensitive. The Cert Publishers exclusion follows a live Windows Server 2025 forest,
+  where the group holds Generic All on CN=AIA even before any CA is installed; who is a member of Cert Publishers is
+  the thing to review, and NTAuthCertificates, Enrollment Services and templates get no such exclusion.
 condition_cel: >-
-  obj.dn.lowerAscii().contains("cn=public key services,cn=services,cn=configuration,") && !obj.class.exists(c, c.lowerAscii() == "pkicertificatetemplate") && sd_readable(obj) && ((sd_owner(obj) != "" && !tier0_sid(sd_owner(obj)) && !(sd_owner(obj) in ["S-1-5-10", "S-1-3-0"])) || aces(obj).exists(a, a.allow && a.effective && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"]) && (mask_has(a.mask, 0x10000000) || mask_has(a.mask, 0x40000000) || mask_has(a.mask, 0x40000) || mask_has(a.mask, 0x80000) || (mask_has(a.mask, 0x20) && a.object_type == ""))))
+  obj.dn.lowerAscii().contains("cn=public key services,cn=services,cn=configuration,") && !obj.class.exists(c, c.lowerAscii() == "pkicertificatetemplate") && sd_readable(obj) && ((sd_owner(obj) != "" && !tier0_sid(sd_owner(obj)) && !(sd_owner(obj) in ["S-1-5-10", "S-1-3-0"])) || aces(obj).exists(a, a.allow && a.effective && !a.trustee_tier0 && !(a.trustee in ["S-1-5-10", "S-1-3-0"]) && !(a.trustee.endsWith("-517") && (obj.dn.lowerAscii().contains("cn=aia,cn=public key services,") || obj.dn.lowerAscii().contains("cn=cdp,cn=public key services,") || obj.dn.lowerAscii().contains("cn=certification authorities,cn=public key services,"))) && (mask_has(a.mask, 0x10000000) || mask_has(a.mask, 0x40000000) || mask_has(a.mask, 0x40000) || mask_has(a.mask, 0x80000) || (mask_has(a.mask, 0x20) && a.object_type == ""))))
 expect:
 - CN=NTAuthCertificates,CN=Public Key Services,CN=Services,CN=Configuration,DC=lab,DC=example

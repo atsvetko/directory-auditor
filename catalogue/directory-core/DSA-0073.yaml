@@ -18,7 +18,10 @@ attributes:
 condition: >-
   The schema contains the msDS-DelegatedManagedServiceAccount class (Windows Server 2025 schema), and an OU or
   top-level container grants an allow ACE that is in effect on the container itself, to a principal outside Tier 0,
-  with Create Child (0x1) for all child classes or for the dMSA class specifically, or with Generic All.
+  with Create Child (0x1) for all child classes or for the dMSA class specifically, or with Generic All. Only
+  OUs and containers where a dMSA can exist are considered: in the domain naming context, outside CN=System
+  (Windows refuses to create a dMSA in the configuration or DNS application partitions — security principals live
+  only in domain naming contexts — and under CN=System).
 threshold: any occurrence
 rationale: >-
   A delegated managed service account is designed to replace an existing service account: the dMSA records the
@@ -64,10 +67,16 @@ references:
 notes: >-
   Silent on forests without the Windows Server 2025 schema (the class GUID is read from the schema, never assumed).
   The descriptor includes ACEs inherited from the domain head, so a domain-wide delegation is reported on every OU
-  it reaches. The KDC update level of a DC cannot be read over LDAP and is not assessed here.
+  it reaches. The KDC update level of a DC cannot be read over LDAP and is not assessed here. Live check on Windows
+  Server 2025: creating a dMSA under CN=AIA (configuration partition) fails with "Security principal objects can only
+  be created inside domain naming contexts", and under a GPO in CN=Policies,CN=System with "The requested operation
+  is not allowed on an object under the system container" — both were reported before the scope was narrowed.
 condition_cel: >-
   schema_guid("msDS-DelegatedManagedServiceAccount") != "" && sd_readable(obj)
   && obj.class.exists(c, c.lowerAscii() in ["organizationalunit", "container"])
+  && !obj.dn.lowerAscii().contains("cn=configuration,")
+  && !obj.dn.lowerAscii().contains("dc=domaindnszones,") && !obj.dn.lowerAscii().contains("dc=forestdnszones,")
+  && !obj.dn.lowerAscii().startsWith("cn=system,dc=") && !obj.dn.lowerAscii().contains(",cn=system,dc=")
   && aces(obj).exists(a, a.allow && a.effective && !a.trustee_tier0
   && !(a.trustee in ["S-1-3-0", "S-1-5-10"])
   && (mask_has(a.mask, 0x10000000)

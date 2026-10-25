@@ -127,6 +127,9 @@ var accountAttrs = []string{
 	// ordinary user may not be allowed to read it; absence then means "not
 	// readable", not "no keys".
 	"msDS-KeyCredentialLink",
+	// The PSOs that apply to the account: readable by ordinary users even where
+	// the PSOs themselves are not, which tells "unreadable" from "none" (DSA-0071).
+	"msDS-PSOApplied",
 }
 
 // sdFlags selects the descriptor parts every SD read asks for: the owner
@@ -160,7 +163,7 @@ var Plan = []Query{
 		Purpose: "delegation, RBCD, DCs, machine-account creators, gMSA password readers, member OS support, " +
 			"replication SPNs on non-DCs, RODC password replication policy (DSA-0004…0006, 0013, 0055, 0084, 0087, 0088, 0089)"},
 	{Name: "groups", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(objectClass=group)", Classes: []string{"group"},
-		Attrs:   []string{"objectClass", "sAMAccountName", "objectSid", "objectGUID", "sIDHistory", "member", "groupType", "adminCount", "whenChanged"},
+		Attrs:   []string{"objectClass", "sAMAccountName", "objectSid", "objectGUID", "sIDHistory", "member", "groupType", "adminCount", "whenChanged", "msDS-PSOApplied"},
 		Purpose: "Tier-0 membership resolution (catalogue/TIER0.md), Allowed/Denied RODC Password Replication Groups (DSA-0089)"},
 	{Name: "trusts", Base: "CN=System", Scope: ldapx.ScopeOneLevel, Filter: "(objectClass=trustedDomain)", Classes: []string{"trustedDomain"},
 		Attrs:   []string{"objectClass", "name", "trustPartner", "trustDirection", "trustType", "trustAttributes", "securityIdentifier", "whenCreated", "whenChanged"},
@@ -195,9 +198,10 @@ var Plan = []Query{
 		Attrs:   []string{"objectClass", "lDAPDisplayName", "searchFlags", "schemaIDGUID"},
 		Purpose: "LAPS password attributes: confidentiality flag and schema GUIDs for ACL matching (DSA-0056, DSA-0057)"},
 	{Name: "schema-dmsa", Base: "<schema>", Scope: ldapx.ScopeOneLevel, Classes: []string{"classSchema"},
-		Filter:  "(lDAPDisplayName=msDS-DelegatedManagedServiceAccount)",
-		Attrs:   []string{"objectClass", "lDAPDisplayName", "schemaIDGUID"},
-		Purpose: "dMSA class GUID for create-child ACL matching; absent before the Windows Server 2025 schema (DSA-0073)"},
+		Filter: "(lDAPDisplayName=msDS-DelegatedManagedServiceAccount)",
+		Attrs:  []string{"objectClass", "lDAPDisplayName", "schemaIDGUID", "defaultSecurityDescriptor"},
+		Purpose: "dMSA class GUID for create-child ACL matching; absent before the Windows Server 2025 schema (DSA-0073); " +
+			"its default security, which decides whether an ordinary user can see dMSAs at all (DSA-0074)"},
 	{Name: "dmsa", Base: "default", Scope: ldapx.ScopeSubtree, Filter: "(objectClass=msDS-DelegatedManagedServiceAccount)", SD: true,
 		Classes: []string{"msDS-DelegatedManagedServiceAccount"},
 		Attrs: []string{"objectClass", "sAMAccountName", "objectSid", "msDS-ManagedAccountPrecededByLink", "msDS-DelegatedMSAState",
@@ -392,6 +396,7 @@ func collect(ctx context.Context, c searcher, meta snapshot.Meta, progress func(
 			}
 		}
 	}
+	snap.Skipped = append(snap.Skipped, silentGaps(snap, meta.Tier)...)
 
 	// DNS zones in the application partitions found under CN=Partitions.
 	if configNC == "" {

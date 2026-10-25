@@ -58,7 +58,10 @@ references:
 notes: >-
   Only directly-applied PSOs (msDS-PSOAppliesTo contains the principal) are evaluated, so the finding is always
   the effective policy — no false positive from a stronger PSO winning. PSOs applied only through nested group membership
-  are a known gap (conservative). Threshold 12; tunable. The default domain policy is DSA-0021.
+  are a known gap (conservative). Threshold 12; tunable. The default domain policy is DSA-0021. On Windows the
+  Password Settings Container grants ordinary users no read, so a tier-0 scan sees no PSOs; msDS-PSOApplied on the
+  principals is readable, and when it names a PSO the scan could not read, the check reports "not collected"
+  instead of passing (seen on Windows Server 2025).
 condition_cel: >-
   intattr(obj, "msDS-MinimumPasswordLength") > 0 && intattr(obj, "msDS-MinimumPasswordLength") < 12 && attrs(obj,
   "msDS-PSOAppliesTo").exists(d, tier0_sid(objattr(d, "objectSid")))

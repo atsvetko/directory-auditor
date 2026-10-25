@@ -28,7 +28,8 @@ REPO=${REPO:-$(cd "$here/../../.." && pwd)}
 LAB=${DA_LAB_HOME:-$HOME/.local/share/da-lab}
 GO=${GO:-$(command -v go || echo "$LAB/cache/go/go/bin/go")}
 WIN_ISO=${WIN_ISO:-$LAB/cache/iso/Win2025.iso}
-VIRTIO_ISO=${VIRTIO_ISO:-$(ls "$LAB"/cache/virtio/virtio-win-*.iso 2>/dev/null | tail -1)}
+# (|| true: with set -e and pipefail, a failing ls in the default would end the script silently)
+VIRTIO_ISO=${VIRTIO_ISO:-$(ls "$LAB"/cache/virtio/virtio-win-*.iso 2>/dev/null | tail -1 || true)}
 IMAGE_INDEX=${IMAGE_INDEX:-2}
 EXPECT=${EXPECT:-$REPO/testdata/lab/windows-expect.yaml}
 export LIBVIRT_DEFAULT_URI=qemu:///system
@@ -173,6 +174,18 @@ cmd_reset() {
 }
 
 usn() { vssh '(Get-ADRootDSE).highestCommittedUSN' | tr -d '\r'; }
+# A DC fresh from a snapshot does its own housekeeping for a while, and those
+# local writes advance highestCommittedUSN too. Wait until it stays put for 30 s
+# (at most ~5 min) so that only the scans are measured.
+wait_quiet() {
+  local a b
+  for i in $(seq 1 10); do
+    a=$(usn); sleep 30; b=$(usn)
+    [[ $a == "$b" ]] && { echo "DC quiet at highestCommittedUSN $b"; return 0; }
+  done
+  echo "warning: DC still writing after 5 min (highestCommittedUSN $a -> $b)"
+}
+logons() { vssh '(Get-ADUser audit -Properties logonCount -Server localhost).logonCount' | tr -d '\r'; }
 audit_state() { vssh '$u = Get-ADUser audit -Properties badPwdCount,lockoutTime; "badPwdCount=$($u.badPwdCount) lockoutTime=$($u.lockoutTime)"' | tr -d '\r'; }
 
 scan_one() { # label outdir extra-args...
@@ -195,12 +208,13 @@ cmd_scan() {
   # output is discarded) so that only the measured scans are measured.
   scan_one "warm-up logon (not measured)" "$OUT/warm-up" >/dev/null || true
   rm -rf "$OUT/warm-up"
-  usn0=$(usn); acct0=$(audit_state)
+  wait_quiet
+  usn0=$(usn); acct0=$(audit_state); logon0=$(logons)
   echo "before: highestCommittedUSN=$usn0 audit: $acct0"
   rm -rf "$OUT/lab-out" "$OUT/lab-seal"
   scan_one "audit user, --tls auto" "$OUT/lab-out" || true
   scan_one "audit user, --tls none (Kerberos sealing)" "$OUT/lab-seal" --tls none || true
-  usn1=$(usn); acct1=$(audit_state)
+  usn1=$(usn); acct1=$(audit_state); logon1=$(logons)
   echo "after:  highestCommittedUSN=$usn1 audit: $acct1"
 
   rc=0
@@ -212,10 +226,19 @@ cmd_scan() {
   done
 
   log "read-only check (DC side)"
-  if [[ $usn0 == "$usn1" ]]; then echo "ok: highestCommittedUSN unchanged ($usn0)"
-  else
-    echo "CHANGED: highestCommittedUSN $usn0 -> $usn1; objects changed during the scans:"
+  # Every Kerberos logon makes the DC record the account's non-replicated
+  # lastLogon/logonCount, which advances highestCommittedUSN by one without
+  # changing any object's uSNChanged. So: no object may have changed, and the
+  # USN may grow by exactly the number of logons the scans made.
+  changed=$(vssh "@(Get-ADObject -IncludeDeletedObjects -Filter 'uSNChanged -gt $usn0').Count" | tr -d '\r')
+  if [[ $changed != 0 ]]; then
+    echo "FAIL: $changed object(s) changed during the scans:"
     vssh "Get-ADObject -IncludeDeletedObjects -Filter 'uSNChanged -gt $usn0' -Properties uSNChanged,whenChanged | Select-Object uSNChanged,whenChanged,DistinguishedName | Format-Table -AutoSize | Out-String -Width 220"
+    rc=1
+  elif (( usn1 - usn0 == logon1 - logon0 )); then
+    echo "ok: no object changed; highestCommittedUSN $usn0 -> $usn1 = $((logon1 - logon0)) logon(s) recorded for audit (logonCount $logon0 -> $logon1)"
+  else
+    echo "FAIL: highestCommittedUSN $usn0 -> $usn1 but audit logged on $((logon1 - logon0)) time(s): an unexplained local write"
     rc=1
   fi
   if [[ $acct0 == "$acct1" ]]; then echo "ok: audit account unchanged ($acct0)"

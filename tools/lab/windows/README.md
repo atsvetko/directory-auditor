@@ -67,8 +67,10 @@ expects, and store the audit password as a repo secret:
   (default `Lab-Reader-Pass-2026!` — Windows refuses a password that contains the account name — or whatever you set via `-AuditPassword`).
 - The runner needs the Go toolchain from `go.mod`; `actions/setup-go` installs it.
 
-That is all. `lab-windows.yml` then runs nightly, on demand, and on pushes that
-touch the catalogue or the AD provider.
+That is all; `lab-windows.yml` runs on demand only (`workflow_dispatch`). The scheduled
+Windows lane now runs on a Linux KVM host instead — see
+[`tools/lab/kvm`](../kvm/README.md) and `lab-kvm.yml` — because no Hyper-V runner was
+ever registered for this workflow.
 
 ## What it proves (and what it doesn't)
 

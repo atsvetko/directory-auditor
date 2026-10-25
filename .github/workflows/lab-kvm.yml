@@ -56,3 +56,39 @@ jobs:
       - name: leave the lab at baseline
         if: always()
         run: tools/lab/kvm/samba-lab.sh reset || true
+
+  windows:
+    name: Windows Server 2025 DC (KVM)
+    # after the Samba lane (one VM workload at a time on the host), whatever its result
+    needs: samba
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: [self-hosted, linux, kvm-lab]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: baseline (forest da.test, weak objects) — scan, verify, DC-side write check
+        run: |
+          tools/lab/kvm/windows-lab.sh reset baseline
+          tools/lab/kvm/windows-lab.sh scan
+          mkdir -p reports/baseline && cp -r ~/.local/share/da-lab/state/out-windows/lab-out/. reports/baseline/
+      - name: adcs (Enterprise CA + weak templates) — scan, verify, DC-side write check
+        if: ${{ !cancelled() }}
+        run: |
+          tools/lab/kvm/windows-lab.sh reset adcs
+          tools/lab/kvm/windows-lab.sh scan
+          mkdir -p reports/adcs && cp -r ~/.local/share/da-lab/state/out-windows/lab-out/. reports/adcs/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kvm-windows-reports
+          path: |
+            reports/*/report.html
+            reports/*/report.json
+            reports/*/run-*.log
+          retention-days: 14
+      - name: leave the lab at baseline
+        if: always()
+        run: tools/lab/kvm/windows-lab.sh reset baseline || true
