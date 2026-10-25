@@ -30,7 +30,9 @@ func (c *Conn) BindKerberos(account, password string) (string, error) {
 	if cert, err := c.peerCertificate(); err == nil {
 		cb = tlsServerEndPoint(cert)
 	}
-	ctx, err := newGSSContext(spn, cb, account, password, c.opts.Domain, host)
+	// The KDC is the server we dialled (every DC is a KDC); --server-name names it
+	// for the SPN, but may not resolve from here when --server is an IP address.
+	ctx, err := newGSSContext(spn, cb, account, password, c.opts.Domain, c.addrHost())
 	if err != nil {
 		return "", fmt.Errorf("ldapx: %w", err)
 	}
@@ -90,6 +92,15 @@ func (c *Conn) peerCertificate() (*x509.Certificate, error) {
 		return nil, errors.New("no TLS session")
 	}
 	return st.PeerCertificates[0], nil
+}
+
+// addrHost is the host part of the address the connection was dialled to.
+func (c *Conn) addrHost() string {
+	h, _, err := net.SplitHostPort(c.opts.Server)
+	if err != nil {
+		return c.opts.Server
+	}
+	return h
 }
 
 func (c *Conn) host() string {
