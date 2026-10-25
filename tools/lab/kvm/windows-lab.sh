@@ -28,7 +28,8 @@ REPO=${REPO:-$(cd "$here/../../.." && pwd)}
 LAB=${DA_LAB_HOME:-$HOME/.local/share/da-lab}
 GO=${GO:-$(command -v go || echo "$LAB/cache/go/go/bin/go")}
 WIN_ISO=${WIN_ISO:-$LAB/cache/iso/Win2025.iso}
-VIRTIO_ISO=${VIRTIO_ISO:-$(ls "$LAB"/cache/virtio/virtio-win-*.iso 2>/dev/null | tail -1)}
+# (|| true: with set -e and pipefail, a failing ls in the default would end the script silently)
+VIRTIO_ISO=${VIRTIO_ISO:-$(ls "$LAB"/cache/virtio/virtio-win-*.iso 2>/dev/null | tail -1 || true)}
 IMAGE_INDEX=${IMAGE_INDEX:-2}
 EXPECT=${EXPECT:-$REPO/testdata/lab/windows-expect.yaml}
 export LIBVIRT_DEFAULT_URI=qemu:///system
