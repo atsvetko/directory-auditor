@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Re-create the vulnerable-baseline checkpoint of a lab DC VM from scratch.

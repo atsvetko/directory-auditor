@@ -64,7 +64,7 @@ expects, and store the audit password as a repo secret:
 
 - In the repo: **Settings > Secrets and variables > Actions**, add
   `LAB_AUDIT_PASSWORD` = the value `populate.ps1` used for the `audit` account
-  (default `Lab-Audit-Pass-2026!`, or whatever you set via `-AuditPassword`).
+  (default `Lab-Reader-Pass-2026!` — Windows refuses a password that contains the account name — or whatever you set via `-AuditPassword`).
 - The runner needs the Go toolchain from `go.mod`; `actions/setup-go` installs it.
 
 That is all. `lab-windows.yml` then runs nightly, on demand, and on pushes that

@@ -100,6 +100,8 @@ deliberately weak settings (`tools/lab/samba`, ~3 min); nightly and on demand it
 admin. `tools/lab/verify` compares `report.json` with `testdata/lab/*-expect.yaml`: every expected
 finding must fire on the expected object, nothing else may, and containers the account cannot
 read must show as "not collected". The lab scripts refuse to run without `DIRAUDITOR_LAB=1`.
+On a Linux host with KVM, [`tools/lab/kvm`](tools/lab/kvm/README.md) builds the same Samba lab
+in a VM with a baseline snapshot and also checks from the DC side that a scan wrote nothing.
 
 ## Preview checks and signed packs
 

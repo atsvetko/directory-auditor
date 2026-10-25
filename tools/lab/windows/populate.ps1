@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
@@ -20,7 +20,7 @@ param(
     [string]$DomainName   = 'da.test',
     # Audit account the CI scan authenticates as (ordinary user, no admin rights).
     [string]$AuditUser    = 'audit',
-    [string]$AuditPassword = $(if ($env:LAB_AUDIT_PASSWORD) { $env:LAB_AUDIT_PASSWORD } else { 'Lab-Audit-Pass-2026!' })
+    [string]$AuditPassword = $(if ($env:LAB_AUDIT_PASSWORD) { $env:LAB_AUDIT_PASSWORD } else { 'Lab-Reader-Pass-2026!' })  # must not contain the account name: Windows rejects 'audit' in it
 )
 
 $ErrorActionPreference = 'Stop'
@@ -69,6 +69,14 @@ try {
             New-ADUser -Name $AuditUser -SamAccountName $AuditUser -Path $users -Enabled $true `
                 -AccountPassword (ConvertTo-SecureString $AuditPassword -AsPlainText -Force) -PasswordNeverExpires $true
         }
+    }
+    # Always (re)set the password and enable the account: when the password is
+    # rejected, New-ADUser leaves a disabled account with no password behind, and
+    # a rerun that only checks for existence would keep it (no Kerberos keys:
+    # KDC_ERR_ETYPE_NOSUPP for every scan).
+    if ($PSCmdlet.ShouldProcess($AuditUser, 'set password, enable')) {
+        Set-ADAccountPassword -Identity $AuditUser -Reset -NewPassword (ConvertTo-SecureString $AuditPassword -AsPlainText -Force)
+        Enable-ADAccount -Identity $AuditUser
     }
 
     # --- Account-level fixtures --------------------------------------------

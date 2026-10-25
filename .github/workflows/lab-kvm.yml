@@ -1,0 +1,58 @@
+# Live labs on the self-hosted KVM host (tools/lab/kvm): the Samba AD DC VM and
+# the Windows Server 2025 AD DC VM, each reset to its baseline snapshot, scanned
+# as the ordinary 'audit' user, verified against testdata/lab/*-expect.yaml,
+# and checked from the DC side for writes.
+#
+# The runner (labels self-hosted, linux, kvm-lab) is the maintainer's machine:
+# jobs run only for this repository's own branches, never for pull requests
+# from forks (and fork workflows also need approval in the repo settings).
+name: lab-kvm
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "**/*.md"]
+  pull_request:
+  schedule:
+    - cron: "40 1 * * *"        # nightly, 01:40 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One lab job at a time on the host; never cancel a running one (it would
+# leave a VM away from its baseline until the next reset).
+concurrency:
+  group: kvm-lab
+  cancel-in-progress: false
+
+env:
+  DIRAUDITOR_LAB: "1"
+
+jobs:
+  samba:
+    name: Samba AD DC (KVM)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux, kvm-lab]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: reset to baseline
+        run: tools/lab/kvm/samba-lab.sh reset
+      - name: scan, verify, DC-side read-only check
+        run: tools/lab/kvm/samba-lab.sh scan
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kvm-samba-report
+          path: |
+            ~/.local/share/da-lab/state/out/lab-out/report.html
+            ~/.local/share/da-lab/state/out/lab-out/report.json
+            ~/.local/share/da-lab/state/out/lab-out/run-*.log
+          retention-days: 14
+      - name: leave the lab at baseline
+        if: always()
+        run: tools/lab/kvm/samba-lab.sh reset || true
