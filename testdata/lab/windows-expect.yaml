@@ -15,9 +15,14 @@ must:
   DSA-0027: ["CN=DnsAdmins,CN=Users,DC=da,DC=test"]   # DnsAdmins has a member
   DSA-0028: ["CN=t_contractor,CN=Users,DC=da,DC=test"]   # cleartext password in description (masked in the report)
   DSA-0042: ["CN=Guest,CN=Users,DC=da,DC=test"]   # built-in Guest enabled
-  DSA-0071: ["CN=WeakAdminPSO,CN=Password Settings Container,CN=System,DC=da,DC=test"]   # weak PSO applied to Domain Admins
   DSA-0073: ["OU=ServiceDelegation,DC=da,DC=test"]   # helpdesk may create dMSAs (Windows Server 2025 schema only)
-  DSA-0074: ["CN=dmsa-evil,OU=ServiceDelegation,DC=da,DC=test"]   # dMSA claims to supersede the built-in Administrator
+# Seeded, but unreadable for the ordinary audit account on Windows Server 2025:
+# the Password Settings Container and the dMSA class grant Authenticated Users no
+# read. The scan must say so ("not collected"), never pass. An administrator
+# (tier 2) scan would pin WeakAdminPSO (DSA-0071) and dmsa-evil (DSA-0074).
+must_not_collect:
+  - DSA-0071   # WeakAdminPSO applied to Domain Admins; msDS-PSOApplied names it, the PSO is unreadable
+  - DSA-0074   # dmsa-evil supersedes the built-in Administrator; dMSAs are invisible below tier 2
 allow:
   - DSA-0002
   - DSA-0003

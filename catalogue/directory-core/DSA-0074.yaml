@@ -66,7 +66,9 @@ references:
 notes: >-
   The finding names the dMSA; the evidence shows the superseded account and the migration state (1 = in progress,
   2 = completed). Whether the reciprocal link is present on the target is visible on the target object
-  (msDS-SupersededManagedAccountLink) in the snapshot.
+  (msDS-SupersededManagedAccountLink) in the snapshot. The dMSA class's default security descriptor grants
+  Authenticated Users no read, so an ordinary user cannot see dMSAs at all; below tier 2 an empty result is reported
+  as "not collected", not as a pass (seen on Windows Server 2025, where the lab dMSA was invisible to the audit user).
 condition_cel: >-
   obj.class.exists(c, c.lowerAscii() == "msds-delegatedmanagedserviceaccount")
   && attrs(obj, "msDS-ManagedAccountPrecededByLink").exists(l, tier0_sid(objattr(l, "objectSid")))

@@ -25,8 +25,9 @@ type expect struct {
 	Tier0MustInclude []string            `yaml:"tier0_must_include"`
 	Tier0MustExclude []string            `yaml:"tier0_must_exclude"`
 	CollectedQueries []string            `yaml:"collected_queries"`
-	DNGlob           bool                `yaml:"dn_glob"`     // expected DNs may contain '*' (generated RDNs such as ipaUniqueID)
-	ExpectAuth       string              `yaml:"expect_auth"` // kerberos | simple: how the scan must have authenticated
+	DNGlob           bool                `yaml:"dn_glob"`          // expected DNs may contain '*' (generated RDNs such as ipaUniqueID)
+	ExpectAuth       string              `yaml:"expect_auth"`      // kerberos | simple: how the scan must have authenticated
+	MustNotCollect   []string            `yaml:"must_not_collect"` // checks whose input this account cannot read: must say "not collected", never pass
 }
 
 func main() {
@@ -50,6 +51,7 @@ func main() {
 	bad := func(f string, a ...any) { problems = append(problems, fmt.Sprintf(f, a...)) }
 	allowSkip := set(e.AllowSkip)
 	allow := set(e.Allow)
+	notCollect := set(e.MustNotCollect)
 	seen := map[string]bool{}
 
 	fmt.Printf("lab %s: %d objects, score %d, %d checks (%d fail, %d pass, %d skipped)\n",
@@ -60,6 +62,12 @@ func main() {
 	for _, c := range r.Checks {
 		seen[c.ID] = true
 		want, listed := e.Must[c.ID]
+		if notCollect[c.ID] {
+			if c.Status != "skipped" || c.Skip != "not-collected" {
+				bad("%s must be reported not collected (its input is unreadable for this account) but was %s %s", c.ID, c.Status, c.Skip)
+			}
+			continue
+		}
 		switch c.Status {
 		case "skipped":
 			if !allowSkip[c.Skip] {
@@ -92,6 +100,11 @@ func main() {
 			if listed {
 				bad("%s passed but must fire on %v", c.ID, want)
 			}
+		}
+	}
+	for _, id := range e.MustNotCollect {
+		if !seen[id] {
+			bad("%s is in must_not_collect but was not evaluated", id)
 		}
 	}
 	for id := range e.Must {
