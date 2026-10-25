@@ -22,6 +22,7 @@ import (
 	"github.com/atsvetko/directory-auditor/internal/demo"
 	"github.com/atsvetko/directory-auditor/internal/doctor"
 	"github.com/atsvetko/directory-auditor/internal/ldapx"
+	"github.com/atsvetko/directory-auditor/internal/local/adcs"
 	"github.com/atsvetko/directory-auditor/internal/local/smbconf"
 	"github.com/atsvetko/directory-auditor/internal/packset"
 	"github.com/atsvetko/directory-auditor/internal/provider"
@@ -52,13 +53,19 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) (code int) {
 	fs.IntVar(&t.Tier, "tier", 0, "privilege tier to use: 0 user LDAP, 1 +SYSVOL/probes, 2 admin")
 	fs.IntVar(&t.MaxQPS, "max-qps", 0, "throttle LDAP queries per second (0 = unlimited)")
 	fs.StringVar(&o.OutDir, "out", "dirauditor-out", "output directory")
-	var smbConf string
-	var local, pwStdin bool
+	var smbConf, adcsOffline, adcsProbeURL string
+	var local, pwStdin, adcsProbe bool
 	fs.BoolVar(&pwStdin, "password-stdin", false, "read the bind password from the first line of stdin instead of the terminal (CI, pipes)")
 	fs.StringVar(&smbConf, "smbconf", "", "also audit this Samba AD DC configuration file (run on the DC; tier 2)")
 	fs.BoolVar(&local, "local", false, "auto-detect "+smbconf.DefaultPath+" on this machine and include it")
+	fs.StringVar(&adcsOffline, "adcs-offline", "", "also ingest AD CS CA/DC configuration from this JSON file (from scripts/collect-adcs-tier2.ps1; tier 2) — ESC6/7/10/11/16")
+	fs.BoolVar(&adcsProbe, "adcs-probe", false, "probe AD CS web-enrollment endpoints over the network, unauthenticated and read-only (tier 1) — ESC8")
+	fs.StringVar(&adcsProbeURL, "adcs-probe-url", "", "extra AD CS endpoints to probe, comma-separated (host or full URL); implies --adcs-probe")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	if adcsProbeURL != "" {
+		adcsProbe = true
 	}
 	lg := runlog.Open(o.OutDir, append([]string{"scan"}, args...))
 	out, errw = io.MultiWriter(out, lg.Writer()), io.MultiWriter(errw, lg.Writer())
@@ -79,18 +86,26 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) (code int) {
 			return 1
 		}
 	}
-	if t.Tier > 1 && smbConf == "" {
-		fmt.Fprintln(errw, "tier 2 currently means the local smb.conf audit (--smbconf / --local); other tier-2 probes are not implemented yet")
+	if t.Tier > 1 && smbConf == "" && adcsOffline == "" {
+		fmt.Fprintln(errw, "tier 2 currently means the local smb.conf audit (--smbconf / --local) or the offline AD CS CA/DC configuration (--adcs-offline); other tier-2 probes are not implemented yet")
 	}
-	if t.Tier == 1 && providerName != "freeipa" {
-		fmt.Fprintln(errw, "note: tier-1 probes exist for FreeIPA only so far; AD collection runs at tier 0")
+	if t.Tier == 1 && providerName != "freeipa" && !adcsProbe {
+		fmt.Fprintln(errw, "note: tier-1 probes exist for FreeIPA and the AD CS web-enrollment probe (--adcs-probe) so far; AD collection otherwise runs at tier 0")
 	}
 
-	// Configuration-only audit: no directory target, just the local smb.conf.
-	if t.Server == "" && t.Domain == "" && smbConf != "" {
+	// Configuration-only audit: no directory target, just the local files/probes.
+	// The ESC8 probe can take part only when explicit endpoints are given
+	// (--adcs-probe-url), since with no snapshot there is nothing to derive from.
+	if t.Server == "" && t.Domain == "" && (smbConf != "" || adcsOffline != "" || (adcsProbe && adcsProbeURL != "")) {
 		snap := &snapshot.Snapshot{Schema: snapshot.SchemaVersion, Collected: time.Now().UTC(),
-			Meta: snapshot.Meta{Provider: "ad", Dialect: "samba", Target: "local smb.conf", Tool: "dirauditor " + buildinfo.Version}}
-		if !collectLocal(ctx, snap, smbConf, errw) {
+			Meta: snapshot.Meta{Provider: "ad", Target: "local configuration", Tool: "dirauditor " + buildinfo.Version}}
+		if smbConf != "" {
+			snap.Meta.Dialect = "samba"
+			if !collectLocal(ctx, snap, smbConf, errw) {
+				return 1
+			}
+		}
+		if !collectADCS(ctx, snap, adcsOffline, adcsProbe, adcsProbeURL, errw) {
 			return 1
 		}
 		return finish(snap, o, out, errw)
@@ -147,7 +162,50 @@ func Scan(ctx context.Context, args []string, out, errw io.Writer) (code int) {
 			return 1
 		}
 	}
+	if !collectADCS(ctx, snap, adcsOffline, adcsProbe, adcsProbeURL, errw) {
+		return 1
+	}
 	return finish(snap, o, out, errw)
+}
+
+// collectADCS adds the out-of-band AD CS facts to the snapshot: the offline
+// CA/DC configuration (--adcs-offline, tier 2) and the ESC8 web-enrollment probe
+// (--adcs-probe / --adcs-probe-url, tier 1). It returns false only on a hard
+// error that should stop the scan; a probe that reaches nothing is recorded as
+// a skipped state, not a failure.
+func collectADCS(ctx context.Context, snap *snapshot.Snapshot, offline string, probe bool, probeURL string, errw io.Writer) bool {
+	if offline != "" {
+		fmt.Fprintf(errw, "ingesting offline AD CS configuration %s…\n", offline)
+		r, err := adcs.Ingest(offline)
+		if err != nil {
+			fmt.Fprintln(errw, "error:", err)
+			return false
+		}
+		adcs.AugmentOffline(snap, r)
+		fmt.Fprintf(errw, "  · %d CA, %d DC configuration objects\n", r.CAs, r.DCs)
+	}
+	if probe {
+		var urls []string
+		urls = append(urls, adcs.CandidateURLs(snap)...)
+		if probeURL != "" {
+			urls = append(urls, adcs.ExpandTargets(strings.Split(probeURL, ","))...)
+		}
+		if len(urls) == 0 {
+			fmt.Fprintln(errw, "note: --adcs-probe: no endpoints to probe (the snapshot carries no pKIEnrollmentService dNSHostName; pass --adcs-probe-url <host-or-url>)")
+			return true
+		}
+		fmt.Fprintf(errw, "probing %d AD CS web-enrollment endpoint(s), unauthenticated and read-only…\n", len(urls))
+		results := adcs.Probe(ctx, urls, adcs.ProbeOptions{})
+		adcs.AugmentProbe(snap, results)
+		reachable := 0
+		for _, res := range results {
+			if res.Reachable {
+				reachable++
+			}
+		}
+		fmt.Fprintf(errw, "  · %d of %d endpoint(s) answered; EPA is reported as unknown (it cannot be confirmed by an unauthenticated probe — ESC8 flags such endpoints for review)\n", reachable, len(results))
+	}
+	return true
 }
 
 // readPasswordLine reads one line (the password) from r. Used with
@@ -421,13 +479,19 @@ func PrintManifest(w io.Writer) {
 	fmt.Fprintf(w, `%s
 Behaviours of this binary:
   network     : outbound only, to the directory server(s) you name (LDAP 389/636, DNS SRV lookups
-                through the OS resolver). No other hosts are contacted. No update checks. No telemetry.
+                through the OS resolver). With --adcs-probe it also makes unauthenticated, read-only
+                HTTP(S) GET requests to the AD CS web-enrollment endpoints you target (ESC8); it reads
+                only the status line and WWW-Authenticate headers, sends no credential and never relays.
+                No other hosts are contacted. No update checks. No telemetry.
   listeners   : wizard only (no arguments or 'ui'): 127.0.0.1, random port, one-time token in the URL;
                 CLI commands open no listener
   processes   : the wizard asks the OS to open the default browser once (rundll32 / open / xdg-open);
                 with --smbconf/--local (or when the wizard finds a Samba DC configuration on this machine)
                 it runs 'testparm -s -v --suppress-prompt <smb.conf>' and 'samba -V' / 'smbd -V',
                 both read-only, and reads smb.conf. Secret-looking values are redacted.
+                With --adcs-offline it reads (only reads) the JSON file you name, produced out of band
+                by scripts/collect-adcs-tier2.ps1 on a CA/DC host (that script runs certutil -getreg
+                and registry reads, all read-only; it is run by you, not by this binary).
   writes      : output directory only (snapshot, report.json, report.html, run-<stamp>.log — progress,
                 notes and errors with timestamps, never credentials)
   directory   : read-only — no LDAP modify/add/delete code is linked (scripts/readonly-check.sh)

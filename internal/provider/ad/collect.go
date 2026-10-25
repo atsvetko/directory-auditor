@@ -52,7 +52,8 @@ var zoneAttrs = []string{"objectClass", "name", "dNSProperty", "whenChanged"}
 var pkiAttrs = []string{"objectClass", "cn", "name", "displayName",
 	"msPKI-Certificate-Name-Flag", "pKIExtendedKeyUsage", "msPKI-Certificate-Application-Policy",
 	"msPKI-Enrollment-Flag", "msPKI-RA-Signature", "msPKI-Template-Schema-Version", "msPKI-Certificate-Policy",
-	"certificateTemplates", "cACertificate", "msPKI-Cert-Template-OID", "msDS-OIDToGroupLink", "whenChanged"}
+	"certificateTemplates", "cACertificate", "msPKI-Cert-Template-OID", "msDS-OIDToGroupLink", "whenChanged",
+	"dNSHostName"}
 
 // Out-of-band AD CS configuration snapshot (contract for the ESC6/7/8/10/11/16
 // collector).

@@ -15,6 +15,7 @@ machines:
     domain: da.test
     ip: 10.55.0.10
     forest_mode: Win2016
+    adcs: true                 # also install a lab Enterprise CA with vulnerable AD CS config (ESC1–ESC16)
     expect: testdata/lab/windows-expect.yaml
     cpu: 2
     mem_gb: 4
