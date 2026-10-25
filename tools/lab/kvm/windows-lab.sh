@@ -174,6 +174,17 @@ cmd_reset() {
 }
 
 usn() { vssh '(Get-ADRootDSE).highestCommittedUSN' | tr -d '\r'; }
+# A DC fresh from a snapshot does its own housekeeping for a while, and those
+# local writes advance highestCommittedUSN too. Wait until it stays put for 30 s
+# (at most ~5 min) so that only the scans are measured.
+wait_quiet() {
+  local a b
+  for i in $(seq 1 10); do
+    a=$(usn); sleep 30; b=$(usn)
+    [[ $a == "$b" ]] && { echo "DC quiet at highestCommittedUSN $b"; return 0; }
+  done
+  echo "warning: DC still writing after 5 min (highestCommittedUSN $a -> $b)"
+}
 logons() { vssh '(Get-ADUser audit -Properties logonCount -Server localhost).logonCount' | tr -d '\r'; }
 audit_state() { vssh '$u = Get-ADUser audit -Properties badPwdCount,lockoutTime; "badPwdCount=$($u.badPwdCount) lockoutTime=$($u.lockoutTime)"' | tr -d '\r'; }
 
@@ -197,6 +208,7 @@ cmd_scan() {
   # output is discarded) so that only the measured scans are measured.
   scan_one "warm-up logon (not measured)" "$OUT/warm-up" >/dev/null || true
   rm -rf "$OUT/warm-up"
+  wait_quiet
   usn0=$(usn); acct0=$(audit_state); logon0=$(logons)
   echo "before: highestCommittedUSN=$usn0 audit: $acct0"
   rm -rf "$OUT/lab-out" "$OUT/lab-seal"
