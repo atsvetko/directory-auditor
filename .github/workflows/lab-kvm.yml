@@ -53,9 +53,10 @@ jobs:
             ~/.local/share/da-lab/state/out/lab-out/report.json
             ~/.local/share/da-lab/state/out/lab-out/run-*.log
           retention-days: 14
-      - name: leave the lab at baseline
+      # off between runs: the next job's reset brings it back from the snapshot
+      - name: power the VM off
         if: always()
-        run: tools/lab/kvm/samba-lab.sh reset || true
+        run: tools/lab/kvm/samba-lab.sh stop || true
 
   windows:
     name: Windows Server 2025 DC (KVM)
@@ -89,6 +90,6 @@ jobs:
             reports/*/report.json
             reports/*/run-*.log
           retention-days: 14
-      - name: leave the lab at baseline
+      - name: power the VM off
         if: always()
-        run: tools/lab/kvm/windows-lab.sh reset baseline || true
+        run: tools/lab/kvm/windows-lab.sh stop || true

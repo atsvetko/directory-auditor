@@ -95,7 +95,8 @@ only; no sudo, no access to your home), gives it the lab SSH key, registers the 
 installs it as a service. Ubuntu 26.10 ships OpenSSL 4, which the runner's .NET cannot load;
 the script installs the side-by-side `libssl3t64`. `.github/workflows/lab-kvm.yml` runs the
 Samba lane, then the Windows lane (both snapshots, `baseline` and `adcs`), nightly, on pushes to `main`
-and on same-repository pull requests (never forks).
+and on same-repository pull requests (never forks). Each job starts by resetting its VM to a
+snapshot and ends with `stop`, so the VMs use memory only while a job runs.
 Note that membership in `libvirt` gives `labrunner` control of every system VM on the host.
 
 ## Resources
