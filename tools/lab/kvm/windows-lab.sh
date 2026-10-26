@@ -13,6 +13,7 @@
 #   scan          build this checkout, scan from the host as the ordinary 'audit' user
 #                 (auto transport, then --tls none), verify, and check from the DC side that
 #                 the scan wrote nothing. EXPECT selects the expectation file.
+#   stop          power the VM off (the next reset brings it back from a snapshot)
 #   ssh [CMD]     PowerShell on the DC as Administrator
 #   destroy       remove the VM and its disk (keeps the uploaded ISOs)
 #
@@ -251,6 +252,18 @@ cmd_scan() {
   return $rc
 }
 
+cmd_stop() {
+  log "powering off $VM"
+  if ! virsh domstate "$VM" | has 'shut off'; then
+    # Windows Server ignores the ACPI button when nobody is logged on; ask it over SSH
+    vssh 'Stop-Computer -Force' 2>/dev/null || virsh shutdown "$VM" >/dev/null
+    for i in $(seq 1 150); do virsh domstate "$VM" | has 'shut off' && break; sleep 2; done
+    # the next run reverts to a snapshot, so a forced power-off loses nothing
+    virsh domstate "$VM" | has 'shut off' || { echo "no clean shutdown after 5 min; forcing off"; virsh destroy "$VM" >/dev/null; }
+  fi
+  virsh domstate "$VM"
+}
+
 cmd_destroy() {
   virsh destroy "$VM" >/dev/null 2>&1 || true
   for s in $(virsh snapshot-list "$VM" --name 2>/dev/null); do virsh snapshot-delete "$VM" "$s" >/dev/null; done
@@ -262,7 +275,7 @@ cmd_destroy() {
 }
 
 case "${1:-}" in
-  create|provision|populate|adcs|scan|destroy) "cmd_$1" ;;
+  create|provision|populate|adcs|scan|stop|destroy) "cmd_$1" ;;
   snapshot|reset) c=$1; shift; "cmd_$c" "$@" ;;
   ssh) shift; vssh "$@" ;;
   *) sed -n '2,24p' "$0"; exit 2 ;;

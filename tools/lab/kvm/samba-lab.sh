@@ -10,6 +10,7 @@
 #   scan       build dirauditor + verify on the host, scan inside the VM as the
 #              'audit' user (pinned LDAPS, then sealed LDAP), verify both reports,
 #              and check from the DC side that the scan wrote nothing
+#   stop       power the VM off (the next reset brings it back from the snapshot)
 #   ssh        shell in the VM
 #   destroy    remove the VM, its disks and the seed (keeps the base image)
 #
@@ -245,6 +246,17 @@ cmd_scan() {
   return $rc
 }
 
+cmd_stop() {
+  log "powering off $VM"
+  if ! virsh domstate "$VM" | has 'shut off'; then
+    virsh shutdown "$VM" >/dev/null
+    for i in $(seq 1 60); do virsh domstate "$VM" | has 'shut off' && break; sleep 2; done
+    # the next run reverts to the snapshot, so a forced power-off loses nothing
+    virsh domstate "$VM" | has 'shut off' || { echo "no clean shutdown after 2 min; forcing off"; virsh destroy "$VM" >/dev/null; }
+  fi
+  virsh domstate "$VM"
+}
+
 cmd_destroy() {
   virsh destroy "$VM" >/dev/null 2>&1 || true
   virsh snapshot-delete "$VM" baseline >/dev/null 2>&1 || true
@@ -256,7 +268,7 @@ cmd_destroy() {
 }
 
 case "${1:-}" in
-  create|provision|snapshot|reset|scan|destroy) "cmd_$1" ;;
+  create|provision|snapshot|reset|scan|stop|destroy) "cmd_$1" ;;
   ssh) shift; vssh "$@" ;;
   *) sed -n '2,20p' "$0"; exit 2 ;;
 esac
