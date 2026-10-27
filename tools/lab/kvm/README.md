@@ -94,8 +94,8 @@ button when nobody is logged on.
 only; no sudo, no access to your home), gives it the lab SSH key, registers the runner and
 installs it as a service. Ubuntu 26.10 ships OpenSSL 4, which the runner's .NET cannot load;
 the script installs the side-by-side `libssl3t64`. `.github/workflows/lab-kvm.yml` runs the
-Samba lane, then the Windows lane (both snapshots, `baseline` and `adcs`), nightly, on pushes to `main`
-and on same-repository pull requests (never forks).
+Samba lane, then the Windows lane (both snapshots, `baseline` and `adcs`), on manual dispatch only:
+the scheduled lab runs on the Hyper-V host ([`tools/lab/hyperv`](../hyperv/README.md)).
 Note that membership in `libvirt` gives `labrunner` control of every system VM on the host.
 
 ## Resources

@@ -6,15 +6,12 @@
 # The runner (labels self-hosted, linux, kvm-lab) is the maintainer's machine:
 # jobs run only for this repository's own branches, never for pull requests
 # from forks (and fork workflows also need approval in the repo settings).
+#
+# Manual only: the scheduled and per-push lab runs moved to the Hyper-V host
+# (lab-hyperv.yml, tools/lab/hyperv). Kept for a run on a KVM host with a kvm-lab runner.
 name: lab-kvm
 
 on:
-  push:
-    branches: [main]
-    paths-ignore: ["docs/**", "**/*.md"]
-  pull_request:
-  schedule:
-    - cron: "40 1 * * *"        # nightly, 01:40 UTC
   workflow_dispatch:
 
 permissions:

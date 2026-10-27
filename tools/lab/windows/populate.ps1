@@ -108,9 +108,17 @@ try {
     } else { Set-ADComputer -Identity 'APP01$' -TrustedForDelegation $true }
 
     # --- Group fixtures -----------------------------------------------------
-    # DSA-0027 DnsAdmins has a member.
-    if (Get-ADGroup -Filter "Name -eq 'DnsAdmins'" -ErrorAction SilentlyContinue) {
-        Add-ADGroupMember -Identity 'DnsAdmins' -Members 'svc_legacy' -ErrorAction SilentlyContinue
+    # DSA-0027 DnsAdmins has a member. The DNS Server service creates DnsAdmins some
+    # minutes after the promotion, so on a fresh DC wait for it rather than skip.
+    if ((Get-WindowsFeature DNS -ErrorAction SilentlyContinue).Installed) {
+        $deadline = (Get-Date).AddMinutes(15)
+        while (-not (Get-ADGroup -Filter "Name -eq 'DnsAdmins'" -ErrorAction SilentlyContinue)) {
+            if ((Get-Date) -gt $deadline) { throw 'DnsAdmins did not appear within 15 minutes of the DNS Server role' }
+            Start-Sleep 20
+        }
+        if ($PSCmdlet.ShouldProcess('DnsAdmins', 'add svc_legacy')) {
+            Add-ADGroupMember -Identity 'DnsAdmins' -Members 'svc_legacy'
+        }
     }
     # DSA-0042 built-in Guest enabled.
     if ($PSCmdlet.ShouldProcess('Guest', 'enable')) { Enable-ADAccount -Identity 'Guest' }
@@ -199,6 +207,7 @@ try {
     '  computer APP01$: {0}' -f [bool](Get-ADComputer -Filter "Name -eq 'APP01'" -ErrorAction SilentlyContinue)
     '  PSO WeakAdminPSO: {0}' -f [bool](Get-ADFineGrainedPasswordPolicy -Filter "Name -eq 'WeakAdminPSO'" -ErrorAction SilentlyContinue)
     '  GPO {0}: {1}' -f $gpoName, [bool](Get-GPO -Name $gpoName -ErrorAction SilentlyContinue)
+    '  DnsAdmins member svc_legacy: {0}' -f [bool](Get-ADGroupMember 'DnsAdmins' -ErrorAction SilentlyContinue | Where-Object SamAccountName -eq 'svc_legacy')
     Write-Host 'done. Take the Hyper-V checkpoint "vuln-baseline" now (see README).'
 }
 finally {
