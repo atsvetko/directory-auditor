@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Windows Server 2025 AD DC lab on KVM (libvirt qemu:///system, network da-lab).
-# The KVM counterpart of tools/lab/windows (Hyper-V) and lab-windows.yml:
+# The KVM counterpart of tools/lab/hyperv/windows-lab.ps1:
 #
 #   create        VM from your Windows Server ISO, unattended (SeaBIOS, SATA, e1000e — no
 #                 drivers needed), static IP, OpenSSH with the lab key. Never has a route out:

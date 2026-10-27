@@ -5,7 +5,8 @@ controllers**, the counterpart to the Samba lab (`tools/lab/samba`). A
 self-hosted GitHub Actions runner on your Hyper-V host restores a disposable DC
 to a known-vulnerable checkpoint, scans it, and checks the findings against
 [`testdata/lab/windows-expect.yaml`](../../../testdata/lab/windows-expect.yaml).
-After the one-time setup below it runs nightly with no human intervention.
+For the automated, nightly lane see [`tools/lab/hyperv`](../hyperv/README.md); this page
+describes the scripts it runs inside the DC and a hand-built layout for manual testing.
 
 Matrix: **Windows Server 2022** (`DA-DC-2022`, 10.55.0.10) and **2025**
 (`DA-DC-2025`, 10.55.0.11), both in the `da.test` forest.
@@ -67,10 +68,10 @@ expects, and store the audit password as a repo secret:
   (default `Lab-Reader-Pass-2026!` — Windows refuses a password that contains the account name — or whatever you set via `-AuditPassword`).
 - The runner needs the Go toolchain from `go.mod`; `actions/setup-go` installs it.
 
-That is all; `lab-windows.yml` runs on demand only (`workflow_dispatch`). The scheduled
-Windows lane now runs on a Linux KVM host instead — see
-[`tools/lab/kvm`](../kvm/README.md) and `lab-kvm.yml` — because no Hyper-V runner was
-ever registered for this workflow.
+The scheduled Windows lane now builds its DC from scratch with
+[`tools/lab/hyperv`](../hyperv/README.md) (`lab-hyperv.yml`), which runs this folder's
+`provision.ps1`, `populate.ps1` and `provision-adcs.ps1` inside the VM; the hand-built
+two-DC layout above no longer has a workflow.
 
 ## What it proves (and what it doesn't)
 

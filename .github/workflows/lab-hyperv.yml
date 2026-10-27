@@ -1,0 +1,105 @@
+# Live labs on the self-hosted Hyper-V host (tools/lab/hyperv): the Samba AD DC VM and
+# the Windows Server 2025 AD DC VM on the isolated DA-Lab switch, each restored to a
+# checkpoint, scanned as the ordinary 'audit' user, verified against
+# testdata/lab/*-expect.yaml, checked from the DC side for writes, and powered off.
+#
+# The runner (labels self-hosted, windows, hyperv-lab) runs as the local user labrunner
+# (Hyper-V Administrators) on the maintainer's lab host: jobs run only for this
+# repository's own branches, never for pull requests from forks.
+#
+# Steps run under cmd and start PowerShell with -ExecutionPolicy Bypass for that one
+# process: the host keeps its default execution policy, which would refuse the temp
+# script that `shell: powershell` dot-sources.
+name: lab-hyperv
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "**/*.md"]
+  pull_request:
+  schedule:
+    - cron: "40 1 * * *"        # nightly, 01:40 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One lab job at a time on the host; never cancel a running one (it would leave a VM
+# away from its checkpoint until the next reset).
+concurrency:
+  group: hyperv-lab
+  cancel-in-progress: false
+
+env:
+  DIRAUDITOR_LAB: "1"
+  DA_LAB_KEY: C:\DirAuditorLab\state-labrunner\id_ed25519
+  LAB: powershell -NoProfile -ExecutionPolicy Bypass -File
+
+defaults:
+  run:
+    shell: cmd
+
+jobs:
+  samba:
+    name: Samba AD DC (Hyper-V)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, windows, hyperv-lab]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: restore the checkpoint
+        run: '%LAB% tools\lab\hyperv\samba-lab.ps1 reset'
+      - name: scan, verify, DC-side read-only check
+        run: '%LAB% tools\lab\hyperv\samba-lab.ps1 scan'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hyperv-samba-report
+          path: |
+            C:\DirAuditorLab\out\samba\lab-out\report.html
+            C:\DirAuditorLab\out\samba\lab-out\report.json
+            C:\DirAuditorLab\out\samba\lab-out\run-*.log
+          retention-days: 14
+      # off between runs: the next job's reset brings it back from the checkpoint
+      - name: power the VM off
+        if: always()
+        run: '%LAB% tools\lab\hyperv\samba-lab.ps1 stop'
+
+  windows:
+    name: Windows Server 2025 DC (Hyper-V)
+    # after the Samba lane (one VM workload at a time on the host), whatever its result
+    needs: samba
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: [self-hosted, windows, hyperv-lab]
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: baseline (forest da.test, weak objects) — scan, verify, DC-side write check
+        run: |
+          %LAB% tools\lab\hyperv\windows-lab.ps1 reset baseline || exit /b 1
+          %LAB% tools\lab\hyperv\windows-lab.ps1 scan || exit /b 1
+          xcopy /E /I /Y /Q C:\DirAuditorLab\out\windows\lab-out reports\baseline
+      - name: adcs (Enterprise CA + weak templates) — scan, verify, DC-side write check
+        if: ${{ !cancelled() }}
+        run: |
+          %LAB% tools\lab\hyperv\windows-lab.ps1 reset adcs || exit /b 1
+          %LAB% tools\lab\hyperv\windows-lab.ps1 scan || exit /b 1
+          xcopy /E /I /Y /Q C:\DirAuditorLab\out\windows\lab-out reports\adcs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hyperv-windows-reports
+          path: |
+            reports/*/report.html
+            reports/*/report.json
+            reports/*/run-*.log
+          retention-days: 14
+      - name: power the VM off
+        if: always()
+        run: '%LAB% tools\lab\hyperv\windows-lab.ps1 stop'
